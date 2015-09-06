@@ -66,11 +66,7 @@ namespace ICSharpCode.NRefactory.Completion
 		/// </param>
 		public static bool IsBrowsable(this IEntity entity)
 		{
-			try {
-				return GetEditorBrowsableState (entity) != System.ComponentModel.EditorBrowsableState.Never;
-			} catch (Exception) {
-				return true;
-			}
+			return GetEditorBrowsableState (entity) != System.ComponentModel.EditorBrowsableState.Never;
 		}
 	}
 }

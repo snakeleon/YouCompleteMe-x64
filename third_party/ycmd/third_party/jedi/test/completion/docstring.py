@@ -3,13 +3,14 @@
 # -----------------
 # sphinx style
 # -----------------
-def f(a, b, c, d):
+def sphinxy(a, b, c, d, x):
     """ asdfasdf
     :param a: blablabla
     :type a: str
     :type b: (str, int)
-    :type c: threading.Thread
-    :type d: :class:`threading.Thread`
+    :type c: random.Random
+    :type d: :class:`random.Random`
+    :param str x: blablabla
     :rtype: dict
     """
     #? str()
@@ -18,30 +19,35 @@ def f(a, b, c, d):
     b[0]
     #? int()
     b[1]
-    #? ['join']
-    c.join
-    #? ['join']
-    d.join
+    #? ['seed']
+    c.seed
+    #? ['seed']
+    d.seed
+    #? ['lower']
+    x.lower
 
 #? dict()
-f()
+sphinxy()
 
 # wrong declarations
-def f(a, b):
+def sphinxy2(a, b, x):
     """
     :param a: Forgot type declaration
     :type a:
     :param b: Just something
     :type b: ``
-    :rtype: 
+    :param x: Just something without type
+    :rtype:
     """
     #? 
     a
     #? 
     b
+    #?
+    x
 
 #? 
-f()
+sphinxy2()
 
 # local classes -> github #370
 class ProgramNode():
@@ -53,9 +59,9 @@ def local_classes(node, node2):
     ... and the class definition after this func definition:
     :type node2: ProgramNode2
     """
-    #? ProgramNode
+    #? ProgramNode()
     node
-    #? ProgramNode2
+    #? ProgramNode2()
     node2
 
 class ProgramNode2():
@@ -66,10 +72,10 @@ def list_with_non_imports(lst):
     """
     Should be able to work with tuples and lists and still import stuff.
 
-    :type lst: (threading.Thread, [collections.defaultdict, ...])
+    :type lst: (random.Random, [collections.defaultdict, ...])
     """
-    #? ['start']
-    lst[0].start
+    #? ['seed']
+    lst[0].seed
 
     import collections as col
     # use some weird index
@@ -77,19 +83,28 @@ def list_with_non_imports(lst):
     lst[1][10]
 
 
+def two_dots(a):
+    """
+    :type a: json.decoder.JSONDecoder
+    """
+    #? ['raw_decode']
+    a.raw_decode
+
+
 # sphinx returns
 def return_module_object():
     """
-    :rtype: :class:`threading.Thread`
+    :rtype: :class:`random.Random`
     """
 
-#? ['join']
-return_module_object().join
+#? ['seed']
+return_module_object().seed
+
 
 # -----------------
 # epydoc style
 # -----------------
-def e(a, b):
+def epydoc(a, b):
     """ asdfasdf
     @type a: str
     @param a: blablabla
@@ -106,7 +121,7 @@ def e(a, b):
     b[1]
 
 #? list()
-e()
+epydoc()
 
 
 # Returns with param type only
@@ -142,7 +157,7 @@ def both():
     """
     return 23
 
-#? str(), int()
+#? str() int()
 both()
 
 class Test(object):

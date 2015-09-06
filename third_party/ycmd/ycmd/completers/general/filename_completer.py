@@ -23,7 +23,7 @@ from collections import defaultdict
 from ycmd.completers.completer import Completer
 from ycmd.completers.cpp.clang_completer import InCFamilyFile
 from ycmd.completers.cpp.flags import Flags
-from ycmd.utils import ToUtf8IfNeeded
+from ycmd.utils import ToUtf8IfNeeded, ToUnicodeIfNeeded
 from ycmd import responses
 
 EXTRA_INFO_MAP = { 1 : '[File]', 2 : '[Dir]', 3 : '[File&Dir]' }
@@ -38,11 +38,11 @@ class FilenameCompleter( Completer ):
     self._flags = Flags()
 
     self._path_regex = re.compile( """
-      # 1 or more 'D:/'-like token or '/' or '~' or './' or '../'
-      (?:[A-z]+:/|[/~]|\./|\.+/)+
+      # 1 or more 'D:/'-like token or '/' or '~' or './' or '../' or '$var/'
+      (?:[A-z]+:/|[/~]|\./|\.+/|\$[A-Za-z0-9{}_]+/)+
 
-      # any alphanumeric symbal and space literal
-      (?:[ /a-zA-Z0-9()$+_~.\x80-\xff-\[\]]|
+      # any alphanumeric, symbol or space literal
+      (?:[ /a-zA-Z0-9(){}$+_~.\x80-\xff-\[\]]|
 
       # skip any special symbols
       [^\x20-\x7E]|
@@ -59,7 +59,7 @@ class FilenameCompleter( Completer ):
   def AtIncludeStatementStart( self, request_data ):
     start_column = request_data[ 'start_column' ] - 1
     current_line = request_data[ 'line_value' ]
-    filepath = ToUtf8IfNeeded( request_data[ 'filepath' ] )
+    filepath = request_data[ 'filepath' ]
     filetypes = request_data[ 'file_data' ][ filepath ][ 'filetypes' ]
     return ( InCFamilyFile( filetypes ) and
              self._include_start_regex.match(
@@ -80,9 +80,10 @@ class FilenameCompleter( Completer ):
   def ComputeCandidatesInner( self, request_data ):
     current_line = request_data[ 'line_value' ]
     start_column = request_data[ 'start_column' ] - 1
-    filepath = ToUtf8IfNeeded( request_data[ 'filepath' ] )
-    filetypes = request_data[ 'file_data' ][ filepath ][ 'filetypes' ]
+    orig_filepath = request_data[ 'filepath' ]
+    filetypes = request_data[ 'file_data' ][ orig_filepath ][ 'filetypes' ]
     line = current_line[ :start_column ]
+    utf8_filepath = ToUtf8IfNeeded( orig_filepath )
 
     if InCFamilyFile( filetypes ):
       include_match = self._include_regex.search( line )
@@ -91,31 +92,38 @@ class FilenameCompleter( Completer ):
         # We do what GCC does for <> versus "":
         # http://gcc.gnu.org/onlinedocs/cpp/Include-Syntax.html
         include_current_file_dir = '<' not in include_match.group()
+        client_data = request_data.get( 'extra_conf_data', None )
         return _GenerateCandidatesForPaths(
           self.GetPathsIncludeCase( path_dir,
                                     include_current_file_dir,
-                                    filepath ) )
+                                    utf8_filepath,
+                                    client_data ) )
 
     path_match = self._path_regex.search( line )
-    path_dir = os.path.expanduser( path_match.group() ) if path_match else ''
+    path_dir = os.path.expanduser(
+                os.path.expandvars( path_match.group() ) ) if path_match else ''
 
     return _GenerateCandidatesForPaths(
       _GetPathsStandardCase(
         path_dir,
         self.user_options[ 'filepath_completion_use_working_dir' ],
-        filepath ) )
+        utf8_filepath ) )
 
 
-  def GetPathsIncludeCase( self, path_dir, include_current_file_dir, filepath ):
+  def GetPathsIncludeCase( self, path_dir, include_current_file_dir, filepath,
+                           client_data ):
     paths = []
-    include_paths = self._flags.UserIncludePaths( filepath )
+    include_paths = self._flags.UserIncludePaths( filepath, client_data )
 
     if include_current_file_dir:
       include_paths.append( os.path.dirname( filepath ) )
 
     for include_path in include_paths:
+      unicode_path = ToUnicodeIfNeeded( os.path.join( include_path, path_dir ) )
       try:
-        relative_paths = os.listdir( os.path.join( include_path, path_dir ) )
+        # We need to pass a unicode string to get unicode strings out of
+        # listdir.
+        relative_paths = os.listdir( unicode_path )
       except:
         relative_paths = []
 
@@ -131,7 +139,9 @@ def _GetPathsStandardCase( path_dir, use_working_dir, filepath ):
                              path_dir )
 
   try:
-    relative_paths = os.listdir( path_dir )
+    # We need to pass a unicode string to get unicode strings out of
+    # listdir.
+    relative_paths = os.listdir( ToUnicodeIfNeeded( path_dir ) )
   except:
     relative_paths = []
 
@@ -140,7 +150,7 @@ def _GetPathsStandardCase( path_dir, use_working_dir, filepath ):
 
 
 def _GenerateCandidatesForPaths( absolute_paths ):
-  extra_info = defaultdict(int)
+  extra_info = defaultdict( int )
   basenames = []
   for absolute_path in absolute_paths:
     basename = os.path.basename( absolute_path )

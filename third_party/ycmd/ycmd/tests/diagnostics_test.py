@@ -19,16 +19,26 @@
 
 from ..server_utils import SetUpPythonPath
 SetUpPythonPath()
-from .test_utils import ( Setup, BuildRequest, PathToTestFile,
-                          StopOmniSharpServer, WaitUntilOmniSharpServerReady )
+from .test_utils import ( Setup,
+                          BuildRequest,
+                          PathToTestFile,
+                          StopOmniSharpServer,
+                          WaitUntilOmniSharpServerReady )
 from webtest import TestApp
 from nose.tools import with_setup, eq_
-from hamcrest import ( assert_that, contains, contains_string, has_entries,
-                       has_entry, empty, equal_to )
+from hamcrest import ( assert_that,
+                       contains,
+                       contains_string,
+                       has_entries,
+                       has_entry,
+                       has_items,
+                       empty,
+                       equal_to )
 from ..responses import NoDiagnosticSupport
 from .. import handlers
 import bottle
 import httplib
+from pprint import pprint
 
 bottle.debug( True )
 
@@ -52,7 +62,7 @@ void foo() {
   assert_that( results,
                contains(
                   has_entries( {
-                    'kind': equal_to( 'ERROR'),
+                    'kind': equal_to( 'ERROR' ),
                     'text': contains_string( 'cannot initialize' ),
                     'ranges': contains( has_entries( {
                       'start': has_entries( {
@@ -134,16 +144,15 @@ struct Foo {
                              filepath = '/foo.h',
                              filetype = 'cpp' )
 
-  response = app.post_json( '/event_notification', event_data )
-  assert_that( response.body, empty() )
-
+  response = app.post_json( '/event_notification', event_data ).json
+  assert_that( response, empty() )
 
 @with_setup( Setup )
 def Diagnostics_CsCompleter_ZeroBasedLineAndColumn_test():
   app = TestApp( handlers.app )
   app.post_json( '/ignore_extra_conf_file',
                  { 'filepath': PathToTestFile( '.ycm_extra_conf.py' ) } )
-  filepath = PathToTestFile( 'testy/Program.cs' )
+  filepath = PathToTestFile( 'testy', 'Program.cs' )
   contents = open( filepath ).read()
   event_data = BuildRequest( filepath = filepath,
                              filetype = 'cs',
@@ -151,7 +160,7 @@ def Diagnostics_CsCompleter_ZeroBasedLineAndColumn_test():
                              event_name = 'FileReadyToParse' )
 
   results = app.post_json( '/event_notification', event_data )
-  WaitUntilOmniSharpServerReady( app )
+  WaitUntilOmniSharpServerReady( app, filepath )
 
   event_data = BuildRequest( filepath = filepath,
                              event_name = 'FileReadyToParse',
@@ -163,26 +172,79 @@ def Diagnostics_CsCompleter_ZeroBasedLineAndColumn_test():
   assert_that( results,
                contains(
                   has_entries( {
-                    'kind': equal_to( 'ERROR'),
+                    'kind': equal_to( 'ERROR' ),
                     'text': contains_string(
                         "Unexpected symbol `}'', expecting identifier" ),
                     'location': has_entries( {
-                      'line_num': 10,
+                      'line_num': 11,
                       'column_num': 2
                     } ),
                     'location_extent': has_entries( {
                       'start': has_entries( {
-                        'line_num': 10,
+                        'line_num': 11,
                         'column_num': 2,
                       } ),
                       'end': has_entries( {
-                        'line_num': 10,
+                        'line_num': 11,
                         'column_num': 2,
                       } ),
                     } )
                   } ) ) )
 
-  StopOmniSharpServer( app )
+  StopOmniSharpServer( app, filepath )
+
+
+@with_setup( Setup )
+def Diagnostics_CsCompleter_MultipleSolution_test():
+  app = TestApp( handlers.app )
+  app.post_json( '/ignore_extra_conf_file',
+                 { 'filepath': PathToTestFile( '.ycm_extra_conf.py' ) } )
+  filepaths = [ PathToTestFile( 'testy', 'Program.cs' ),
+                PathToTestFile( 'testy-multiple-solutions',
+                                'solution-named-like-folder',
+                                'testy',
+                                'Program.cs' ) ]
+  lines = [ 11, 10 ]
+  for filepath, line in zip( filepaths, lines ):
+    contents = open( filepath ).read()
+    event_data = BuildRequest( filepath = filepath,
+                               filetype = 'cs',
+                               contents = contents,
+                               event_name = 'FileReadyToParse' )
+
+    results = app.post_json( '/event_notification', event_data )
+    WaitUntilOmniSharpServerReady( app, filepath )
+
+    event_data = BuildRequest( filepath = filepath,
+                               event_name = 'FileReadyToParse',
+                               filetype = 'cs',
+                               contents = contents )
+
+    results = app.post_json( '/event_notification', event_data ).json
+
+    assert_that( results,
+                 contains(
+                     has_entries( {
+                         'kind': equal_to( 'ERROR' ),
+                         'text': contains_string(
+                             "Unexpected symbol `}'', expecting identifier" ),
+                         'location': has_entries( {
+                         'line_num': line,
+                         'column_num': 2
+                         } ),
+                         'location_extent': has_entries( {
+                         'start': has_entries( {
+                             'line_num': line,
+                             'column_num': 2,
+                         } ),
+                         'end': has_entries( {
+                             'line_num': line,
+                             'column_num': 2,
+                         } ),
+                         } )
+                     } ) ) )
+
+    StopOmniSharpServer( app, filepath )
 
 
 @with_setup( Setup )
@@ -214,11 +276,40 @@ struct Foo {
 
 
 @with_setup( Setup )
+def GetDetailedDiagnostic_ClangCompleter_Multiline_test():
+  app = TestApp( handlers.app )
+  contents = """
+struct Foo {
+  Foo(int z) {}
+};
+
+int main() {
+  Foo foo("goo");
+}
+"""
+
+  diag_data = BuildRequest( compilation_flags = ['-x', 'c++'],
+                            line_num = 7,
+                            contents = contents,
+                            filetype = 'cpp' )
+
+  event_data = diag_data.copy()
+  event_data.update( {
+    'event_name': 'FileReadyToParse',
+  } )
+
+  app.post_json( '/event_notification', event_data )
+  results = app.post_json( '/detailed_diagnostic', diag_data ).json
+  assert_that( results,
+               has_entry( 'message', contains_string( "\n" ) ) )
+
+
+@with_setup( Setup )
 def GetDetailedDiagnostic_CsCompleter_Works_test():
   app = TestApp( handlers.app )
   app.post_json( '/ignore_extra_conf_file',
                  { 'filepath': PathToTestFile( '.ycm_extra_conf.py' ) } )
-  filepath = PathToTestFile( 'testy/Program.cs' )
+  filepath = PathToTestFile( 'testy', 'Program.cs' )
   contents = open( filepath ).read()
   event_data = BuildRequest( filepath = filepath,
                              filetype = 'cs',
@@ -226,13 +317,13 @@ def GetDetailedDiagnostic_CsCompleter_Works_test():
                              event_name = 'FileReadyToParse' )
 
   app.post_json( '/event_notification', event_data )
-  WaitUntilOmniSharpServerReady( app )
+  WaitUntilOmniSharpServerReady( app, filepath )
   app.post_json( '/event_notification', event_data )
 
   diag_data = BuildRequest( filepath = filepath,
                             filetype = 'cs',
                             contents = contents,
-                            line_num = 10,
+                            line_num = 11,
                             column_num = 2 )
 
   results = app.post_json( '/detailed_diagnostic', diag_data ).json
@@ -242,7 +333,7 @@ def GetDetailedDiagnostic_CsCompleter_Works_test():
                   contains_string(
                      "Unexpected symbol `}'', expecting identifier" ) ) )
 
-  StopOmniSharpServer( app )
+  StopOmniSharpServer( app, filepath )
 
 
 @with_setup( Setup )
@@ -260,3 +351,35 @@ def GetDetailedDiagnostic_JediCompleter_DoesntWork_test():
                has_entry( 'exception',
                           has_entry( 'TYPE', NoDiagnosticSupport.__name__ ) ) )
 
+
+
+@with_setup( Setup )
+def Diagnostics_ClangCompleter_FixIt_Available_test():
+  app = TestApp( handlers.app )
+  contents = open( PathToTestFile( 'FixIt_Clang_cpp11.cpp' ) ).read()
+
+  event_data = BuildRequest( contents = contents,
+                             event_name = 'FileReadyToParse',
+                             filetype = 'cpp',
+                             compilation_flags = [ '-x' , 'c++',
+                                                   '-Wall',
+                                                   '-Wextra',
+                                                   '-pedantic' ] )
+
+  response = app.post_json( '/event_notification', event_data ).json
+
+  pprint( response )
+
+  assert_that( response, has_items (
+    has_entries( {
+      'location' : has_entries( { 'line_num': 16, 'column_num': 3 } ),
+      'text': equal_to( 'switch condition type \'A\' '
+                        'requires explicit conversion to \'int\''),
+      'fixit_available' : True
+    } ),
+    has_entries( {
+      'location' : has_entries( { 'line_num': 11, 'column_num': 3 } ),
+      'text': equal_to('explicit conversion functions are a C++11 extension'),
+      'fixit_available' : False
+    } ),
+  ) )

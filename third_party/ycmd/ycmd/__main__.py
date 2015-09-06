@@ -17,7 +17,7 @@
 # You should have received a copy of the GNU General Public License
 # along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
 
-from server_utils import SetUpPythonPath
+from server_utils import SetUpPythonPath, CompatibleWithCurrentCoreVersion
 SetUpPythonPath()
 
 import sys
@@ -111,13 +111,20 @@ def SetupLogging( log_level ):
                        level = numeric_level )
 
 def SetupOptions( options_file ):
-  options = ( json.load( open( options_file, 'r' ) )
-              if options_file
-              else user_options_store.DefaultOptions() )
+  options = user_options_store.DefaultOptions()
+  if options_file:
+    user_options = json.load( open( options_file, 'r' ) )
+    options.update( user_options )
   utils.RemoveIfExists( options_file )
-  options[ 'hmac_secret' ] = base64.b64decode( options[ 'hmac_secret' ] )
+  hmac_secret = base64.b64decode( options[ 'hmac_secret' ] )
+  del options[ 'hmac_secret' ]
   user_options_store.SetAll( options )
-  return options
+  return options, hmac_secret
+
+
+def CloseStdin():
+  sys.stdin.close()
+  os.close(0)
 
 
 def Main():
@@ -129,12 +136,17 @@ def Main():
     sys.stderr = open( args.stderr, 'w' )
 
   SetupLogging( args.log )
-  options = SetupOptions( args.options_file )
+  options, hmac_secret = SetupOptions( args.options_file )
 
   # This ensures that ycm_core is not loaded before extra conf
   # preload was run.
   YcmCoreSanityCheck()
   extra_conf_store.CallGlobalExtraConfYcmCorePreloadIfExists()
+
+  if not CompatibleWithCurrentCoreVersion():
+    # ycm_core.[so|dll|dylib] is too old and needs to be recompiled.
+    sys.exit( 2 )
+
   PossiblyDetachFromTerminal()
 
   # This can't be a top-level import because it transitively imports
@@ -142,9 +154,11 @@ def Main():
   # preload has executed.
   from ycmd import handlers
   handlers.UpdateUserOptions( options )
-  SetUpSignalHandler(args.stdout, args.stderr, args.keep_logfiles)
+  handlers.SetHmacSecret( hmac_secret )
+  SetUpSignalHandler( args.stdout, args.stderr, args.keep_logfiles )
   handlers.app.install( WatchdogPlugin( args.idle_suicide_seconds ) )
-  handlers.app.install( HmacPlugin( options[ 'hmac_secret' ] ) )
+  handlers.app.install( HmacPlugin( hmac_secret ) )
+  CloseStdin()
   waitress.serve( handlers.app,
                   host = args.host,
                   port = args.port,

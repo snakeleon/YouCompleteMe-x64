@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO.Abstractions;
 using System.Linq;
 
 namespace OmniSharp.Solution
@@ -8,20 +9,23 @@ namespace OmniSharp.Solution
     {
         Logger _logger;
         CSharpProject _project;
-        string _folder;
+        IFileSystem _fileSystem;
 
-        public CSharpFolder(Logger logger)
+        public CSharpFolder(string folder, Logger logger, IFileSystem fileSystem)
         {
             _logger = logger;
+            FileName = folder;
+            _fileSystem = fileSystem;
         }
 
+        public string FileName { get; private set; }
         public bool Terminated { get; private set; }
+        public bool Loaded { get; private set; }
 
-        public void LoadSolution(string folder)
+        public void LoadSolution()
         {
-            _folder = folder;
             Loaded = false;
-            _project = new CSharpProject(this, _logger, folder);
+            _project = new CSharpProject(this, _logger, FileName, _fileSystem);
             Loaded = true;
         }
 
@@ -39,15 +43,13 @@ namespace OmniSharp.Solution
 
         public void Reload()
         {
-            LoadSolution(_folder);
+            LoadSolution();
         }
 
         public void Terminate()
         {
             Terminated = true;
         }
-
-        public bool Loaded { get; private set; }
 
         public List<IProject> Projects
         {
@@ -57,7 +59,6 @@ namespace OmniSharp.Solution
             }
         }
 
-        public string FileName { get; private set; }
     }
     
 }

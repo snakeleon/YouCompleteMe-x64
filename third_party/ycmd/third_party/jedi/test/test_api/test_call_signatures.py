@@ -22,8 +22,14 @@ class TestCallSignatures(TestCase):
     def _run_simple(self, source, name, index=0, column=None, line=1):
         self._run(source, name, index, line, column)
 
+    def test_valid_call(self):
+        self._run('str()', 'str', column=4)
+
     def test_simple(self):
         run = self._run_simple
+        s7 = "str().upper().center("
+        s8 = "str(int[zip("
+        run(s7, 'center', 0)
 
         # simple
         s1 = "sorted(a, str("
@@ -168,6 +174,48 @@ class TestCallSignatures(TestCase):
     def test_unterminated_strings(self):
         self._run('str(";', 'str', 0)
 
+    def test_whitespace_before_bracket(self):
+        self._run('str (', 'str', 0)
+        self._run('str (";', 'str', 0)
+        # TODO this is not actually valid Python, the newline token should be
+        # ignored.
+        self._run('str\n(', 'str', 0)
+
+    def test_brackets_in_string_literals(self):
+        self._run('str (" (', 'str', 0)
+        self._run('str (" )', 'str', 0)
+
+    def test_function_definitions_should_break(self):
+        """
+        Function definitions (and other tokens that cannot exist within call
+        signatures) should break and not be able to return a call signature.
+        """
+        assert not Script('str(\ndef x').call_signatures()
+
+    def test_flow_call(self):
+        assert not Script('if (1').call_signatures()
+
+    def test_chained_calls(self):
+        source = dedent('''
+        class B():
+          def test2(self, arg):
+            pass
+
+        class A():
+          def test1(self):
+            return B()
+
+        A().test1().test2(''')
+
+        self._run(source, 'test2', 0)
+
+    def test_return(self):
+        source = dedent('''
+        def foo():
+            return '.'.join()''')
+
+        self._run(source, 'join', 0, column=len("    return '.'.join("))
+
 
 class TestParams(TestCase):
     def params(self, source, line=None, column=None):
@@ -189,6 +237,18 @@ class TestParams(TestCase):
         assert p[0].name in ['file', 'name']
         assert p[1].name == 'mode'
 
+    def test_builtins(self):
+        """
+        The self keyword should be visible even for builtins, if not
+        instantiated.
+        """
+        p = self.params('str.endswith(')
+        assert p[0].name == 'self'
+        assert p[1].name == 'suffix'
+        p = self.params('str().endswith(')
+        assert p[0].name == 'suffix'
+
+
 
 def test_signature_is_definition():
     """
@@ -204,7 +264,7 @@ def test_signature_is_definition():
     # Now compare all the attributes that a CallSignature must also have.
     for attr_name in dir(definition):
         dont_scan = ['defined_names', 'line_nr', 'start_pos', 'documentation',
-                     'doc', 'parent']
+                     'doc', 'parent', 'goto_assignments']
         if attr_name.startswith('_') or attr_name in dont_scan:
             continue
         attribute = getattr(definition, attr_name)
@@ -274,3 +334,12 @@ def test_signature_index():
     assert get(both + 'foo(a=2').index == 1
     assert get(both + 'foo(a=2, b=2').index == 1
     assert get(both + 'foo(a, b, c').index == 0
+
+
+def test_bracket_start():
+    def bracket_start(src):
+        signatures = Script(src).call_signatures()
+        assert len(signatures) == 1
+        return signatures[0].bracket_start
+
+    assert bracket_start('str(') == (1, 3)

@@ -21,7 +21,7 @@ arr
 def inputs(param):
     return param
 
-#? list()
+#? list
 inputs(list)
 
 def variable_middle():
@@ -96,11 +96,13 @@ def other(a):
     return recursion2(a)
 
 def recursion2(a):
-    if a:
+    if random.choice([0, 1]):
         return other(a)
     else:
-        return recursion2("")
-    return a
+        if random.choice([0, 1]):
+            return recursion2("")
+        else:
+            return a
 
 #? int() str()
 recursion2(1)
@@ -205,7 +207,7 @@ exe[0]
 exe[1]
 
 # illegal args (TypeError)
-#? 
+#?
 args_func(*1)[0]
 # iterator
 #? int()
@@ -237,7 +239,7 @@ exe = args_func(1, "", list)
 exe[0]
 #? tuple()
 exe[1]
-#? list()
+#? list
 exe[1][1]
 
 
@@ -264,6 +266,7 @@ class Something():
     def x(self, a, b=1):
         return a
 
+#? int()
 Something().x(1)
 
 
@@ -286,10 +289,15 @@ exe['b']
 #? int() float()
 exe['c']
 
+a = 'a'
 exe2 = kwargs_func(**{a:3,
-                      b:4.0})
+                      'b':4.0})
 #? int()
 exe2['a']
+#? float()
+exe2['b']
+#? int() float()
+exe2['c']
 
 # -----------------
 # *args / ** kwargs
@@ -306,7 +314,7 @@ def fu(a=1, b="", *args, **kwargs):
 
 exe = fu(list, 1, "", c=set, d="")
 
-#? list()
+#? list
 exe[0]
 #? int()
 exe[1]
@@ -316,7 +324,7 @@ exe[2]
 exe[2][0]
 #? dict()
 exe[3]
-#? set()
+#? set
 exe[3]['c']
 
 # -----------------
@@ -350,20 +358,20 @@ def nested_kw(**kwargs1):
 def nested_kw2(**kwargs2):
     return nested_kw(**kwargs2)
 
-#? int()
+# invalid command, doesn't need to return anything
+#? 
 nested_kw(b=1, c=1.0, list)
 #? int()
 nested_kw(b=1)
-#? int()
+# invalid command, doesn't need to return anything
+#?  
 nested_kw(d=1.0, b=1, list)
-#? int()
-nested_kw(b=1)
 #? int()
 nested_kw(a=3.0, b=1)
 #? int()
 nested_kw(b=1, a=r"")
 #? []
-nested_kw('')
+nested_kw(1, '')
 #? []
 nested_kw(a='')
 
@@ -389,10 +397,12 @@ def nested_both(*args, **kwargs):
 def nested_both2(*args, **kwargs):
     return nested_both(*args, **kwargs)
 
-#? int()
+# invalid commands, may return whatever.
+#? list
 nested_both('', b=1, c=1.0, list)
-#? int()
+#? list
 nested_both('', c=1.0, b=1, list)
+
 #? []
 nested_both('')
 
@@ -429,23 +439,6 @@ nested_def2('', b=1, c=1.0)[1]
 nested_def2('', c=1.0, b=1)[1]
 #? []
 nested_def2('')[1]
-
-# -----------------
-# function annotations (should be ignored at the moment)
-# -----------------
-def annot(a:3, *args:3):
-    return a, args[0]
-
-#? str()
-annot('', 1.0)[0]
-#? float()
-annot('', 1.0)[1]
-
-def annot_ret(a:3) -> 3:
-    return a
-
-#? str()
-annot_ret('')
 
 # -----------------
 # magic methods

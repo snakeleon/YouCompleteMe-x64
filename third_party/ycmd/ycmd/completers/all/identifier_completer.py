@@ -27,7 +27,6 @@ from ycmd import utils
 from ycmd.utils import ToUtf8IfNeeded
 from ycmd import responses
 
-MAX_IDENTIFIER_COMPLETIONS_RETURNED = 10
 SYNTAX_FILENAME = 'YCM_PLACEHOLDER_FOR_SYNTAX'
 
 
@@ -37,6 +36,7 @@ class IdentifierCompleter( GeneralCompleter ):
     self._completer = ycm_core.IdentifierCompleter()
     self._tags_file_last_mtime = defaultdict( int )
     self._logger = logging.getLogger( __name__ )
+    self._max_candidates = user_options[ 'max_num_identifier_candidates' ]
 
 
   def ShouldUseNow( self, request_data ):
@@ -51,11 +51,16 @@ class IdentifierCompleter( GeneralCompleter ):
       ToUtf8IfNeeded( utils.SanitizeQuery( request_data[ 'query' ] ) ),
       ToUtf8IfNeeded( request_data[ 'filetypes' ][ 0 ] ) )
 
-    completions = completions[ : MAX_IDENTIFIER_COMPLETIONS_RETURNED ]
+    completions = completions[ : self._max_candidates ]
     completions = _RemoveSmallCandidates(
       completions, self.user_options[ 'min_num_identifier_candidate_chars' ] )
 
-    return [ responses.BuildCompletionData( x ) for x in completions ]
+    def ConvertCompletionData( x ):
+        return responses.BuildCompletionData(
+                insertion_text = x,
+                extra_menu_info='[ID]' )
+
+    return [ ConvertCompletionData( x ) for x in completions ]
 
 
   def AddIdentifier( self, identifier, request_data ):
@@ -68,7 +73,7 @@ class IdentifierCompleter( GeneralCompleter ):
     if not filetype or not filepath or not identifier:
       return
 
-    vector = ycm_core.StringVec()
+    vector = ycm_core.StringVector()
     vector.append( ToUtf8IfNeeded( identifier ) )
     self._logger.info( 'Adding ONE buffer identifier for file: %s', filepath )
     self._completer.AddIdentifiersToDatabase( vector,
@@ -115,7 +120,7 @@ class IdentifierCompleter( GeneralCompleter ):
 
 
   def AddIdentifiersFromTagFiles( self, tag_files ):
-    absolute_paths_to_tag_files = ycm_core.StringVec()
+    absolute_paths_to_tag_files = ycm_core.StringVector()
     for tag_file in tag_files:
       try:
         current_mtime = os.path.getmtime( tag_file )
@@ -139,7 +144,7 @@ class IdentifierCompleter( GeneralCompleter ):
 
 
   def AddIdentifiersFromSyntax( self, keyword_list, filetypes ):
-    keyword_vector = ycm_core.StringVec()
+    keyword_vector = ycm_core.StringVector()
     for keyword in keyword_list:
       keyword_vector.append( ToUtf8IfNeeded( keyword ) )
 
@@ -224,7 +229,7 @@ def _IdentifiersFromBuffer( text,
   if not collect_from_comments_and_strings:
     text = identifier_utils.RemoveIdentifierFreeText( text )
   idents = identifier_utils.ExtractIdentifiersFromText( text, filetype )
-  vector = ycm_core.StringVec()
+  vector = ycm_core.StringVector()
   for ident in idents:
     vector.append( ToUtf8IfNeeded( ident ) )
   return vector

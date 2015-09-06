@@ -90,6 +90,22 @@ def f(b, a): return a
 f(b=3)
 
 # -----------------
+# closure
+# -----------------
+
+def x():
+    a = 0
+
+    def x():
+        return a
+
+    a = 3.0
+    return x()
+
+#? float()
+x()
+
+# -----------------
 # class
 # -----------------
 class A(object):
@@ -103,8 +119,8 @@ class A(object):
 
     def before(self):
         self.b = 3
-        # TODO should this be so?
-        #? int() str() list()
+        # TODO should this be so? include entries after cursor?
+        #? int() str() list
         self.b
         self.b = list
 

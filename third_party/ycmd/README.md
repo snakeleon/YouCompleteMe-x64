@@ -1,7 +1,7 @@
 ycmd: a code-completion & comprehension server
 ==============================================
 
-[![Build Status](https://travis-ci.org/Valloric/ycmd.png?branch=master)](https://travis-ci.org/Valloric/ycmd)
+[![Build Status](https://travis-ci.org/Valloric/ycmd.svg?branch=master)](https://travis-ci.org/Valloric/ycmd)
 
 ycmd is a server that provides APIs for code-completion and other
 code-comprehension use-cases like semantic GoTo commands (and others). For
@@ -14,8 +14,22 @@ The best way to learn how to interact with ycmd is by reading through (and
 running) the [`example_client.py`][example-client] file. See the [README for the
 examples][example-readme] folder for details on how to run the example client.
 
+Known ycmd clients:
+------------------
+
+- [YouCompleteMe][ycm]: Vim client, stable and exposes all ycmd features.
+- [emacs-ycmd][]: Emacs client, still a bit experimental.
+- [you-complete-me][atom-you-complete-me]: Atom client.
+- [kak-ycmd][]: Kakoune client.
+
+Feel free to send a pull request adding a link to your client here if you've
+built one.
+
 Building
 --------
+
+[Clients commonly build and set up ycmd for you; you are unlikely to need to
+build ycmd yourself unless you want to build a new client.]
 
 This is all for Ubuntu Linux. Details on getting ycmd running on other OS's can be
 found in [YCM's instructions][ycm-install] (ignore the Vim-specific parts).
@@ -30,8 +44,8 @@ When you first clone the repository you'll need to update the submodules:
 git submodule update --init --recursive
 ```
 
-Then run `./build.sh --clang-completer --omnisharp-completer`.  This should get
-you going.
+Then run `./build.py --clang-completer --omnisharp-completer --gocode-completer`.
+This should get you going.
 
 For more detailed instructions on building ycmd, see [YCM's
 instructions][ycm-install] (ignore the Vim-specific parts).
@@ -59,9 +73,10 @@ provided previously and any tags files produced by ctags. This engine is
 non-semantic.
 
 There are also several semantic engines in YCM. There's a libclang-based
-completer that provides semantic completion for C-family languages.  There's a
-Jedi-based completer for semantic completion for Python and an OmniSharp-based
-completer for C#. More will be added with time.
+completer that provides semantic completion for C-family languages.  There's also a
+Jedi-based completer for semantic completion for Python, an OmniSharp-based
+completer for C#, a [Gocode][gocode]-based completer for Go, and a TSServer-based
+completer for TypeScript. More will be added with time.
 
 There are also other completion engines, like the filepath completer (part of
 the identifier completer).
@@ -120,6 +135,20 @@ completion (both of which are subsequence matches). A word-boundary character
 are all capital characters, characters preceded by an underscore and the first
 letter character in the completion string.
 
+### Auto-shutdown if no requests for a while
+
+If the server hasn't received any requests for a while (controlled by the
+`--idle_suicide_seconds` ycmd flag), it will shut itself down. This is useful
+for cases where the process that started ycmd dies without telling ycmd to die
+too or if ycmd hangs (this should be extremely rare).
+
+If you're implementing a client for ycmd, ensure that you have some sort of
+keep-alive background thread that periodically pings ycmd (just call the
+`/healthy` handler, although any handler will do).
+
+You can also turn this off by passing `--idle_suicide_seconds=0`, although that
+isn't recommended.
+
 User-level customization
 -----------------------
 
@@ -127,7 +156,7 @@ You can provide settings to ycmd on server startup. There's a
 [`default_settings.json`][def-settings] file that you can tweak. See the
 [_Options_ section in YCM's _User Guide_][options] for a description on what
 each option does. Pass the path to the modified settings file to ycmd as an
-`--options-file=/path/to/file` flag.  Note that you must set the `hmac_secret`
+`--options_file=/path/to/file` flag.  Note that you must set the `hmac_secret`
 setting (encode the value with [base64][]). Because the file you are passing
 contains a secret token, ensure that you are creating the temporary file in a
 secure way (the [`mkstemp()`][mkstemp] Linux system call is a good idea; use
@@ -141,6 +170,7 @@ user has configured. There's also an extra file (`.ycm_extra_conf.py`) your user
 is supposed to provide to configure certain semantic completers. More
 information on it can also be found in the [corresponding section of YCM's _User
 Guide_][extra-conf-doc].
+
 
 Backwards compatibility
 -----------------------
@@ -176,29 +206,21 @@ If you have questions about the plugin or need help, please use the
 
 The author's homepage is <http://val.markovic.io>.
 
-Project Management
-------------------
-
-This open-source project is run by me, Strahinja Val Markovic. I also happen to
-work for Google and the code I write here is under Google copyright (for the
-sake of simplicity and other reasons). This does **NOT** mean that this is an
-official Google product (it isn't) or that Google has (or wants to have)
-anything to do with it.
-
 License
 -------
 
 This software is licensed under the [GPL v3 license][gpl].
-© 2014 Google Inc.
+© 2015 ycmd contributors
 
 [ycmd-users]: https://groups.google.com/forum/?hl=en#!forum/ycm-users
 [ycm]: http://valloric.github.io/YouCompleteMe/
+[atom-you-complete-me]: https://atom.io/packages/you-complete-me
 [semver]: http://semver.org/
 [hmac]: http://en.wikipedia.org/wiki/Hash-based_message_authentication_code
 [exploit]: https://groups.google.com/d/topic/ycm-users/NZAPrvaYgxo/discussion
 [example-client]: https://github.com/Valloric/ycmd/blob/master/examples/example_client.py
 [example-readme]: https://github.com/Valloric/ycmd/blob/master/examples/README.md
-[trigger-defaults]: https://github.com/Valloric/ycmd/blob/master/ycmd/completers/completer_utils.py#L24
+[trigger-defaults]: https://github.com/Valloric/ycmd/blob/master/ycmd/completers/completer_utils.py#L143
 [subsequence]: http://en.wikipedia.org/wiki/Subsequence
 [ycm-install]: https://github.com/Valloric/YouCompleteMe/blob/master/README.md#mac-os-x-super-quick-installation
 [def-settings]: https://github.com/Valloric/ycmd/blob/master/ycmd/default_settings.json
@@ -206,3 +228,7 @@ This software is licensed under the [GPL v3 license][gpl].
 [mkstemp]: http://man7.org/linux/man-pages/man3/mkstemp.3.html
 [options]: https://github.com/Valloric/YouCompleteMe#options
 [extra-conf-doc]: https://github.com/Valloric/YouCompleteMe#c-family-semantic-completion-engine-usage
+[emacs-ycmd]: https://github.com/abingham/emacs-ycmd
+[gpl]: http://www.gnu.org/copyleft/gpl.html
+[gocode]: https://github.com/nsf/gocode
+[kak-ycmd]: https://github.com/mawww/kak-ycmd

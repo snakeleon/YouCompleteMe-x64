@@ -25,14 +25,16 @@ import functools
 import socket
 import stat
 import json
-import hmac
-import hashlib
-from distutils.spawn import find_executable
 import subprocess
 import collections
 
-WIN_PYTHON27_PATH = 'C:\python27\pythonw.exe'
-WIN_PYTHON26_PATH = 'C:\python26\pythonw.exe'
+WIN_PYTHON27_PATH = 'C:\python27\python.exe'
+WIN_PYTHON26_PATH = 'C:\python26\python.exe'
+# Creation flag to disable creating a console window on Windows. See
+# https://msdn.microsoft.com/en-us/library/windows/desktop/ms684863.aspx
+CREATE_NO_WINDOW = 0x08000000
+# Executable extensions used on Windows
+WIN_EXECUTABLE_EXTS = [ '.exe', '.bat', '.cmd' ]
 
 
 def SanitizeQuery( query ):
@@ -150,10 +152,6 @@ def PathToPythonInterpreter():
   # Arch Linux) have made the... interesting decision to point /usr/bin/python
   # to python3.
   python_names = [ 'python2', 'python' ]
-  if OnWindows():
-    # On Windows, 'pythonw' doesn't pop-up a console window like running
-    # 'python' does.
-    python_names.insert( 0, 'pythonw' )
 
   path_to_python = PathToFirstExistingExecutable( python_names )
   if path_to_python:
@@ -171,9 +169,33 @@ def PathToPythonInterpreter():
 
 def PathToFirstExistingExecutable( executable_name_list ):
   for executable_name in executable_name_list:
-    path = find_executable( executable_name )
+    path = FindExecutable( executable_name )
     if path:
       return path
+  return None
+
+
+# On Windows, distutils.spawn.find_executable only works for .exe files
+# but .bat and .cmd files are also executables, so we use our own
+# implementation.
+def FindExecutable( executable ):
+  paths = os.environ[ 'PATH' ].split( os.pathsep )
+  base, extension = os.path.splitext( executable )
+
+  if OnWindows() and extension.lower() not in WIN_EXECUTABLE_EXTS:
+    extensions = WIN_EXECUTABLE_EXTS
+  else:
+    extensions = ['']
+
+  for extension in extensions:
+    executable_name = executable + extension
+    if not os.path.isfile( executable_name ):
+      for path in paths:
+        executable_path = os.path.join(path, executable_name )
+        if os.path.isfile( executable_path ):
+          return executable_path
+    else:
+      return executable_name
   return None
 
 
@@ -183,6 +205,14 @@ def OnWindows():
 
 def OnCygwin():
   return sys.platform == 'cygwin'
+
+
+def OnMac():
+  return sys.platform == 'darwin'
+
+
+def OnTravis():
+  return 'TRAVIS' in os.environ
 
 
 # From here: http://stackoverflow.com/a/8536476/1672783
@@ -233,44 +263,16 @@ def ForceSemanticCompletion( request_data ):
            bool( request_data[ 'force_semantic' ] ) )
 
 
-# A wrapper for subprocess.Popen that works around a Popen bug on Windows.
+# A wrapper for subprocess.Popen that fixes quirks on Windows.
 def SafePopen( *args, **kwargs ):
-  if kwargs.get( 'stdin' ) is None:
-    # We need this on Windows otherwise bad things happen. See issue #637.
-    kwargs[ 'stdin' ] = subprocess.PIPE if OnWindows() else None
+  if OnWindows():
+    # We need this to start the server otherwise bad things happen.
+    # See issue #637.
+    if kwargs.get( 'stdin_windows' ) is subprocess.PIPE:
+      kwargs[ 'stdin' ] = subprocess.PIPE
+    # Do not create a console window
+    kwargs[ 'creationflags' ] = CREATE_NO_WINDOW
 
+  kwargs.pop( 'stdin_windows', None )
   return subprocess.Popen( *args, **kwargs )
 
-
-def ContentHexHmacValid( content, hmac, hmac_secret ):
-  return SecureCompareStrings( CreateHexHmac( content, hmac_secret ), hmac )
-
-
-def CreateHexHmac( content, hmac_secret ):
-  # Must ensure that hmac_secret is str and not unicode
-  return hmac.new( str( hmac_secret ),
-                   msg = content,
-                   digestmod = hashlib.sha256 ).hexdigest()
-
-
-# This is the compare_digest function from python 3.4, adapted for 2.7:
-#   http://hg.python.org/cpython/file/460407f35aa9/Lib/hmac.py#l16
-def SecureCompareStrings( a, b ):
-  """Returns the equivalent of 'a == b', but avoids content based short
-  circuiting to reduce the vulnerability to timing attacks."""
-  # Consistent timing matters more here than data type flexibility
-  if not ( isinstance( a, str ) and isinstance( b, str ) ):
-    raise TypeError( "inputs must be str instances" )
-
-  # We assume the length of the expected digest is public knowledge,
-  # thus this early return isn't leaking anything an attacker wouldn't
-  # already know
-  if len( a ) != len( b ):
-    return False
-
-  # We assume that integers in the bytes range are all cached,
-  # thus timing shouldn't vary much due to integer object creation
-  result = 0
-  for x, y in zip( a, b ):
-    result |= ord( x ) ^ ord( y )
-  return result == 0

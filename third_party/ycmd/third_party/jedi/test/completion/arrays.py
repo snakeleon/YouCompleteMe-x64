@@ -224,7 +224,7 @@ f()
 d = dict({'a':''})
 def y(a):
     return a
-#? 
+#?
 y(**d)
 
 # problem with more complicated casts
@@ -297,7 +297,7 @@ list(a)[1]
 
 #? int() str()
 list(a)[0]
-#? 
+#?
 set(a)[0]
 
 #? int() str()
@@ -338,6 +338,11 @@ tuple((1,))[0]
 #? []
 list().__iterable
 
+# With a list comprehension.
+for i in set(a for a in [1]):
+    #? int()
+    i
+
 
 # -----------------
 # Recursions
@@ -352,3 +357,11 @@ def recursion1(foo):
 
 #? int()
 recursion1([1,2])[0]
+
+# -----------------
+# Merged Arrays
+# -----------------
+
+for x in [1] + ['']:
+    #? int() str()
+    x

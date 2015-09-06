@@ -32,7 +32,7 @@ You should also **search the archives of the [ycmd-users][] mailing list**.
 
 Lastly, **make sure you are running the latest version of ycmd**. The issue you
 have encountered may have already been fixed. **Don't forget to recompile
-ycm_core.so too** (usually by just running `install.sh` again).
+ycm_core.so too** (usually by just running `install.py` again).
 
 OK, so we've reached this far. You need to create an issue. First realize that
 the time it takes to fix your issue is a multiple of how long it takes the
@@ -74,7 +74,8 @@ Creating good pull requests
     faster.
 
 4.  **Write tests for your code**. Your pull request is unlikely to be merged
-    without tests.
+    without tests. See [TESTS.md][ycmd-tests] for instructions on running the
+    tests.
 
 5.  **Explain in detail why your pull request makes sense.** Ask yourself, would
     this feature be helpful to others? Not just a few people, but a lot of
@@ -93,13 +94,6 @@ Creating good pull requests
     sometimes what you want can be done in a different way if the reason for the
     change is known. _What goal is your change trying to accomplish?_
 
-6.  **Sign the Google [Contributor License Agreement][cla]** (you can sign
-    online at the bottom of that page). You _must_ sign this form, otherwise we
-    cannot merge in your changes. **_Always_ mention in the pull request that
-    you've signed it**, even if you signed it for a previous pull request (you
-    only need to sign the CLA once).
-
-
 [build-bots]: https://travis-ci.org/Valloric/ycmd
 [ycmd-users]: https://groups.google.com/forum/?hl=en#!forum/ycmd-users
-[cla]: https://developers.google.com/open-source/cla/individual
+[ycmd-tests]: https://github.com/Valloric/ycmd/blob/master/TESTS.md

@@ -15,9 +15,9 @@ There are three kinds of test:
 
 import textwrap
 
+import pytest
+
 import jedi
-from jedi.api import classes
-from jedi.evaluate import Evaluator
 from ..helpers import TestCase
 
 
@@ -27,26 +27,28 @@ class MixinTestFullName(object):
     def check(self, source, desired):
         script = jedi.Script(textwrap.dedent(source))
         definitions = getattr(script, type(self).operation)()
-        self.assertEqual(definitions[0].full_name, desired)
+        for d in definitions:
+            self.assertEqual(d.full_name, desired)
 
     def test_os_path_join(self):
         self.check('import os; os.path.join', 'os.path.join')
 
     def test_builtin(self):
-        self.check('type', 'type')
-
-    def test_from_import(self):
-        self.check('from os import path', 'os.path')
+        self.check('TypeError', 'TypeError')
 
 
 class TestFullNameWithGotoDefinitions(MixinTestFullName, TestCase):
     operation = 'goto_definitions'
 
+    @pytest.mark.skipif('sys.version_info[0] < 3', reason='Python 2 also yields None.')
     def test_tuple_mapping(self):
         self.check("""
         import re
         any_re = re.compile('.*')
-        any_re""", 're.RegexObject')
+        any_re""", '_sre.compile.SRE_Pattern')
+
+    def test_from_import(self):
+        self.check('from os import path', 'os.path')
 
 
 class TestFullNameWithCompletions(MixinTestFullName, TestCase):
@@ -78,10 +80,12 @@ class TestFullDefinedName(TestCase):
         """, ['os', 'os.path', 'os.path.join', 'os.path'])
 
 
-def test_keyword_full_name_should_be_none():
-    """issue #94"""
-    # Using `from jedi.keywords import Keyword` here does NOT work
-    # in Python 3.  This is due to the import hack jedi using.
-    Keyword = classes.keywords.Keyword
-    d = classes.Definition(Evaluator(), Keyword('(', (0, 0)))
-    assert d.full_name is None
+def test_sub_module():
+    """
+    ``full_name needs to check sys.path to actually find it's real path module
+    path.
+    """
+    defs = jedi.Script('from jedi.api import classes; classes').goto_definitions()
+    assert [d.full_name for d in defs] == ['jedi.api.classes']
+    defs = jedi.Script('import jedi.api; jedi.api').goto_definitions()
+    assert [d.full_name for d in defs] == ['jedi.api']

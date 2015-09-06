@@ -24,16 +24,13 @@ from ycmd import extra_conf_store
 from ycmd.utils import ToUtf8IfNeeded
 from ycmd.completers.completer import Completer
 from ycmd.completers.cpp.flags import Flags, PrepareFlagsForClang
+from ycmd.completers.cpp.ephemeral_values_set import EphemeralValuesSet
 
 CLANG_FILETYPES = set( [ 'c', 'cpp', 'objc', 'objcpp' ] )
-MIN_LINES_IN_FILE_TO_PARSE = 5
 PARSING_FILE_MESSAGE = 'Still parsing file, no completions yet.'
 NO_COMPILE_FLAGS_MESSAGE = 'Still no compile flags, no completions yet.'
 INVALID_FILE_MESSAGE = 'File is invalid.'
 NO_COMPLETIONS_MESSAGE = 'No completions found; errors in the file?'
-FILE_TOO_SHORT_MESSAGE = (
-  'File is less than {0} lines long; not compiling.'.format(
-    MIN_LINES_IN_FILE_TO_PARSE ) )
 NO_DIAGNOSTIC_MESSAGE = 'No diagnostic for current line!'
 PRAGMA_DIAG_TEXT_TO_IGNORE = '#pragma once in main file'
 TOO_MANY_ERRORS_DIAG_TEXT_TO_IGNORE = 'too many errors emitted, stopping now'
@@ -47,6 +44,7 @@ class ClangCompleter( Completer ):
     self._completer = ycm_core.ClangCompleter()
     self._flags = Flags()
     self._diagnostic_store = None
+    self._files_being_compiled = EphemeralValuesSet()
 
 
   def SupportedFiletypes( self ):
@@ -54,7 +52,7 @@ class ClangCompleter( Completer ):
 
 
   def GetUnsavedFilesVector( self, request_data ):
-    files = ycm_core.UnsavedFileVec()
+    files = ycm_core.UnsavedFileVector()
     for filename, file_data in request_data[ 'file_data' ].iteritems():
       if not ClangAvailableForFiletypes( file_data[ 'filetypes' ] ):
         continue
@@ -87,12 +85,13 @@ class ClangCompleter( Completer ):
     files = self.GetUnsavedFilesVector( request_data )
     line = request_data[ 'line_num' ]
     column = request_data[ 'start_column' ]
-    results = self._completer.CandidatesForLocationInFile(
-        ToUtf8IfNeeded( filename ),
-        line,
-        column,
-        files,
-        flags )
+    with self._files_being_compiled.GetExclusive( filename ):
+      results = self._completer.CandidatesForLocationInFile(
+          ToUtf8IfNeeded( filename ),
+          line,
+          column,
+          files,
+          flags )
 
     if not results:
       raise RuntimeError( NO_COMPLETIONS_MESSAGE )
@@ -105,26 +104,70 @@ class ClangCompleter( Completer ):
              'GoToDeclaration',
              'GoTo',
              'GoToImprecise',
-             'ClearCompilationFlagCache']
+             'ClearCompilationFlagCache',
+             'GetType',
+             'GetParent',
+             'FixIt']
 
 
   def OnUserCommand( self, arguments, request_data ):
     if not arguments:
       raise ValueError( self.UserCommandsHelpMessage() )
 
-    command = arguments[ 0 ]
-    if command == 'GoToDefinition':
-      return self._GoToDefinition( request_data )
-    elif command == 'GoToDeclaration':
-      return self._GoToDeclaration( request_data )
-    elif command == 'GoTo':
-      return self._GoTo( request_data )
-    elif command == 'GoToImprecise':
-      return self._GoToImprecise( request_data )
-    elif command == 'ClearCompilationFlagCache':
-      return self._ClearCompilationFlagCache()
-    raise ValueError( self.UserCommandsHelpMessage() )
+    # command_map maps: command -> { method, args }
+    #
+    # where:
+    #  "command" is the completer command entered by the user
+    #            (e.g. GoToDefinition)
+    #  "method"  is a method to call for that command
+    #            (e.g. self._GoToDefinition)
+    #  "args"    is a dictionary of
+    #               "method_argument" : "value" ...
+    #            which defines the kwargs (via the ** double splat)
+    #            when calling "method"
+    command_map = {
+      'GoToDefinition' : {
+        'method' : self._GoToDefinition,
+        'args'   : { 'request_data' : request_data }
+      },
+      'GoToDeclaration' : {
+        'method' : self._GoToDeclaration,
+        'args'   : { 'request_data' : request_data }
+      },
+      'GoTo' : {
+        'method' : self._GoTo,
+        'args'   : { 'request_data' : request_data }
+      },
+      'GoToImprecise' : {
+        'method' : self._GoToImprecise,
+        'args'   : { 'request_data' : request_data }
+      },
+      'ClearCompilationFlagCache' : {
+        'method' : self._ClearCompilationFlagCache,
+        'args'   : { }
+      },
+      'GetType' : {
+        'method' : self._GetSemanticInfo,
+        'args'   : { 'request_data' : request_data,
+                     'func'         : 'GetTypeAtLocation' }
+      },
+      'GetParent' : {
+        'method' : self._GetSemanticInfo,
+        'args'   : { 'request_data' : request_data,
+                     'func'         : 'GetEnclosingFunctionAtLocation' }
+      },
+      'FixIt' : {
+        'method' : self._FixIt,
+        'args'   : { 'request_data' : request_data }
+      }
+    }
 
+    try:
+      command_def = command_map[ arguments[ 0 ] ]
+    except KeyError:
+      raise ValueError( self.UserCommandsHelpMessage() )
+
+    return command_def[ 'method' ]( **( command_def[ 'args' ] ) )
 
   def _LocationForGoTo( self, goto_function, request_data, reparse = True ):
     filename = request_data[ 'filepath' ]
@@ -182,17 +225,8 @@ class ClangCompleter( Completer ):
       raise RuntimeError( 'Can\'t jump to definition or declaration.' )
     return _ResponseForLocation( location )
 
-
-  def _ClearCompilationFlagCache( self ):
-    self._flags.Clear()
-
-
-  def OnFileReadyToParse( self, request_data ):
+  def _GetSemanticInfo( self, request_data, func, reparse = True ):
     filename = request_data[ 'filepath' ]
-    contents = request_data[ 'file_data' ][ filename ][ 'contents' ]
-    if contents.count( '\n' ) < MIN_LINES_IN_FILE_TO_PARSE:
-      raise ValueError( FILE_TOO_SHORT_MESSAGE )
-
     if not filename:
       raise ValueError( INVALID_FILE_MESSAGE )
 
@@ -200,10 +234,66 @@ class ClangCompleter( Completer ):
     if not flags:
       raise ValueError( NO_COMPILE_FLAGS_MESSAGE )
 
-    diagnostics = self._completer.UpdateTranslationUnit(
-      ToUtf8IfNeeded( filename ),
-      self.GetUnsavedFilesVector( request_data ),
-      flags )
+    files = self.GetUnsavedFilesVector( request_data )
+    line = request_data[ 'line_num' ]
+    column = request_data[ 'column_num' ]
+
+    message = getattr( self._completer, func )(
+        ToUtf8IfNeeded( filename ),
+        line,
+        column,
+        files,
+        flags,
+        reparse)
+
+    if not message:
+      message = "No semantic information available"
+
+    return responses.BuildDisplayMessageResponse( message )
+
+  def _ClearCompilationFlagCache( self ):
+    self._flags.Clear()
+
+  def _FixIt( self, request_data ):
+    filename = request_data[ 'filepath' ]
+    if not filename:
+      raise ValueError( INVALID_FILE_MESSAGE )
+
+    flags = self._FlagsForRequest( request_data )
+    if not flags:
+      raise ValueError( NO_COMPILE_FLAGS_MESSAGE )
+
+    files = self.GetUnsavedFilesVector( request_data )
+    line = request_data[ 'line_num' ]
+    column = request_data[ 'column_num' ]
+
+    fixits = getattr( self._completer, "GetFixItsForLocationInFile" )(
+        ToUtf8IfNeeded( filename ),
+        line,
+        column,
+        files,
+        flags,
+        True )
+
+    # don't raise an error if not fixits: - leave that to the client to respond
+    # in a nice way
+
+    return responses.BuildFixItResponse( fixits )
+
+  def OnFileReadyToParse( self, request_data ):
+    filename = request_data[ 'filepath' ]
+    if not filename:
+      raise ValueError( INVALID_FILE_MESSAGE )
+
+    flags = self._FlagsForRequest( request_data )
+    if not flags:
+      raise ValueError( NO_COMPILE_FLAGS_MESSAGE )
+
+    with self._files_being_compiled.GetExclusive( filename ):
+      diagnostics = self._completer.UpdateTranslationUnit(
+        ToUtf8IfNeeded( filename ),
+        self.GetUnsavedFilesVector( request_data ),
+        flags )
 
     diagnostics = _FilterDiagnostics( diagnostics )
     self._diagnostic_store = DiagnosticsToDiagStructure( diagnostics )
@@ -267,7 +357,8 @@ def ConvertCompletionData( completion_data ):
     menu_text = completion_data.MainCompletionText(),
     extra_menu_info = completion_data.ExtraMenuInfo(),
     kind = completion_data.kind_.name,
-    detailed_info = completion_data.DetailedInfoForPreviewWindow() )
+    detailed_info = completion_data.DetailedInfoForPreviewWindow(),
+    extra_data = { 'doc_string': completion_data.DocString() } if completion_data.DocString() else None )
 
 
 def DiagnosticsToDiagStructure( diagnostics ):

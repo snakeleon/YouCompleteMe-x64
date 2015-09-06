@@ -192,6 +192,22 @@ Base.upper
 Base().upper
 
 # -----------------
+# dynamic inheritance
+# -----------------
+
+class Angry(object):
+    def shout(self):
+        return 'THIS IS MALARKEY!'
+
+def classgetter():
+    return Angry
+
+class Dude(classgetter()):
+    def react(self):
+        #? ['shout']
+        self.s
+
+# -----------------
 # __call__
 # -----------------
 
@@ -278,10 +294,10 @@ def Recursion():
         self.a = self.a
         self.b = self.b.recurse()
 
-#? 
+#?
 Recursion().a
 
-#? 
+#?
 Recursion().b
 
 # -----------------
@@ -323,15 +339,15 @@ getattr(str(), 'upper')
 getattr(str, 'upper')
 
 # some strange getattr calls
-#? 
+#?
 getattr(str, 1)
-#? 
+#?
 getattr()
-#? 
+#?
 getattr(str)
-#? 
+#?
 getattr(getattr, 1)
-#? 
+#?
 getattr(str, [])
 
 
@@ -372,9 +388,11 @@ class PrivateVar():
         self.__var = 1
         #? int()
         self.__var
+        #? ['__var']
+        self.__var
 #? []
 PrivateVar().__var
-#? 
+#?
 PrivateVar().__var
 
 # -----------------
@@ -382,9 +400,11 @@ PrivateVar().__var
 # -----------------
 class Super(object):
     a = 3
+    def return_sup(self):
+        return 1
 
 class TestSuper(Super):
-    #? 
+    #?
     super()
     def test(self):
         #? Super()
@@ -395,8 +415,15 @@ class TestSuper(Super):
             #? Super()
             super()
         def a():
-            #? 
+            #?
             super()
+
+    def return_sup(self):
+        #? int()
+        return super().return_sup()
+
+#? int()
+TestSuper().return_sup()
 
 
 # -----------------
@@ -423,9 +450,26 @@ class TestX(object):
 # -----------------
 
 class A(object):
-    pass
+    a = 3
 
 #? ['mro']
 A.mro
 #? []
 A().mro
+
+
+# -----------------
+# mro resolution
+# -----------------
+
+class B(A()):
+    b = 3
+
+#?
+B.a
+#?
+B().a
+#? int()
+B.b
+#? int()
+B().b

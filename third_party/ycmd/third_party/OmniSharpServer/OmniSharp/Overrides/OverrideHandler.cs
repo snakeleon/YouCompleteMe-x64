@@ -99,6 +99,8 @@ namespace OmniSharp.Overrides {
             memberDeclaration.Modifiers |= Modifiers.Override;
             // Remove virtual flag
             memberDeclaration.Modifiers &= ~ Modifiers.Virtual;
+            // Remove abstract flag
+            memberDeclaration.Modifiers &= ~ Modifiers.Abstract;
 
             // The current type declaration, e.g. class, struct..
             var typeDeclaration = parsedContent.SyntaxTree.GetNodeAt
@@ -106,11 +108,11 @@ namespace OmniSharp.Overrides {
                 , n => n.NodeType == NodeType.TypeDeclaration);
 
             // Even empty classes have nodes, so this works
-            var memberBeforeClosingBraceNode =
-                typeDeclaration.Children.Last().GetPrevNode();
+            var lastNode =
+                typeDeclaration.Children.Last();
 
-            script.InsertAfter
-                ( node    : memberBeforeClosingBraceNode
+            script.InsertBefore
+                ( node    : lastNode
                 , newNode : memberDeclaration);
             script.FormatText(memberDeclaration);
 

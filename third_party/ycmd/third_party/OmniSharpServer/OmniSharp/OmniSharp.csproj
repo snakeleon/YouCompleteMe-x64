@@ -1,4 +1,3 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <PropertyGroup>
     <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
@@ -9,11 +8,9 @@
     <RootNamespace>OmniSharp</RootNamespace>
     <AssemblyName>OmniSharp</AssemblyName>
     <TargetFrameworkVersion>v4.0</TargetFrameworkVersion>
-    <TargetFrameworkProfile>
-    </TargetFrameworkProfile>
+    <TargetFrameworkProfile></TargetFrameworkProfile>
     <FileAlignment>512</FileAlignment>
     <SolutionDir Condition="$(SolutionDir) == '' Or $(SolutionDir) == '*Undefined*'">..\</SolutionDir>
-    <RestorePackages>true</RestorePackages>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|x86' ">
     <PlatformTarget>x86</PlatformTarget>
@@ -75,6 +72,15 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="Microsoft.CSharp" />
+    <Reference Include="Nancy.Metadata.Module">
+      <HintPath>..\packages\Nancy.MetaData.0.23.2\lib\net40\Nancy.Metadata.Module.dll</HintPath>
+    </Reference>
+    <Reference Include="Nancy.Swagger">
+      <HintPath>..\packages\Nancy.Swagger.0.1.0-alpha3\lib\net40\Nancy.Swagger.dll</HintPath>
+    </Reference>
+    <Reference Include="Swagger.ObjectModel">
+      <HintPath>..\packages\Swagger.ObjectModel.0.1.0-alpha3\lib\net40\Swagger.ObjectModel.dll</HintPath>
+    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Configuration" />
     <Reference Include="System.Core" />
@@ -83,11 +89,14 @@
     <Reference Include="monodoc">
       <HintPath>..\packages\monodoc.dll</HintPath>
     </Reference>
+    <Reference Include="System.IO.Abstractions">
+      <HintPath>..\packages\System.IO.Abstractions.1.4.0.92\lib\net35\System.IO.Abstractions.dll</HintPath>
+    </Reference>
     <Reference Include="Nancy">
-      <HintPath>..\packages\Nancy.0.22.2\lib\net40\Nancy.dll</HintPath>
+      <HintPath>..\packages\Nancy.0.23.2\lib\net40\Nancy.dll</HintPath>
     </Reference>
     <Reference Include="Nancy.Hosting.Self">
-      <HintPath>..\packages\Nancy.Hosting.Self.0.22.2\lib\net40\Nancy.Hosting.Self.dll</HintPath>
+      <HintPath>..\packages\Nancy.Hosting.Self.0.23.2\lib\net40\Nancy.Hosting.Self.dll</HintPath>
     </Reference>
   </ItemGroup>
   <ItemGroup>
@@ -95,16 +104,52 @@
       <SubType>Code</SubType>
     </Compile>
     <Compile Include="AutoComplete\HelpService.cs" />
+    <Compile Include="AutoComplete\Metadata\AutoCompleteMetadataModule.cs" />
+    <Compile Include="AutoComplete\Metadata\AutoCompleteRequestMetadataProvider.cs" />
+    <Compile Include="AutoComplete\Metadata\AutoCompleteResponseMetadataProvider.cs" />
+    <Compile Include="Build\Metadata\BuildCommandMetadataModule.cs" />
+    <Compile Include="CheckAliveStatus\Metadata\CheckAliveStatusMetadataModule.cs" />
+    <Compile Include="CheckReadyStatus\Metadata\CheckReadyStatusMetadataModule.cs" />
+    <Compile Include="CodeActions\Metadata\FixUsingsMetadataModule.cs" />
+    <Compile Include="CodeActions\Metadata\GetCodeActionsMetadataModule.cs" />
+    <Compile Include="CodeActions\Metadata\RunCodeActionMetadataModule.cs" />
+    <Compile Include="CodeFormat\Metadata\CodeFormatMetadataModule.cs" />
     <Compile Include="CodeIssues\CodeIssueProviders.cs" />
     <Compile Include="CodeIssues\CodeIssuesHandler.cs" />
     <Compile Include="CodeIssues\CodeIssuesModule.cs" />
     <Compile Include="CodeIssues\GetCodeIssuesResponse.cs" />
+    <Compile Include="CodeIssues\Metadata\CodeIssuesMetadataModule.cs" />
     <Compile Include="CodeIssues\RunCodeIssuesResponse.cs" />
     <Compile Include="Common\CygPathWrapper.cs" />
     <Compile Include="Configuration\OmniSharpConfiguration.cs" />
     <Compile Include="Configuration\PathMode.cs" />
     <Compile Include="Configuration\PathReplacement.cs" />
     <Compile Include="Configuration\TestCommands.cs" />
+    <Compile Include="CurrentFileMembers\Metadata\CurrentFileMembersAsTreeMetadataModule.cs" />
+    <Compile Include="CurrentFileMembers\Metadata\CurrentFileMembersAsFlatMetadataModule.cs" />
+    <Compile Include="CurrentFileMembers\Metadata\CurrentFileTopLevelTypesMetadataModule.cs" />
+    <Compile Include="FindSymbols\Metadata\FindSymbolsMetadataModule.cs" />
+    <Compile Include="FindTypes\Metadata\FindTypesMetadataModule.cs" />
+    <Compile Include="FindUsages\Metadata\FindUsagesMetadataModule.cs" />
+    <Compile Include="GotoDefinition\Metadata\GotoDefinitionRequestMetadataProvider.cs" />
+    <Compile Include="GotoDefinition\Metadata\GotoDefinitionResponseMetadataProvider.cs" />
+    <Compile Include="GotoFile\Metadata\GotoFileMetadataModule.cs" />
+    <Compile Include="GotoImplementation\Metadata\GotoImplementationMetadataModule.cs" />
+    <Compile Include="GotoRegion\Metadata\GotoRegionMetadataModule.cs" />
+    <Compile Include="LookupAllTypes\Metadata\LookupAllTypesMetadataModule.cs" />
+    <Compile Include="Overrides\Metadata\GetOverrideTargetsMetadataModule.cs" />
+    <Compile Include="Overrides\Metadata\RunOverrideTargetMetadataModule.cs" />
+    <Compile Include="ProjectManipulation\AddReference\Metadata\AddReferenceMetadataModule.cs" />
+    <Compile Include="ProjectManipulation\AddToProject\Metadata\AddToProjectMetadataModule.cs" />
+    <Compile Include="ProjectManipulation\RemoveFromProject\Metadata\RemoveFromProjectMetadataModule.cs" />
+    <Compile Include="ReloadSolution\Metadata\ReloadSolutionMetadataModule.cs" />
+    <Compile Include="Rename\Metadata\RenameMetadataModule.cs" />
+    <Compile Include="SemanticErrors\Metadata\SemanticErrorsMetadataModule.cs" />
+    <Compile Include="StopServer\Metadata\StopServerMetadataModule.cs" />
+    <Compile Include="SyntaxErrors\CodeCheckHandler.cs" />
+    <Compile Include="SyntaxErrors\CodeCheckModule.cs" />
+    <Compile Include="SyntaxErrors\Metadata\CodeCheckMetadataModule.cs" />
+    <Compile Include="SyntaxErrors\Metadata\SyntaxErrorsMetadataModule.cs" />
     <Compile Include="TestContextInformation\GetContextResponse.cs" />
     <Compile Include="TestContextInformation\TestCommandRequest.cs" />
     <Compile Include="Documentation\DocumentationFetcher.cs" />
@@ -114,6 +159,7 @@
     <Compile Include="TestContextInformation\GetTestContextResponse.cs" />
     <Compile Include="Build\BuildCommandBuilder.cs" />
     <Compile Include="Build\BuildCommandModule.cs" />
+    <Compile Include="Common\Error.cs" />
     <Compile Include="Common\FileSystem.cs" />
     <Compile Include="Common\IFileSystem.cs" />
     <Compile Include="FindSymbols\FindSymbolsHandler.cs" />
@@ -190,7 +236,6 @@
     <Compile Include="Solution\OrphanProject.cs" />
     <Compile Include="Solution\StringExtensions.cs" />
     <Compile Include="StopServer\StopServerModule.cs" />
-    <Compile Include="SyntaxErrors\Error.cs" />
     <Compile Include="SyntaxErrors\SyntaxErrorsModule.cs" />
     <Compile Include="Parser\BufferParser.cs" />
     <Compile Include="GotoDefinition\GotoDefinitionHandler.cs" />
@@ -201,6 +246,7 @@
     </Compile>
     <Compile Include="GotoImplementation\Location.cs" />
     <Compile Include="GotoDefinition\GotoDefinitionResponse.cs" />
+    <Compile Include="GotoDefinition\Metadata\GotoDefinitionMetadataModule.cs" />
     <Compile Include="Parser\ParsedResult.cs" />
     <Compile Include="AutoComplete\AutoCompleteModule.cs" />
     <Compile Include="AutoComplete\AutoCompleteRequest.cs" />
@@ -211,6 +257,9 @@
     <Compile Include="GotoDefinition\GotoDefinitionModule.cs" />
     <Compile Include="GotoDefinition\GotoDefinitionRequest.cs" />
     <Compile Include="Common\Request.cs" />
+    <Compile Include="SemanticErrors\SemanticErrorsHandler.cs" />
+    <Compile Include="SemanticErrors\SemanticErrorsModule.cs" />
+    <Compile Include="SemanticErrors\SemanticErrorsResponse.cs" />
     <Compile Include="Solution\CSharpFile.cs" />
     <Compile Include="Solution\CSharpProject.cs" />
     <Compile Include="Logger.cs" />
@@ -225,6 +274,7 @@
     <Compile Include="Documentation\XmlDocumentationProviderFactory.cs" />
     <Compile Include="SyntaxErrors\SyntaxErrorsHandler.cs" />
     <Compile Include="SyntaxErrors\SyntaxErrorsResponse.cs" />
+    <Compile Include="TypeLookup\Metadata\TypeLookupMetadataModule.cs" />
     <Compile Include="TypeLookup\TypeLookupHandler.cs" />
     <Compile Include="TypeLookup\TypeLookupResponse.cs" />
     <Compile Include="TypeLookup\TypeLookupModule.cs" />
@@ -243,6 +293,7 @@
     <Compile Include="GotoRegion\GotoRegionHandler.cs" />
     <Compile Include="GotoRegion\GotoRegionModule.cs" />
     <Compile Include="GotoRegion\GetDirectivesAstVisitor.cs" />
+    <Compile Include="UpdateBuffer\Metadata\UpdateBufferMetadataModule.cs" />
     <Compile Include="UpdateBuffer\UpdateBufferModule.cs" />
     <Compile Include="CodeActions\GetCodeActionRequest.cs" />
     <Compile Include="Solution\ProjectFinder.cs" />
@@ -250,6 +301,23 @@
     <Compile Include="CodeActions\FixUsingsResponse.cs" />
     <Compile Include="CodeActions\FixUsingsModule.cs" />
     <Compile Include="Solution\CSharpFolder.cs" />
+    <Compile Include="AutoComplete\SnippetGenerator.cs" />
+    <Compile Include="Build\BuildTargetRequest.cs" />
+    <Compile Include="Build\BuildTargetResponse.cs" />
+    <Compile Include="AutoComplete\ReturnTypeAmbience.cs" />
+    <Compile Include="Solution\AssemblySearch.cs" />
+    <Compile Include="Solution\Project.cs" />
+    <Compile Include="Solution\SolutionPicker.cs" />
+    <Compile Include="Common\Metadata\QuickFixResponseMetadataProvider.cs" />
+    <Compile Include="Common\Metadata\QuickFixMetadataProvider.cs" />
+    <Compile Include="Common\Metadata\RequestMetadataProvider.cs" />
+    <Compile Include="ProcessExtensions.cs" />
+    <Compile Include="PlatformHelper.cs" />
+    <Compile Include="FindProjects\FindProjectsHandler.cs" />
+    <Compile Include="FindProjects\FindProjectsModule.cs" />
+    <Compile Include="FindProjects\FindProjectsResponse.cs" />
+    <Compile Include="FindProjects\MsBuildProject.cs" />
+    <Compile Include="FindProjects\MsBuildWorkspaceInformation.cs" />
   </ItemGroup>
   <ItemGroup>
     <None Include="app.config" />
@@ -263,30 +331,29 @@
       <Project>{3650EB54-3511-4009-B430-3DA4BBFD9D7F}</Project>
       <Name>Microsoft.Build.Evaluation</Name>
     </ProjectReference>
-    <ProjectReference Include="..\NRefactory\ICSharpCode.NRefactory.CSharp\ICSharpCode.NRefactory.CSharp.csproj">
-      <Project>{53DCA265-3C3C-42F9-B647-F72BA678122B}</Project>
-      <Name>ICSharpCode.NRefactory.CSharp</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\NRefactory\ICSharpCode.NRefactory\ICSharpCode.NRefactory.csproj">
-      <Project>{3B2A5653-EC97-4001-BB9B-D90F1AF2C371}</Project>
-      <Name>ICSharpCode.NRefactory</Name>
-    </ProjectReference>
     <ProjectReference Include="..\NRefactory\ICSharpCode.NRefactory.Cecil\ICSharpCode.NRefactory.Cecil.csproj">
       <Project>{2B8F4F83-C2B3-4E84-A27B-8DEE1BE0E006}</Project>
       <Name>ICSharpCode.NRefactory.Cecil</Name>
-    </ProjectReference>
-    <ProjectReference Include="..\cecil\Mono.Cecil.csproj">
-      <Project>{D68133BD-1E63-496E-9EDE-4FBDBF77B486}</Project>
-      <Name>Mono.Cecil</Name>
     </ProjectReference>
     <ProjectReference Include="..\NRefactory\ICSharpCode.NRefactory.CSharp.Refactoring\ICSharpCode.NRefactory.CSharp.Refactoring.csproj">
       <Project>{2A705FC6-1A9E-4941-9E47-254D79F2D9D5}</Project>
       <Name>ICSharpCode.NRefactory.CSharp.Refactoring</Name>
     </ProjectReference>
+    <ProjectReference Include="..\NRefactory\ICSharpCode.NRefactory\ICSharpCode.NRefactory.csproj">
+      <Project>{3B2A5653-EC97-4001-BB9B-D90F1AF2C371}</Project>
+      <Name>ICSharpCode.NRefactory</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\NRefactory\ICSharpCode.NRefactory.CSharp\ICSharpCode.NRefactory.CSharp.csproj">
+      <Project>{53DCA265-3C3C-42F9-B647-F72BA678122B}</Project>
+      <Name>ICSharpCode.NRefactory.CSharp</Name>
+    </ProjectReference>
+    <ProjectReference Include="..\cecil\Mono.Cecil.csproj">
+      <Project>{D68133BD-1E63-496E-9EDE-4FBDBF77B486}</Project>
+      <Name>Mono.Cecil</Name>
+    </ProjectReference>
   </ItemGroup>
   <ItemGroup />
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <!--<Import Project="$(SolutionDir)\.nuget\NuGet.targets" />-->
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
        Other similar extension points exist, see Microsoft.Common.targets.
   <Target Name="BeforeBuild">
@@ -295,4 +362,12 @@
   </Target>
   -->
   <ItemGroup />
+  <!--NuGet package restore is disabled because xbuild fetches packages on every build-->
+  <!--<Import Project="$(SolutionDir)\.nuget\NuGet.targets" Condition="Exists('$(SolutionDir)\.nuget\NuGet.targets')" />-->
+  <!--<Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">-->
+  <!--<PropertyGroup>-->
+  <!--<ErrorText>This project references NuGet package(s) that are missing on this computer. Enable NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>-->
+  <!--</PropertyGroup>-->
+  <!--<Error Condition="!Exists('$(SolutionDir)\.nuget\NuGet.targets')" Text="$([System.String]::Format('$(ErrorText)', '$(SolutionDir)\.nuget\NuGet.targets'))" />-->
+  <!--</Target>-->
 </Project>

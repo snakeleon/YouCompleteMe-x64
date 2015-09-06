@@ -19,6 +19,7 @@
 # You should have received a copy of the GNU General Public License
 # along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
 
+from ycmd.utils import ToUtf8IfNeeded
 from ycmd.completers.completer import Completer
 from ycmd import responses
 
@@ -55,12 +56,30 @@ class JediCompleter( Completer ):
       return jedi.Script( contents, line, column, filename )
 
 
+  def _GetExtraData( self, completion ):
+      location = {}
+      if completion.module_path:
+        location[ 'filepath' ] = ToUtf8IfNeeded( completion.module_path )
+      if completion.line:
+        location[ 'line_num' ] = completion.line
+      if completion.column:
+        location[ 'column_num' ] = completion.column + 1
+
+      if location:
+        extra_data = {}
+        extra_data[ 'location' ] = location
+        return extra_data
+      else:
+        return None
+
+
   def ComputeCandidatesInner( self, request_data ):
     script = self._GetJediScript( request_data )
     return [ responses.BuildCompletionData(
-                str( completion.name ),
-                str( completion.description ),
-                str( completion.doc ) )
+                ToUtf8IfNeeded( completion.name ),
+                ToUtf8IfNeeded( completion.description ),
+                ToUtf8IfNeeded( completion.docstring() ),
+                extra_data = self._GetExtraData( completion ) )
              for completion in script.completions() ]
 
   def DefinedSubcommands( self ):
@@ -113,9 +132,9 @@ class JediCompleter( Completer ):
     script = self._GetJediScript( request_data )
     try:
       if declaration:
-        definitions = script.goto_definitions()
-      else:
         definitions = script.goto_assignments()
+      else:
+        definitions = script.goto_definitions()
     except jedi.NotFoundError:
       raise RuntimeError(
                   'Cannot follow nothing. Put your cursor on a valid name.' )

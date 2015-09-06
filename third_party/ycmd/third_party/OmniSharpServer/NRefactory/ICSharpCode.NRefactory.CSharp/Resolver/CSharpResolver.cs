@@ -1586,8 +1586,7 @@ namespace ICSharpCode.NRefactory.CSharp.Resolver
 								resultType = def;
 							
 							if (firstResult == null || !TopLevelTypeDefinitionIsAccessible(firstResult.GetDefinition())) {
-								if (TopLevelTypeDefinitionIsAccessible(resultType.GetDefinition()))
-									firstResult = resultType;
+								firstResult = resultType;
 							} else if (TopLevelTypeDefinitionIsAccessible(def)) {
 								return new AmbiguousTypeResolveResult(firstResult);
 							}

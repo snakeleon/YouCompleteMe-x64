@@ -1,30 +1,33 @@
+#Notice
+This project is being replaced with [OmniSharp Roslyn](https://github.com/OmniSharp/omnisharp-roslyn). I'll still accept PRs for this project, but please note that all development has stopped here.
+
+
+
 OmniSharpServer
 ===============
-
-[![Mono Build Status](https://travis-ci.org/nosami/OmniSharpServer.png?branch=master)](https://travis-ci.org/nosami/OmniSharpServer) [![Windows Build Status](http://teamcity.codebetter.com/app/rest/builds/buildType:(id:bt1232)/statusIcon)](http://teamcity.codebetter.com/viewType.html?buildTypeId=bt1232&guest=1)
+[![Mono Build Status](https://travis-ci.org/OmniSharp/omnisharp-server.svg?branch=master)](https://travis-ci.org/OmniSharp/omnisharp-server) [![Windows Build Status](http://teamcity.codebetter.com/app/rest/builds/buildType:(id:bt1232)/statusIcon)](http://teamcity.codebetter.com/viewType.html?buildTypeId=bt1232&guest=1)
 
 HTTP wrapper around [NRefactory] (https://github.com/icsharpcode/NRefactory) allowing C# editor plugins to be written for any editor in any language.
 
 
-This is the server component for the [Vim OmniSharp plugin](https://github.com/nosami/OmniSharp), [YouCompleteMe](https://github.com/Valloric/YouCompleteMe), [Sublime Text 2](https://github.com/PaulCampbell/OmniSharpSublimePlugin), [Sublime Text 3](https://github.com/moonrabbit/OmniSharpSublime)
-and [Emacs OmniSharp plugin](https://github.com/sp3ctum/omnisharp-emacs).
+This is the server component for the [Vim OmniSharp plugin](https://github.com/nosami/OmniSharp), [YouCompleteMe](https://github.com/Valloric/YouCompleteMe), [Sublime Text 2](https://github.com/PaulCampbell/OmniSharpSublimePlugin), [Sublime Text 3](https://github.com/moonrabbit/OmniSharpSublime), [Emacs OmniSharp plugin](https://github.com/sp3ctum/omnisharp-emacs) and [Atom plugin](https://github.com/Mpdreamz/atom-sharper)
 
 
 #Build
 
 ####OSX / Linux 
-Requires a minimum of Mono 3.0.12 - If you absolutely must use mono 2.10 then checkout the mono-2.10.8 tag. [Updating mono on ubuntu](https://github.com/nosami/OmniSharpServer/wiki)
+Requires a minimum of Mono 3.0.12 - If you absolutely must use mono 2.10 then checkout the mono-2.10.8 tag. [Updating mono on ubuntu](https://github.com/nosami/OmniSharpServer/wiki). If you are using OSX, please use the official version of Mono as the homebrew version has [known](https://github.com/nosami/OmniSharpServer/issues/83) [issues](https://github.com/nosami/OmniSharpServer/issues/80).
 ```
-    git clone https://github.com/nosami/OmniSharpServer.git
-    cd OmniSharpServer
+    git clone https://github.com/OmniSharp/omnisharp-server.git
+    cd omnisharp-server
     git submodule update --init --recursive
     xbuild
 ```
 
 ####Windows
 ```
-    git clone https://github.com/nosami/OmniSharpServer.git
-    cd OmniSharpServer
+    git clone https://github.com/OmniSharp/omnisharp-server.git
+    cd omnisharp-server
     git submodule update --init --recursive
 
     # (if using Cygwin, overwrite the default config file config.json with config-cygwin.json)
@@ -34,8 +37,13 @@ Requires a minimum of Mono 3.0.12 - If you absolutely must use mono 2.10 then ch
 
 To start the Omnisharp server manually (The Vim OmniSharp client and YouCompleteMe may start this for you automatically):
 
+- Use the current working directory
+    - If one solution file is found, use it. Otherwise start in folder mode.
+```
+[mono] OmniSharp.exe
+```
 
-- With a solution file / project files
+- To specify a solution file / project files
 ```
 [mono] OmniSharp.exe -s (path\to\sln)
 ```

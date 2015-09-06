@@ -100,7 +100,8 @@ def GetUnsavedAndCurrentBufferData():
       continue
 
     buffers_data[ GetBufferFilepath( buffer_object ) ] = {
-      'contents': '\n'.join( buffer_object ),
+      # Add a newline to match what gets saved to disk. See #1455 for details.
+      'contents': '\n'.join( buffer_object ) + '\n',
       'filetypes': FiletypesForBuffer( buffer_object )
     }
 
@@ -137,16 +138,12 @@ def GetBufferFilepath( buffer_object ):
   return os.path.join( folder_path, str( buffer_object.number ) )
 
 
-# NOTE: This unplaces *all* signs in a buffer, not just the ones we placed. We
-# used to track which signs we ended up placing and would then only unplace
-# ours, but that causes flickering Vim since we have to call
-#    sign unplace <id> buffer=<buffer-num>
-# in a loop. So we're forced to unplace all signs, which might conflict with
-# other Vim plugins.
-def UnplaceAllSignsInBuffer( buffer_number ):
+def UnplaceSignInBuffer( buffer_number, sign_id ):
   if buffer_number < 0:
     return
-  vim.command( 'sign unplace * buffer={0}'.format( buffer_number ) )
+  vim.command(
+    'try | exec "sign unplace {0} buffer={1}" | catch /E158/ | endtry'.format(
+        sign_id, buffer_number ) )
 
 
 def PlaceSign( sign_id, line_num, buffer_num, is_error = True ):
@@ -158,6 +155,26 @@ def PlaceSign( sign_id, line_num, buffer_num, is_error = True ):
   sign_name = 'YcmError' if is_error else 'YcmWarning'
   vim.command( 'sign place {0} line={1} name={2} buffer={3}'.format(
     sign_id, line_num, sign_name, buffer_num ) )
+
+
+def PlaceDummySign( sign_id, buffer_num, line_num ):
+    if buffer_num < 0 or line_num < 0:
+      return
+    vim.command( 'sign define ycm_dummy_sign' )
+    vim.command(
+      'sign place {0} name=ycm_dummy_sign line={1} buffer={2}'.format(
+        sign_id,
+        line_num,
+        buffer_num,
+      )
+    )
+
+
+def UnPlaceDummySign( sign_id, buffer_num ):
+    if buffer_num < 0:
+      return
+    vim.command( 'sign undefine ycm_dummy_sign' )
+    vim.command( 'sign unplace {0} buffer={1}'.format( sign_id, buffer_num ) )
 
 
 def ClearYcmSyntaxMatches():
@@ -228,11 +245,15 @@ def ConvertDiagnosticsToQfList( diagnostics ):
     if line_num < 1:
       line_num = 1
 
+    text = diagnostic[ 'text' ]
+    if diagnostic.get( 'fixit_available', False ):
+      text += ' (FixIt available)'
+
     return {
       'bufnr' : GetBufferNumberForFilename( location[ 'filepath' ] ),
       'lnum'  : line_num,
       'col'   : location[ 'column_num' ],
-      'text'  : ToUtf8IfNeeded( diagnostic[ 'text' ] ),
+      'text'  : ToUtf8IfNeeded( text ),
       'type'  : diagnostic[ 'kind' ][ 0 ],
       'valid' : 1
     }
@@ -286,6 +307,25 @@ def EscapedFilepath( filepath ):
 
 
 # Both |line| and |column| need to be 1-based
+def TryJumpLocationInOpenedTab( filename, line, column ):
+  filepath = os.path.realpath( filename )
+
+  for tab in vim.tabpages:
+    for win in tab.windows:
+      if win.buffer.name == filepath:
+        vim.current.tabpage = tab
+        vim.current.window = win
+        vim.current.window.cursor = ( line, column - 1 )
+
+        # Center the screen on the jumped-to location
+        vim.command( 'normal! zz' )
+        return
+  else:
+    # 'filename' is not opened in any tab pages
+    raise ValueError
+
+
+# Both |line| and |column| need to be 1-based
 def JumpToLocation( filename, line, column ):
   # Add an entry to the jumplist
   vim.command( "normal! m'" )
@@ -298,6 +338,14 @@ def JumpToLocation( filename, line, column ):
     # Sadly this fails on random occasions and the undesired jump remains in the
     # jumplist.
     user_command = user_options_store.Value( 'goto_buffer_command' )
+
+    if user_command == 'new-or-existing-tab':
+      try:
+        TryJumpLocationInOpenedTab( filename, line, column )
+        return
+      except ValueError:
+        user_command = 'new-tab'
+
     command = BUFFER_COMMAND_MAP.get( user_command, 'edit' )
     if command == 'edit' and not BufferIsUsable( vim.current.buffer ):
       command = 'split'
@@ -314,11 +362,13 @@ def NumLinesInBuffer( buffer_object ):
   return len( buffer_object )
 
 
-# Calling this function from the non-GUI thread will sometimes crash Vim. At the
-# time of writing, YCM only uses the GUI thread inside Vim (this used to not be
-# the case).
+# Calling this function from the non-GUI thread will sometimes crash Vim. At
+# the time of writing, YCM only uses the GUI thread inside Vim (this used to
+# not be the case).
+# We redraw the screen before displaying the message to avoid the "Press ENTER
+# or type command to continue" prompt when editing a new C-family file.
 def PostVimMessage( message ):
-  vim.command( "echohl WarningMsg | echom '{0}' | echohl None"
+  vim.command( "redraw | echohl WarningMsg | echom '{0}' | echohl None"
                .format( EscapeForVim( str( message ) ) ) )
 
 
@@ -408,3 +458,48 @@ def GetBoolValue( variable ):
 def GetIntValue( variable ):
   return int( vim.eval( variable ) )
 
+
+# Replace the chunk of text specified by a contiguous range with the supplied
+# text.
+# * start and end are objects with line_num and column_num properties
+# * the range is inclusive
+# * indices are all 1-based
+# * the returned character delta is the delta for the last line
+#
+# returns the delta (in lines and characters) that any position after the end
+# needs to be adjusted by.
+def ReplaceChunk( start, end, replacement_text, line_delta, char_delta,
+                  vim_buffer = None ):
+  if vim_buffer is None:
+    vim_buffer = vim.current.buffer
+
+  # ycmd's results are all 1-based, but vim's/python's are all 0-based
+  # (so we do -1 on all of the values)
+  start_line = start[ 'line_num' ] - 1 + line_delta
+  end_line = end[ 'line_num' ] - 1 + line_delta
+  source_lines_count = end_line - start_line + 1
+  start_column = start[ 'column_num' ] - 1 + char_delta
+  end_column = end[ 'column_num' ] - 1
+  if source_lines_count == 1:
+    end_column += char_delta
+
+  replacement_lines = replacement_text.splitlines( False )
+  if not replacement_lines:
+    replacement_lines = [ '' ]
+  replacement_lines_count = len( replacement_lines )
+
+  end_existing_text = vim_buffer[ end_line ][ end_column : ]
+  start_existing_text = vim_buffer[ start_line ][ : start_column ]
+
+  new_char_delta = ( len( replacement_lines[ -1 ] )
+                     - ( end_column - start_column ) )
+  if replacement_lines_count > 1:
+    new_char_delta -= start_column
+
+  replacement_lines[ 0 ] = start_existing_text + replacement_lines[ 0 ]
+  replacement_lines[ -1 ] = replacement_lines[ -1 ] + end_existing_text
+
+  vim_buffer[ start_line : end_line + 1 ] = replacement_lines[:]
+
+  new_line_delta = replacement_lines_count - source_lines_count
+  return ( new_line_delta, new_char_delta )

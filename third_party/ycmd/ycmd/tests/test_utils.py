@@ -21,6 +21,7 @@ import os
 import time
 from .. import handlers
 from ycmd import user_options_store
+from ycmd.utils import OnTravis
 
 def BuildRequest( **kwargs ):
   filepath = kwargs[ 'filepath' ] if 'filepath' in kwargs else '/foo'
@@ -62,22 +63,45 @@ def PathToTestDataDir():
   return os.path.join( dir_of_current_script, 'testdata' )
 
 
-def PathToTestFile( test_basename ):
-  return os.path.join( PathToTestDataDir(), test_basename )
+def PathToTestFile( *args ):
+  return os.path.join( PathToTestDataDir(), *args )
 
 
-def StopOmniSharpServer( app ):
+def StopOmniSharpServer( app, filename ):
   app.post_json( '/run_completer_command',
                  BuildRequest( completer_target = 'filetype_default',
                                command_arguments = ['StopServer'],
+                               filepath = filename,
                                filetype = 'cs' ) )
 
 
-def WaitUntilOmniSharpServerReady( app ):
-  while True:
-    result = app.get( '/ready', { 'include_subservers': 1 } ).json
+def WaitUntilOmniSharpServerReady( app, filename ):
+  retries = 100;
+  success = False;
+
+  # If running on Travis CI, keep trying forever. Travis will kill the worker
+  # after 10 mins if nothing happens.
+  while retries > 0 or OnTravis():
+    result = app.get( '/ready', { 'subserver': 'cs' } ).json
     if result:
+      success = True;
       break
+    request = BuildRequest( completer_target = 'filetype_default',
+                            command_arguments = [ 'ServerTerminated' ],
+                            filepath = filename,
+                            filetype = 'cs' )
+    result = app.post_json( '/run_completer_command', request ).json
+    if result:
+      raise RuntimeError( "OmniSharp failed during startup." )
     time.sleep( 0.2 )
+    retries = retries - 1
+
+  if not success:
+    raise RuntimeError( "Timeout waiting for OmniSharpServer" )
 
 
+def StopGoCodeServer( app ):
+  app.post_json( '/run_completer_command',
+                 BuildRequest( completer_target = 'filetype_default',
+                               command_arguments = ['StopServer'],
+                               filetype = 'go' ) )

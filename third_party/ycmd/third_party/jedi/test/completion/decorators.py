@@ -31,7 +31,7 @@ def fu(a, b, c, *args, **kwargs):
 
 exe = fu(list, c=set, b=3, d='')
 
-#? list()
+#? list
 exe[0]
 #? int()
 exe[1]
@@ -63,7 +63,7 @@ def fu2(a, b, c, *args, **kwargs):
 
 exe = fu2(list, c=set, b=3, d='str')
 
-#? list()
+#? list
 exe[0]
 #? int()
 exe[1]
@@ -121,7 +121,7 @@ class SelfVars():
     @Decorator
     def __init__(self):
         """
-        init decorators should be ignored when looking up variables in the
+        __init__ decorators should be ignored when looking up variables in the
         class.
         """
         self.c = list
@@ -191,6 +191,18 @@ f()
 #? int()
 g()
 
+
+class X():
+    @str
+    def x(self):
+        pass
+
+    def y(self):
+        #? str()
+        self.x
+        #?
+        self.x()
+
 # -----------------
 # method decorators
 # -----------------
@@ -257,7 +269,7 @@ class MethodDecoratorDoesntExist(Base):
 # -----------------
 def memoize(function):
         def wrapper(*args):
-            if 1:
+            if random.choice([0, 1]):
                 pass
             else:
                 rv = function(*args)

@@ -694,7 +694,7 @@ namespace ICSharpCode.NRefactory.CSharp.Completion
 					while (o >= "try".Length) {
 						char ch = memberText [o];
 						if (!char.IsWhiteSpace (ch)) {
-								if (ch == 'y' && memberText [o - 1] == 'r' && memberText [o - 2] == 't' && (o - 3 < 0 || !char.IsLetterOrDigit(memberText [o - 3]))) {
+							if (ch == 'y' && memberText [o - 1] == 'r' && memberText [o - 2] == 't') {
 								wrapper.Append ("} catch {}");
 								didAppendCatch = true;
 							}

@@ -1,4 +1,4 @@
-﻿using ICSharpCode.NRefactory.Editor;
+using ICSharpCode.NRefactory.Editor;
 using ICSharpCode.NRefactory.TypeSystem;
 using OmniSharp.Solution;
 
@@ -6,6 +6,8 @@ namespace OmniSharp.Common
 {
     public class QuickFix
     {
+        public string LogLevel { get; set; }
+
         private string _fileName;
 
         public string FileName 
@@ -19,6 +21,8 @@ namespace OmniSharp.Common
 
         public int Line { get; set; }
         public int Column { get; set; }
+        public int EndLine { get; set; }
+        public int EndColumn { get; set; }
         public string Text { get; set; }
 
         /// <summary>
@@ -44,10 +48,12 @@ namespace OmniSharp.Common
                 .Trim();
 
             return new QuickFix
-                { FileName = region.FileName
-                , Line     = region.BeginLine
-                , Column   = region.BeginColumn
-                , Text     = text};
+                { FileName  = region.FileName
+                , Line      = region.BeginLine
+                , Column    = region.BeginColumn
+                , EndLine   = region.EndLine
+                , EndColumn = region.EndColumn
+                , Text      = text};
         }
 
         /// <summary>
@@ -69,10 +75,12 @@ namespace OmniSharp.Common
                 (entity.Region, document, entity.BodyRegion);
 
             return new QuickFix
-                { FileName = entity.Region.FileName
-                , Line     = entity.Region.BeginLine
-                , Column   = entity.Region.BeginColumn
-                , Text     = text};
+                { FileName  = entity.Region.FileName
+                , Line      = entity.Region.BeginLine
+                , Column    = entity.Region.BeginColumn
+                , EndLine   = entity.Region.EndLine
+                , EndColumn = entity.Region.EndColumn
+                , Text      = text};
 
         }
 
@@ -84,6 +92,8 @@ namespace OmniSharp.Common
                 { FileName = member.Region.FileName
                 , Line     = member.Region.BeginLine
                 , Column   = member.Region.BeginColumn
+                , EndLine  = member.Region.EndLine
+                , EndColumn = member.Region.EndColumn
                 , Text     = text};
         }
 

@@ -21,8 +21,8 @@ from ..server_utils import SetUpPythonPath
 SetUpPythonPath()
 from webtest import TestApp
 from .. import handlers
-from nose.tools import ok_, eq_, with_setup
-from .test_utils import Setup
+from nose.tools import ok_, with_setup
+from .test_utils import Setup, BuildRequest
 import bottle
 
 bottle.debug( True )
@@ -31,27 +31,15 @@ bottle.debug( True )
 @with_setup( Setup )
 def SemanticCompletionAvailable_Works_test():
   app = TestApp( handlers.app )
-  request_data = {
-    'filepath': '/foo',
-    'file_data': {
-      '/foo': {
-        'filetypes': ['python'],
-      }
-    }
-  }
-
+  request_data = BuildRequest( filetype = 'python' )
   ok_( app.post_json( '/semantic_completion_available',
                       request_data ).json )
 
 
 @with_setup( Setup )
-def UserOptions_Works_test():
+def EventNotification_AlwaysJsonResponse_test():
   app = TestApp( handlers.app )
-  options = app.get( '/user_options' ).json
-  ok_( len( options ) )
+  event_data = BuildRequest( contents = 'foo foogoo ba',
+                             event_name = 'FileReadyToParse' )
 
-  options[ 'foobar' ] = 'zoo'
-
-  app.post_json( '/user_options', options )
-  eq_( options, app.get( '/user_options' ).json )
-
+  app.post_json( '/event_notification', event_data ).json

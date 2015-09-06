@@ -3,7 +3,18 @@
 Features and Caveats
 ====================
 
-|jedi| supports many of the widely used Python features:
+Jedi obviously supports autocompletion. It's also possible to get it working in
+(:ref:`your REPL (IPython, etc.) <repl-completion>`).
+
+Static analysis is also possible by using the command ``jedi.names``.
+
+The Jedi Linter is currently in an alpha version and can be tested by calling
+``python -m jedi linter``.
+
+Jedi would in theory support refactoring, but we have never publicized it,
+because it's not production ready. If you're interested in helping out here,
+let me know. With the latest parser changes, it should be very easy to actually
+make it work.
 
 
 General Features
@@ -13,12 +24,14 @@ General Features
 - ignores syntax errors and wrong indentation
 - can deal with complex module / function / class structures
 - virtualenv support
-- can infer function arguments from sphinx and epydoc docstrings (:ref:`type
-  hinting <type-hinting>`)
+- can infer function arguments from sphinx, epydoc and basic numpydoc docstrings
+  (:ref:`type hinting <type-hinting>`)
 
 
 Supported Python Features
 -------------------------
+
+|jedi| supports many of the widely used Python features:
 
 - builtins
 - multiple returns or yields
@@ -41,6 +54,7 @@ Supported Python Features
 - simple/usual ``sys.path`` modifications
 - ``isinstance`` checks for if/while/assert
 - namespace packages (includes ``pkgutil`` and ``pkg_resources`` namespaces)
+- Django / Flask / Buildout support
 
 
 Unsupported Features
@@ -111,7 +125,7 @@ Type Hinting
 
 If |jedi| cannot detect the type of a function argument correctly (due to the
 dynamic nature of Python), you can help it by hinting the type using
-Sphinx-style info field lists or Epydoc docstrings.
+one of the following docstring syntax styles:
 
 **Sphinx style**
 
@@ -119,10 +133,11 @@ http://sphinx-doc.org/domains.html#info-field-lists
 
 ::
 
-    def myfunction(node):
+    def myfunction(node, foo):
         """Do something with a ``node``.
 
         :type node: ProgramNode
+        :param str foo: foo parameter description
 
         """
         node.| # complete here
@@ -140,6 +155,39 @@ http://epydoc.sourceforge.net/manual-fields.html
 
         """
         node.| # complete here
+
+**Numpydoc**
+
+https://github.com/numpy/numpy/blob/master/doc/HOWTO_DOCUMENT.rst.txt
+
+In order to support the numpydoc format, you need to install the `numpydoc
+<https://pypi.python.org/pypi/numpydoc>`__ package.
+
+::
+
+    def foo(var1, var2, long_var_name='hi'):
+        r"""A one-line summary that does not use variable names or the
+        function name.
+
+        ...
+
+        Parameters
+        ----------
+        var1 : array_like
+            Array_like means all those objects -- lists, nested lists,
+            etc. -- that can be converted to an array. We can also
+            refer to variables like `var1`.
+        var2 : int
+            The type above can either refer to an actual Python type
+            (e.g. ``int``), or describe the type of the variable in more
+            detail, e.g. ``(N,) ndarray`` or ``array_like``.
+        long_variable_name : {'hi', 'ho'}, optional
+            Choices in brackets, default first when optional.
+
+        ...
+
+        """
+        var2.| # complete here
 
 A little history
 ----------------

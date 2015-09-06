@@ -170,6 +170,10 @@ class IntegrationTestCase(object):
         return compare_cb(self, comp_str, set(literal_eval(self.correct)))
 
     def run_goto_definitions(self, compare_cb):
+        def comparison(definition):
+            suffix = '()' if definition.type == 'instance' else ''
+            return definition.desc_with_module + suffix
+
         def definition(correct, correct_start, path):
             def defs(line_nr, indent):
                 s = jedi.Script(self.source, line_nr, indent, path)
@@ -177,30 +181,29 @@ class IntegrationTestCase(object):
 
             should_be = set()
             number = 0
-            for index in re.finditer('(?: +|$)', correct):
-                if correct == ' ':
-                    continue
-                # -1 for the comment, +3 because of the comment start `#? `
-                start = index.start()
+            for index in re.finditer('(?:[^ ]+)', correct):
+                end = index.end()
+                # +3 because of the comment start `#? `
+                end += 3
                 number += 1
                 try:
-                    should_be |= defs(self.line_nr - 1, start + correct_start)
+                    should_be |= defs(self.line_nr - 1, end + correct_start)
                 except Exception:
                     print('could not resolve %s indent %s'
-                          % (self.line_nr - 1, start))
+                          % (self.line_nr - 1, end))
                     raise
             # because the objects have different ids, `repr`, then compare.
-            should_str = set(r.desc_with_module for r in should_be)
-            if len(should_str) < number:
-                raise Exception('Solution @%s not right, '
-                   'too few test results: %s' % (self.line_nr - 1, should_str))
-            return should_str
+            should = set(comparison(r) for r in should_be)
+            if len(should) < number:
+                raise Exception('Solution @%s not right, too few test results: %s'
+                                % (self.line_nr - 1, should))
+            return should
 
         script = self.script()
-        should_str = definition(self.correct, self.start, script.path)
+        should = definition(self.correct, self.start, script.path)
         result = script.goto_definitions()
-        is_str = set(r.desc_with_module for r in result)
-        return compare_cb(self, is_str, should_str)
+        is_str = set(comparison(r) for r in result)
+        return compare_cb(self, is_str, should)
 
     def run_goto_assignments(self, compare_cb):
         result = self.script().goto_assignments()
@@ -236,7 +239,7 @@ def collect_file_tests(lines, lines_to_execute):
     correct = None
     test_type = None
     for line_nr, line in enumerate(lines, 1):
-        if correct:
+        if correct is not None:
             r = re.match('^(\d+)\s*(.*)$', correct)
             if r:
                 column = int(r.group(1))
@@ -255,10 +258,13 @@ def collect_file_tests(lines, lines_to_execute):
             correct = None
         else:
             try:
-                r = re.search(r'(?:^|(?<=\s))#([?!<])\s*([^\n]+)', line)
+                r = re.search(r'(?:^|(?<=\s))#([?!<])\s*([^\n]*)', line)
                 # test_type is ? for completion and ! for goto_assignments
                 test_type = r.group(1)
                 correct = r.group(2)
+                # Quick hack to make everything work (not quite a bloody unicorn hack though).
+                if correct == '':
+                    correct = ' '
                 start = r.start()
             except AttributeError:
                 correct = None
@@ -270,7 +276,7 @@ def collect_file_tests(lines, lines_to_execute):
 
 def collect_dir_tests(base_dir, test_files, check_thirdparty=False):
     for f_name in os.listdir(base_dir):
-        files_to_execute = [a for a in test_files.items() if a[0] in f_name]
+        files_to_execute = [a for a in test_files.items() if f_name.startswith(a[0])]
         lines_to_execute = reduce(lambda x, y: x + y[1], files_to_execute, [])
         if f_name.endswith(".py") and (not test_files or files_to_execute):
             skip = None
@@ -387,8 +393,8 @@ if __name__ == '__main__':
 
     file_change(current, count, fails)
 
-    print('\nSummary: (%s fails of %s tests) in %.3fs' % (tests_fail,
-                                        len(cases), time.time() - t_start))
+    print('\nSummary: (%s fails of %s tests) in %.3fs'
+          % (tests_fail, len(cases), time.time() - t_start))
     for s in summary:
         print(s)
 

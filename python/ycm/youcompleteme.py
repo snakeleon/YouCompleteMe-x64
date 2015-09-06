@@ -30,9 +30,9 @@ from ycmd.request_wrap import RequestWrap
 from ycm.diagnostic_interface import DiagnosticInterface
 from ycm.omni_completer import OmniCompleter
 from ycm import syntax_parse
-from ycmd.completers.completer_utils import FiletypeCompleterExistsForFiletype
 from ycm.client.ycmd_keepalive import YcmdKeepalive
 from ycm.client.base_request import BaseRequest, BuildRequestData
+from ycm.client.completer_available_request import SendCompleterAvailableRequest
 from ycm.client.command_request import SendCommandRequest
 from ycm.client.completion_request import CompletionRequest
 from ycm.client.omni_completion_request import OmniCompletionRequest
@@ -46,6 +46,12 @@ try:
 except ImportError:
   USE_ULTISNIPS_DATA = False
 
+def PatchNoProxy():
+  current_value = os.environ.get('no_proxy', '')
+  additions = '127.0.0.1,localhost'
+  os.environ['no_proxy'] = ( additions if not current_value
+                             else current_value + ',' + additions )
+
 # We need this so that Requests doesn't end up using the local HTTP proxy when
 # talking to ycmd. Users should actually be setting this themselves when
 # configuring a proxy server on their machine, but most don't know they need to
@@ -53,7 +59,7 @@ except ImportError:
 # Relevant issues:
 #  https://github.com/Valloric/YouCompleteMe/issues/641
 #  https://github.com/kennethreitz/requests/issues/879
-os.environ['no_proxy'] = '127.0.0.1,localhost'
+PatchNoProxy()
 
 # Force the Python interpreter embedded in Vim (in which we are running) to
 # ignore the SIGINT signal. This helps reduce the fallout of a user pressing
@@ -92,6 +98,7 @@ class YouCompleteMe( object ):
     self._ycmd_keepalive.Start()
 
   def _SetupServer( self ):
+    self._available_completers = {}
     server_port = utils.GetUnusedLocalhostPort()
     # The temp options file is deleted by ycmd during startup
     with tempfile.NamedTemporaryFile( delete = False ) as options_file:
@@ -123,7 +130,8 @@ class YouCompleteMe( object ):
         if self._user_options[ 'server_keep_logfiles' ]:
           args.append('--keep_logfiles')
 
-      self._server_popen = utils.SafePopen( args, stdout = PIPE, stderr = PIPE)
+      self._server_popen = utils.SafePopen( args, stdin_windows = PIPE,
+                                            stdout = PIPE, stderr = PIPE)
       BaseRequest.server_location = 'http://127.0.0.1:' + str( server_port )
       BaseRequest.hmac_secret = hmac_secret
 
@@ -180,6 +188,8 @@ class YouCompleteMe( object ):
             self._omnicomp, wrapped_request_data )
         return self._latest_completion_request
 
+    request_data[ 'working_dir' ] = os.getcwd()
+
     self._AddExtraConfDataIfNeeded( request_data )
     if force_semantic:
       request_data[ 'force_semantic' ] = True
@@ -211,8 +221,20 @@ class YouCompleteMe( object ):
     return self._omnicomp
 
 
+  def FiletypeCompleterExistsForFiletype( self, filetype ):
+    try:
+      return self._available_completers[ filetype ]
+    except KeyError:
+      pass
+
+    exists_completer = ( self.IsServerAlive() and
+                         bool( SendCompleterAvailableRequest( filetype ) ) )
+    self._available_completers[ filetype ] = exists_completer
+    return exists_completer
+
+
   def NativeFiletypeCompletionAvailable( self ):
-    return any( [ FiletypeCompleterExistsForFiletype( x ) for x in
+    return any( [ self.FiletypeCompleterExistsForFiletype( x ) for x in
                   vimsupport.CurrentFiletypes() ] )
 
 
@@ -293,10 +315,10 @@ class YouCompleteMe( object ):
 
 
   def UpdateDiagnosticInterface( self ):
-    if not self.DiagnosticsForCurrentFileReady():
-      return
-    self._diag_interface.UpdateWithNewDiagnostics(
-      self.GetDiagnosticsFromStoredRequest() )
+    if ( self.DiagnosticsForCurrentFileReady() and
+         self.NativeFiletypeCompletionUsable() ):
+      self._diag_interface.UpdateWithNewDiagnostics(
+        self.GetDiagnosticsFromStoredRequest() )
 
 
   def ShowDetailedDiagnostic( self ):
@@ -335,7 +357,7 @@ class YouCompleteMe( object ):
     if '*' in filetype_to_disable:
       return False
     else:
-      return not all([ x in filetype_to_disable for x in filetypes ])
+      return not any([ x in filetype_to_disable for x in filetypes ])
 
 
   def _AddSyntaxDataIfNeeded( self, extra_data ):

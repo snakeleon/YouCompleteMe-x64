@@ -58,7 +58,7 @@ def _FiletypeTriggerDictFromSpec( trigger_dict_spec ):
 
 
 def _FiletypeDictUnion( dict_one, dict_two ):
-  """Returns a new filetye dict that's a union of the provided two dicts.
+  """Returns a new filetype dict that's a union of the provided two dicts.
   Dict params are supposed to be type defaultdict(set)."""
   def UpdateDict( first, second ):
     for key, value in second.iteritems():
@@ -130,13 +130,17 @@ TRIGGER_REGEX_PREFIX = 're!'
 
 DEFAULT_FILETYPE_TRIGGERS = {
   'c' : ['->', '.'],
-  'objc' : ['->', '.', r're!\[[_a-zA-Z]+\w*\s'],
+  'objc' : ['->',
+            '.',
+            r're!\[[_a-zA-Z]+\w*\s',    # bracketed calls
+            r're!^\s*[^\W\d]\w*\s',     # bracketless calls
+            r're!\[.*\]\s',             # method composition
+           ],
   'ocaml' : ['.', '#'],
   'cpp,objcpp' : ['->', '.', '::'],
   'perl' : ['->'],
   'php' : ['->', '::'],
-  'cs,java,javascript,d,python,perl6,scala,vb,elixir,go' : ['.'],
-  'vim' : ['re![_a-zA-Z]+[_\w]*\.'],
+  'cs,java,javascript,typescript,d,python,perl6,scala,vb,elixir,go' : ['.'],
   'ruby' : ['.', '::'],
   'lua' : ['.', ':'],
   'erlang' : [':'],

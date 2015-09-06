@@ -18,11 +18,11 @@ next(reversed(arr))
 def yielder():
     yield None
 
-#? 
+#? None
 next(reversed(yielder()))
 
 # empty reversed should not raise an error
-#? 
+#?
 next(reversed())
 
 #? str()
@@ -64,7 +64,7 @@ import weakref
 #? int()
 weakref.proxy(1)
 
-#? weakref.ref
+#? weakref.ref()
 weakref.ref(1)
 #? int()
 weakref.ref(1)()
@@ -78,14 +78,21 @@ basetwo = functools.partial(int, base=2)
 #? int()
 basetwo()
 
-def a(a, b):
+def function(a, b):
     return a, b
-a = functools.partial(a, 0)
+a = functools.partial(function, 0)
 
 #? int()
 a('')[0]
 #? str()
 a('')[1]
+
+kw = functools.partial(function, b=1.0)
+tup = kw(1)
+#? int()
+tup[0]
+#? float()
+tup[1]
 
 def my_decorator(f):
     @functools.wraps(f)
@@ -140,7 +147,7 @@ import copy
 #? int()
 copy.deepcopy(1)
 
-#? 
+#?
 copy.copy()
 
 # -----------------
@@ -149,7 +156,20 @@ copy.copy()
 
 # We don't want any results for json, because it depends on IO.
 import json
-#? 
+#?
 json.load('asdf')
-#? 
+#?
 json.loads('[1]')
+
+# -----------------
+# random
+# -----------------
+
+import random
+class A(object):
+    def say(self): pass
+class B(object):
+    def shout(self): pass
+cls = random.choice([A, B])
+#? ['say', 'shout']
+cls().s

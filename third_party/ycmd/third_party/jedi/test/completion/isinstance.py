@@ -38,17 +38,20 @@ import datetime
 
 def fooooo(obj):
     if isinstance(obj, datetime.datetime):
-        #? datetime.datetime
+        #? datetime.datetime()
         obj
 
 
 def fooooo2(obj):
-    if isinstance(obj, datetime.datetime):
+    if isinstance(obj, datetime.date):
         return obj
     else:
         return 1
 
-#? int() datetime.datetime
+a
+# In earlier versions of Jedi, this returned both datetime and int, but now
+# Jedi does flow checks and realizes that the top return isn't executed.
+#? int()
 fooooo2('')
 
 
@@ -65,5 +68,7 @@ class Test():
 
     def boo(self):
         if isinstance(self.testing, str):
-            ##? str()
+            #? str()
             self.testing
+            #? Test()
+            self

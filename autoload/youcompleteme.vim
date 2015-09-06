@@ -26,7 +26,7 @@ let s:omnifunc_mode = 0
 let s:old_cursor_position = []
 let s:cursor_moved = 0
 let s:moved_vertically_in_insert_mode = 0
-let s:previous_num_chars_on_current_line = -1
+let s:previous_num_chars_on_current_line = strlen( getline('.') )
 
 let s:diagnostic_ui_filetypes = {
       \ 'cpp': 1,
@@ -66,10 +66,9 @@ function! youcompleteme#Enable()
     set ut=2000
   endif
 
+  call youcompleteme#EnableCursorMovedAutocommands()
   augroup youcompleteme
     autocmd!
-    autocmd CursorMovedI * call s:OnCursorMovedInsertMode()
-    autocmd CursorMoved * call s:OnCursorMovedNormalMode()
     " Note that these events will NOT trigger for the file vim is started with;
     " so if you do "vim foo.cc", these events will not trigger when that buffer
     " is read. This is because youcompleteme#Enable() is called on VimEnter and
@@ -78,6 +77,7 @@ function! youcompleteme#Enable()
     " We also need to trigger buf init code on the FileType event because when
     " the user does :enew and then :set ft=something, we need to run buf init
     " code again.
+    autocmd BufReadPre * call s:OnBufferReadPre( expand( '<afile>:p' ) )
     autocmd BufRead,BufEnter,FileType * call s:OnBufferVisit()
     autocmd BufUnload * call s:OnBufferUnload( expand( '<afile>:p' ) )
     autocmd CursorHold,CursorHoldI * call s:OnCursorHold()
@@ -86,42 +86,64 @@ function! youcompleteme#Enable()
     autocmd VimLeave * call s:OnVimLeave()
   augroup END
 
-  " Calling this once solves the problem of BufRead/BufEnter not triggering for
-  " the first loaded file. This should be the last command executed in this
-  " function!
+  " Calling these once solves the problem of BufReadPre/BufRead/BufEnter not
+  " triggering for the first loaded file. This should be the last commands
+  " executed in this function!
+  call s:OnBufferReadPre( expand( '<afile>:p' ) )
   call s:OnBufferVisit()
 endfunction
 
 
+function! youcompleteme#EnableCursorMovedAutocommands()
+    augroup ycmcompletemecursormove
+        autocmd!
+        autocmd CursorMovedI * call s:OnCursorMovedInsertMode()
+        autocmd CursorMoved * call s:OnCursorMovedNormalMode()
+    augroup END
+endfunction
+
+
+function! youcompleteme#DisableCursorMovedAutocommands()
+    autocmd! ycmcompletemecursormove CursorMoved *
+    autocmd! ycmcompletemecursormove CursorMovedI *
+endfunction
+
+
 function! s:SetUpPython() abort
-  py import sys
-  py import vim
-  exe 'python sys.path.insert( 0, "' . s:script_folder_path . '/../python" )'
-  exe 'python sys.path.insert( 0, "' . s:script_folder_path .
-        \ '/../third_party/ycmd" )'
-  py from ycmd import utils
-  exe 'py utils.AddNearestThirdPartyFoldersToSysPath("'
-        \ . s:script_folder_path . '")'
+python << EOF
+import sys
+import vim
+import os
+import subprocess
 
-  " We need to import ycmd's third_party folders as well since we import and
-  " use ycmd code in the client.
-  py utils.AddNearestThirdPartyFoldersToSysPath( utils.__file__ )
-  py from ycm import base
-  py base.LoadJsonDefaultsIntoVim()
-  py from ycmd import user_options_store
-  py user_options_store.SetAll( base.BuildServerConf() )
-  py from ycm import vimsupport
+script_folder = vim.eval( 's:script_folder_path' )
+sys.path.insert( 0, os.path.join( script_folder, '../python' ) )
+sys.path.insert( 0, os.path.join( script_folder, '../third_party/ycmd' ) )
+from ycmd import utils
+utils.AddNearestThirdPartyFoldersToSysPath( script_folder )
 
-  if !pyeval( 'base.CompatibleWithYcmCore()')
-    echohl WarningMsg |
-      \ echomsg "YouCompleteMe unavailable: YCM support libs too old, PLEASE RECOMPILE" |
-      \ echohl None
-    return 0
-  endif
+# We need to import ycmd's third_party folders as well since we import and
+# use ycmd code in the client.
+utils.AddNearestThirdPartyFoldersToSysPath( utils.__file__ )
+from ycm import base
+base.LoadJsonDefaultsIntoVim()
+from ycmd import user_options_store
+user_options_store.SetAll( base.BuildServerConf() )
+from ycm import vimsupport
 
-  py from ycm.youcompleteme import YouCompleteMe
-  py ycm_state = YouCompleteMe( user_options_store.GetAll() )
-  return 1
+popen_args = [ utils.PathToPythonInterpreter(),
+               os.path.join( script_folder,
+                             '../third_party/ycmd/check_core_version.py') ]
+
+if utils.SafePopen( popen_args ).wait() == 2:
+  vimsupport.PostVimMessage(
+    'YouCompleteMe unavailable: YCM support libs too old, PLEASE RECOMPILE' )
+  vim.command( 'return 0')
+
+from ycm.youcompleteme import YouCompleteMe
+ycm_state = YouCompleteMe( user_options_store.GetAll() )
+vim.command( 'return 1')
+EOF
 endfunction
 
 
@@ -161,8 +183,8 @@ function! s:SetUpKeyMappings()
     let invoke_key = g:ycm_key_invoke_completion
 
     " Inside the console, <C-Space> is passed as <Nul> to Vim
-    if invoke_key ==# '<C-Space>' && !has('gui_running')
-      let invoke_key = '<Nul>'
+    if invoke_key ==# '<C-Space>'
+      imap <Nul> <C-Space>
     endif
 
     " <c-x><c-o> trigger omni completion, <c-p> deselects the first completion
@@ -271,6 +293,10 @@ function! s:AllowedToCompleteInCurrentFile()
     return 0
   endif
 
+  if exists( 'b:ycm_largefile' )
+    return 0
+  endif
+
   let whitelist_allows = has_key( g:ycm_filetype_whitelist, '*' ) ||
         \ has_key( g:ycm_filetype_whitelist, &filetype )
   let blacklist_allows = !has_key( g:ycm_filetype_blacklist, &filetype )
@@ -333,6 +359,18 @@ function! s:OnVimLeave()
 endfunction
 
 
+function! s:OnBufferReadPre(filename)
+  let threshold = g:ycm_disable_for_files_larger_than_kb * 1024
+
+  if threshold > 0 && getfsize( a:filename ) > threshold
+    echohl WarningMsg |
+          \ echomsg "YouCompleteMe is disabled in this buffer; " .
+          \ "the file exceeded the max size (see YCM options)." |
+          \ echohl None
+    let b:ycm_largefile = 1
+  endif
+endfunction
+
 function! s:OnBufferVisit()
   " We need to do this even when we are not allowed to complete in the current
   " file because we might be allowed to complete in the future! The canonical
@@ -391,7 +429,10 @@ endfunction
 function! s:SetCompleteFunc()
   let &completefunc = 'youcompleteme#Complete'
   let &l:completefunc = 'youcompleteme#Complete'
+endfunction
 
+
+function! s:SetOmnicompleteFunc()
   if pyeval( 'ycm_state.NativeFiletypeCompletionUsable()' )
     let &omnifunc = 'youcompleteme#OmniComplete'
     let &l:omnifunc = 'youcompleteme#OmniComplete'
@@ -404,7 +445,6 @@ function! s:SetCompleteFunc()
     let &l:omnifunc = ''
   endif
 endfunction
-
 
 function! s:OnCursorMovedInsertMode()
   if !s:AllowedToCompleteInCurrentFile()
@@ -469,8 +509,15 @@ endfunction
 
 
 function! s:OnInsertEnter()
+  let s:previous_num_chars_on_current_line = strlen( getline('.') )
+
   if !s:AllowedToCompleteInCurrentFile()
     return
+  endif
+
+  if !get( b:, 'ycm_omnicomplete', 0 )
+    let b:ycm_omnicomplete = 1
+    call s:SetOmnicompleteFunc()
   endif
 
   let s:old_cursor_position = []
@@ -489,14 +536,9 @@ endfunction
 
 
 function! s:BufferTextChangedSinceLastMoveInInsertMode()
-  if s:moved_vertically_in_insert_mode
-    let s:previous_num_chars_on_current_line = -1
-    return 0
-  endif
-
   let num_chars_in_current_cursor_line = strlen( getline('.') )
 
-  if s:previous_num_chars_on_current_line == -1
+  if s:moved_vertically_in_insert_mode
     let s:previous_num_chars_on_current_line = num_chars_in_current_cursor_line
     return 0
   endif
@@ -527,8 +569,7 @@ endfunction
 
 function! s:UpdateDiagnosticNotifications()
   let should_display_diagnostics = g:ycm_show_diagnostics_ui &&
-        \ s:DiagnosticUiSupportedForCurrentFiletype() &&
-        \ pyeval( 'ycm_state.NativeFiletypeCompletionUsable()' )
+        \ s:DiagnosticUiSupportedForCurrentFiletype()
 
   if !should_display_diagnostics
     return
