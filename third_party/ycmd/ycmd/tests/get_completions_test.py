@@ -23,7 +23,8 @@ SetUpPythonPath()
 import httplib
 from .test_utils import ( Setup, BuildRequest, PathToTestFile,
                           ChangeSpecificOptions, StopOmniSharpServer,
-                          WaitUntilOmniSharpServerReady, StopGoCodeServer )
+                          WaitUntilOmniSharpServerReady, StopGoCodeServer,
+                          ErrorMatcher )
 from webtest import TestApp, AppError
 from nose.tools import eq_, with_setup
 from hamcrest import ( assert_that, has_item, has_items, has_entry, has_entries,
@@ -49,14 +50,8 @@ def CompletionLocationMatcher( location_type, value ):
                     has_entry( 'location',
                                has_entry( location_type, value ) ) )
 
-
-def ErrorMatcher( cls, msg ):
-  return has_entries( {
-    'exception' : has_entry( 'TYPE', cls.__name__ ),
-    'message': msg,
-  } )
-
 NO_COMPLETIONS_ERROR = ErrorMatcher( RuntimeError, NO_COMPLETIONS_MESSAGE )
+
 
 @with_setup( Setup )
 def GetCompletions_RunTest( test ):
@@ -450,7 +445,7 @@ def GetCompletions_CsCompleter_PathWithSpace_test():
   app = TestApp( handlers.app )
   app.post_json( '/ignore_extra_conf_file',
                  { 'filepath': PathToTestFile( '.ycm_extra_conf.py' ) } )
-  filepath = PathToTestFile( 'неприличное слово', 'Program.cs' )
+  filepath = PathToTestFile( u'неприличное слово', 'Program.cs' )
   contents = open( filepath ).read()
   event_data = BuildRequest( filepath = filepath,
                              filetype = 'cs',

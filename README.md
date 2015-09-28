@@ -2031,7 +2031,7 @@ This software is licensed under the [GPL v3 license][gpl].
 
 ###关于版本
 
-- YouCompleteMe核心版本: 17 (2015.09.02) 静态编译
+- YouCompleteMe核心版本: 17 (2015.09.28) 静态编译
 - clang版本: 3.70 (2015.09.01) [Clang][Clang]
 
 支持操作系统:

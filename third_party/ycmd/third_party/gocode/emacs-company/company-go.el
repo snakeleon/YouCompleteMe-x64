@@ -4,7 +4,7 @@
 
 ;; Author: nsf <no.smile.face@gmail.com>
 ;; Keywords: languages
-;; Package-Requires: ((company "0.8.0"))
+;; Package-Requires: ((company "0.8.0") (go-mode "1.0.0"))
 
 ;; No license, this code is under public domain, do whatever you want.
 
@@ -13,9 +13,10 @@
 (require 'company-template)
 
 (eval-when-compile
-  (require 'cl)
-  (require 'company)
-  (require 'go-mode))
+  (require 'cl))
+
+(require 'go-mode)
+(require 'company)
 
 ;; Close gocode daemon at exit unless it was already running
 (eval-after-load "go-mode"
@@ -83,7 +84,10 @@ symbol is preceded by a \".\", ignoring `company-minimum-prefix-length'."
               (propertize (nth 1 candidate) 'meta (company-go--format-meta candidate)))) strings))
 
 (defun company-go--candidates ()
-  (company-go--get-candidates (split-string (company-go--invoke-autocomplete) "\n" t)))
+  (let ((candidates (company-go--get-candidates (split-string (company-go--invoke-autocomplete) "\n" t))))
+    (if (equal candidates '("PANIC"))
+        (error "GOCODE PANIC: Please check your code by \"go build\"")
+      candidates)))
 
 (defun company-go--location (arg)
   (when (require 'go-mode nil t)
@@ -174,11 +178,18 @@ triggers a completion immediately."
       (and (string-match "\\w+ \\w+\\(.+\\)" meta)
            (match-string 1 meta)))))
 
+(defun company-go--in-num-literal-p ()
+  "Returns t if point is in a numeric literal."
+  (let ((word (company-grab-word)))
+    (when word
+      (string-match-p "^0x\\|^[0-9]+" word))))
+
 ;;;###autoload
 (defun company-go (command &optional arg &rest ignored)
   (case command
     (prefix (and (derived-mode-p 'go-mode)
                  (not (company-in-string-or-comment))
+                 (not (company-go--in-num-literal-p))
                  (or (company-go--prefix) 'stop)))
     (candidates (company-go--candidates))
     (meta (get-text-property 0 'meta arg))

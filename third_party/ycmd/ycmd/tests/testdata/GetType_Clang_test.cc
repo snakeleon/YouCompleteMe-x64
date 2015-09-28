@@ -1,6 +1,14 @@
-// this file is used in RunCompleterCommand_GetType_Clang_test
-#include <iostream>
-#include <string>
+// This file is used in RunCompleterCommand_GetType_Clang_test
+namespace Ns {
+    template< typename T >
+    struct BasicType
+    {
+        BasicType( const T * );
+    };
+
+    typedef BasicType< char > Type;
+}
+
 struct Foo {
   int x;
   int y;
@@ -10,8 +18,8 @@ struct Foo {
 int main()
 {
   Foo foo;
-  std::string a = "hello";
-  std::cout << a;
+  Ns::Type a = "hello";
+  Ns::Type b = a;
 
   auto &arFoo = foo;
   auto *apFoo = &foo;
@@ -19,10 +27,10 @@ int main()
   const auto &acrFoo = foo;
   const auto *acpFoo = &foo;
 
-  std::cout << acrFoo.y
-            << acpFoo->x
-            << arFoo.y
-            << apFoo->x;
+  int acry = acrFoo.y;
+  int acpx = acpFoo->x;
+  int ary = arFoo.y;
+  int apx = apFoo->x;
 
   Foo &rFoo = foo;
   Foo *pFoo = &foo;
@@ -30,11 +38,10 @@ int main()
   const Foo &crFoo = foo;
   const Foo *cpFoo = &foo;
 
-  std::cout << crFoo.y
-            << cpFoo->x
-            << rFoo.y
-            << pFoo->x;
-
+  int cry = crFoo.y;
+  int cpx = cpFoo->x;
+  int ry = rFoo.y;
+  int px = pFoo->x;
 
   return 0;
 }

@@ -23,10 +23,11 @@ from collections import defaultdict
 from ycmd.completers.completer import Completer
 from ycmd.completers.cpp.clang_completer import InCFamilyFile
 from ycmd.completers.cpp.flags import Flags
-from ycmd.utils import ToUtf8IfNeeded, ToUnicodeIfNeeded
+from ycmd.utils import ToUtf8IfNeeded, ToUnicodeIfNeeded, OnWindows
 from ycmd import responses
 
 EXTRA_INFO_MAP = { 1 : '[File]', 2 : '[Dir]', 3 : '[File&Dir]' }
+
 
 class FilenameCompleter( Completer ):
   """
@@ -37,19 +38,34 @@ class FilenameCompleter( Completer ):
     super( FilenameCompleter, self ).__init__( user_options )
     self._flags = Flags()
 
+    # On Windows, backslashes are also valid path separators.
+    self._triggers = [ '/', '\\' ] if OnWindows() else [ '/' ]
+
     self._path_regex = re.compile( """
-      # 1 or more 'D:/'-like token or '/' or '~' or './' or '../' or '$var/'
-      (?:[A-z]+:/|[/~]|\./|\.+/|\$[A-Za-z0-9{}_]+/)+
+      # Head part
+      (?:
+        # 'D:/'-like token
+        [A-z]+:[%(sep)s]|
 
-      # any alphanumeric, symbol or space literal
-      (?:[ /a-zA-Z0-9(){}$+_~.\x80-\xff-\[\]]|
+        # '/', './', '../', or '~'
+        \.{0,2}[%(sep)s]|~|
 
-      # skip any special symbols
-      [^\x20-\x7E]|
+        # '$var/'
+        \$[A-Za-z0-9{}_]+[%(sep)s]
+      )+
 
-      # backslash and 1 char after it. + matches 1 or more of whole group
-      \\.)*$
-      """, re.X )
+      # Tail part
+      (?:
+        # any alphanumeric, symbol or space literal
+        [ %(sep)sa-zA-Z0-9(){}$+_~.\x80-\xff-\[\]]|
+
+        # skip any special symbols
+        [^\x20-\x7E]|
+
+        # backslash and 1 char after it
+        \\.
+      )*$
+      """ % { 'sep': '/\\\\' if OnWindows() else '/' }, re.X )
 
     include_regex_common = '^\s*#(?:include|import)\s*(?:"|<)'
     self._include_start_regex = re.compile( include_regex_common + '$' )
@@ -69,8 +85,9 @@ class FilenameCompleter( Completer ):
   def ShouldUseNowInner( self, request_data ):
     start_column = request_data[ 'start_column' ] - 1
     current_line = request_data[ 'line_value' ]
-    return ( start_column and ( current_line[ start_column - 1 ] == '/' or
-             self.AtIncludeStatementStart( request_data ) ) )
+    return ( start_column and
+             ( current_line[ start_column - 1 ] in self._triggers or
+               self.AtIncludeStatementStart( request_data ) ) )
 
 
   def SupportedFiletypes( self ):
@@ -101,13 +118,18 @@ class FilenameCompleter( Completer ):
 
     path_match = self._path_regex.search( line )
     path_dir = os.path.expanduser(
-                os.path.expandvars( path_match.group() ) ) if path_match else ''
+      os.path.expandvars( path_match.group() ) ) if path_match else ''
+
+    # If the client supplied its working directory, use that instead of the
+    # working directory of ycmd
+    working_dir = request_data.get( 'working_dir' )
 
     return _GenerateCandidatesForPaths(
       _GetPathsStandardCase(
         path_dir,
         self.user_options[ 'filepath_completion_use_working_dir' ],
-        utf8_filepath ) )
+        utf8_filepath,
+        working_dir) )
 
 
   def GetPathsIncludeCase( self, path_dir, include_current_file_dir, filepath,
@@ -133,19 +155,47 @@ class FilenameCompleter( Completer ):
     return sorted( set( paths ) )
 
 
-def _GetPathsStandardCase( path_dir, use_working_dir, filepath ):
-  if not use_working_dir and not path_dir.startswith( '/' ):
-    path_dir = os.path.join( os.path.dirname( filepath ),
-                             path_dir )
+def _GetAbsolutePathForCompletions( path_dir,
+                                    use_working_dir,
+                                    filepath,
+                                    working_dir ):
+  """
+  Returns the absolute path for which completion suggestions should be returned
+  (in the standard case).
+  """
+
+  if os.path.isabs( path_dir ):
+    # This is already an absolute path, return it
+    return path_dir
+  elif use_working_dir:
+    # Return paths relative to the working directory of the client, if
+    # supplied, otherwise relative to the current working directory of this
+    # process
+    if working_dir:
+      return os.path.join( working_dir, path_dir )
+    else:
+      return os.path.join( os.getcwd(), path_dir )
+  else:
+    # Return paths relative to the file
+    return os.path.join( os.path.join( os.path.dirname( filepath ) ),
+                         path_dir )
+
+
+def _GetPathsStandardCase( path_dir, use_working_dir, filepath, working_dir ):
+
+  absolute_path_dir = _GetAbsolutePathForCompletions( path_dir,
+                                                      use_working_dir,
+                                                      filepath,
+                                                      working_dir )
 
   try:
     # We need to pass a unicode string to get unicode strings out of
     # listdir.
-    relative_paths = os.listdir( ToUnicodeIfNeeded( path_dir ) )
+    relative_paths = os.listdir( ToUnicodeIfNeeded( absolute_path_dir ) )
   except:
     relative_paths = []
 
-  return ( os.path.join( path_dir, relative_path )
+  return ( os.path.join( absolute_path_dir, relative_path )
            for relative_path in relative_paths )
 
 
