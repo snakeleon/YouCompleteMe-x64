@@ -1,1 +1,0 @@
-../BoostParts/libBoostParts.a D:/Python27/libs/libpython27.a D:/LLVM/bin/libclang.dll -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 

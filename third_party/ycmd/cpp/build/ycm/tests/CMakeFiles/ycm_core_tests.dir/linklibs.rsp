@@ -1,1 +1,0 @@
- -LD:/Python27/libs/libpython27.a  ../../BoostParts/libBoostParts.a ../libycm_core.dll.a ../libycm_client_support.dll.a gmock/libgmock.a D:/LLVM/bin/libclang.dll ../../BoostParts/libBoostParts.a D:/Python27/libs/libpython27.a -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 
