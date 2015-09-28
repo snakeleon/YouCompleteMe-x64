@@ -1,0 +1,2 @@
+d:\MSYS64\mingw64\bin\ar.exe cq libgmock.a  CMakeFiles/gmock.dir/gtest/src/gtest-all.cc.obj CMakeFiles/gmock.dir/src/gmock-all.cc.obj
+d:\MSYS64\mingw64\bin\ranlib.exe libgmock.a
