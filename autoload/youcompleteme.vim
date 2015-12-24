@@ -51,6 +51,7 @@ function! youcompleteme#Enable()
     return
   endif
 
+  call s:SetUpCommands()
   call s:SetUpCpoptions()
   call s:SetUpCompleteopt()
   call s:SetUpKeyMappings()
@@ -110,6 +111,16 @@ function! youcompleteme#DisableCursorMovedAutocommands()
 endfunction
 
 
+function! youcompleteme#GetErrorCount()
+  return pyeval( 'ycm_state.GetErrorCount()' )
+endfunction
+
+
+function! youcompleteme#GetWarningCount()
+  return pyeval( 'ycm_state.GetWarningCount()' )
+endfunction
+
+
 function! s:SetUpPython() abort
 python << EOF
 import sys
@@ -130,20 +141,19 @@ from ycm import base
 base.LoadJsonDefaultsIntoVim()
 from ycmd import user_options_store
 user_options_store.SetAll( base.BuildServerConf() )
-from ycm import vimsupport
+from ycm import paths, vimsupport
 
-popen_args = [ utils.PathToPythonInterpreter(),
-               os.path.join( script_folder,
-                             '../third_party/ycmd/check_core_version.py') ]
+popen_args = [ paths.PathToPythonInterpreter(),
+               paths.PathToCheckCoreVersion() ]
 
 if utils.SafePopen( popen_args ).wait() == 2:
   vimsupport.PostVimMessage(
     'YouCompleteMe unavailable: YCM support libs too old, PLEASE RECOMPILE' )
-  vim.command( 'return 0')
+  vim.command( 'return 0' )
 
 from ycm.youcompleteme import YouCompleteMe
 ycm_state = YouCompleteMe( user_options_store.GetAll() )
-vim.command( 'return 1')
+vim.command( 'return 1' )
 EOF
 endfunction
 
@@ -303,6 +313,19 @@ function! s:AllowedToCompleteInCurrentFile()
   let blacklist_allows = !has_key( g:ycm_filetype_blacklist, &filetype )
 
   return whitelist_allows && blacklist_allows
+endfunction
+
+
+function! s:SetUpCommands()
+  command! YcmRestartServer call s:RestartServer()
+  command! YcmShowDetailedDiagnostic call s:ShowDetailedDiagnostic()
+  command! YcmDebugInfo call s:DebugInfo()
+  command! -nargs=? -complete=custom,youcompleteme#LogsComplete
+    \ YcmToggleLogs call s:ToggleLogs(<f-args>)
+  command! -nargs=* -complete=custom,youcompleteme#SubCommandsComplete
+    \ YcmCompleter call s:CompleterCommand(<f-args>)
+  command! YcmForceCompileAndDiagnostics call s:ForceCompileAndDiagnostics()
+  command! YcmDiags call s:ShowDiagnostics()
 endfunction
 
 
@@ -737,14 +760,10 @@ function! s:RestartServer()
   py ycm_state.RestartServer()
 endfunction
 
-command! YcmRestartServer call s:RestartServer()
-
 
 function! s:ShowDetailedDiagnostic()
   py ycm_state.ShowDetailedDiagnostic()
 endfunction
-
-command! YcmShowDetailedDiagnostic call s:ShowDetailedDiagnostic()
 
 
 function! s:DebugInfo()
@@ -755,7 +774,13 @@ function! s:DebugInfo()
   endfor
 endfunction
 
-command! YcmDebugInfo call s:DebugInfo()
+
+function! s:ToggleLogs(...)
+  let stderr = a:0 == 0 || a:1 !=? 'stdout'
+  let stdout = a:0 == 0 || a:1 !=? 'stderr'
+  py ycm_state.ToggleLogs( stdout = vimsupport.GetBoolValue( 'l:stdout' ),
+                         \ stderr = vimsupport.GetBoolValue( 'l:stderr' ) )
+endfunction
 
 
 function! s:CompleterCommand(...)
@@ -791,8 +816,10 @@ function! youcompleteme#OpenGoToList()
 endfunction
 
 
-command! -nargs=* -complete=custom,youcompleteme#SubCommandsComplete
-  \ YcmCompleter call s:CompleterCommand(<f-args>)
+function! youcompleteme#LogsComplete( arglead, cmdline, cursorpos )
+  return "stdout\nstderr"
+endfunction
+
 
 function! youcompleteme#SubCommandsComplete( arglead, cmdline, cursorpos )
   return join( pyeval( 'ycm_state.GetDefinedSubcommands()' ),
@@ -832,8 +859,6 @@ function! s:ForceCompileAndDiagnostics()
   echom "Diagnostics refreshed."
 endfunction
 
-command! YcmForceCompileAndDiagnostics call s:ForceCompileAndDiagnostics()
-
 
 function! s:ShowDiagnostics()
   let compilation_succeeded = s:ForceCompile()
@@ -853,8 +878,6 @@ function! s:ShowDiagnostics()
     echom "No warnings or errors detected"
   endif
 endfunction
-
-command! YcmDiags call s:ShowDiagnostics()
 
 
 " This is basic vim plugin boilerplate
