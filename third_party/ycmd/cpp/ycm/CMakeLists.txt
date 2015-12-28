@@ -100,10 +100,28 @@ if ( USE_CLANG_COMPLETER AND
     message( "Downloading Clang ${CLANG_VERSION}" )
 
     set( CLANG_URL "http://llvm.org/releases/${CLANG_VERSION}" )
-    file(
-      DOWNLOAD "${CLANG_URL}/${CLANG_FILENAME}" "${CLANG_LOCAL_FILE}"
-      SHOW_PROGRESS EXPECTED_HASH SHA256=${CLANG_SHA256}
-    )
+
+    # Try to download Clang several times until successful to prevent failure
+    # from network issues on CI services.
+    set( DOWNLOAD_TRIES 3 )
+    set( DOWNLOAD_TRY 0 )
+    set( DOWNLOAD_ERROR 1 )
+
+    while( DOWNLOAD_ERROR AND DOWNLOAD_TRY LESS DOWNLOAD_TRIES )
+      file(
+        DOWNLOAD "${CLANG_URL}/${CLANG_FILENAME}" "${CLANG_LOCAL_FILE}"
+        STATUS DOWNLOAD_STATUS
+        SHOW_PROGRESS
+        EXPECTED_HASH SHA256=${CLANG_SHA256}
+      )
+      math( EXPR DOWNLOAD_TRY "${DOWNLOAD_TRY} + 1" )
+      list( GET DOWNLOAD_STATUS 0 DOWNLOAD_ERROR )
+    endwhile()
+
+    if( DOWNLOAD_ERROR )
+      message( FATAL_ERROR
+        "Could not download ${CLANG_URL}/${CLANG_FILENAME}" )
+    endif()
   else()
     message( "Using Clang archive: ${CLANG_LOCAL_FILE}" )
   endif()
@@ -132,7 +150,14 @@ if ( USE_CLANG_COMPLETER AND
   # folder name the archive produced. It isn't the archive base name.
   # On Windows, the find command is not available so we directly set the path.
   if ( WIN32 )
-    set( PATH_TO_LLVM_ROOT ${CMAKE_CURRENT_BINARY_DIR}/../$_OUTDIR )
+    # Since 7-zip release version 15.12, files are not anymore extracted in
+    # $_OUTDIR folder but directly to the root. So, we check the existence of
+    # $_OUTDIR to appropriately set PATH_TO_LLVM_ROOT.
+    if ( EXISTS ${CMAKE_CURRENT_BINARY_DIR}/../$_OUTDIR )
+      set( PATH_TO_LLVM_ROOT ${CMAKE_CURRENT_BINARY_DIR}/../$_OUTDIR )
+    else()
+      set( PATH_TO_LLVM_ROOT ${CMAKE_CURRENT_BINARY_DIR}/.. )
+    endif()
   else()
     execute_process( COMMAND
       find ${CMAKE_CURRENT_BINARY_DIR}/.. -maxdepth 1 -type d -name clang*

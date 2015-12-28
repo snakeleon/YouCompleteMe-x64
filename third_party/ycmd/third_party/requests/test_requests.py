@@ -9,6 +9,7 @@ import os
 import pickle
 import unittest
 import collections
+import contextlib
 
 import io
 import requests
@@ -16,7 +17,9 @@ import pytest
 from requests.adapters import HTTPAdapter
 from requests.auth import HTTPDigestAuth, _basic_auth_str
 from requests.compat import (
-    Morsel, cookielib, getproxies, str, urljoin, urlparse, is_py3, builtin_str)
+    Morsel, cookielib, getproxies, str, urljoin, urlparse, is_py3,
+    builtin_str, OrderedDict
+    )
 from requests.cookies import cookiejar_from_dict, morsel_to_cookie
 from requests.exceptions import (ConnectionError, ConnectTimeout,
                                  InvalidSchema, InvalidURL, MissingSchema,
@@ -31,6 +34,11 @@ try:
     import StringIO
 except ImportError:
     import io as StringIO
+
+try:
+    from multiprocessing.pool import ThreadPool
+except ImportError:
+    ThreadPool = None
 
 if is_py3:
     def u(s):
@@ -123,6 +131,13 @@ class RequestsTestCase(unittest.TestCase):
         request = requests.Request('GET',
             "http://example.com/path?key=value#fragment", params={"a": "b"}).prepare()
         assert request.url == "http://example.com/path?key=value&a=b#fragment"
+
+    def test_params_original_order_is_preserved_by_default(self):
+        param_ordered_dict = OrderedDict((('z', 1), ('a', 1), ('k', 1), ('d', 1)))
+        session = requests.Session()
+        request = requests.Request('GET', 'http://example.com/', params=param_ordered_dict)
+        prep = session.prepare_request(request)
+        assert prep.url == 'http://example.com/?z=1&a=1&k=1&d=1'
 
     def test_mixed_case_scheme_acceptable(self):
         s = requests.Session()
@@ -411,6 +426,21 @@ class RequestsTestCase(unittest.TestCase):
         r = requests.get(url, auth=auth)
         assert '"auth"' in r.request.headers['Authorization']
 
+    def test_DIGESTAUTH_THREADED(self):
+
+        auth = HTTPDigestAuth('user', 'pass')
+        url = httpbin('digest-auth', 'auth', 'user', 'pass')
+        session = requests.Session()
+        session.auth=auth
+
+        def do_request(i):
+            r = session.get(url)
+            assert '"auth"' in r.request.headers['Authorization']
+            return 1
+        if ThreadPool is not None:
+            pool = ThreadPool(processes=50)
+            pool.map(do_request, range(100))
+
     def test_POSTBIN_GET_POST_FILES(self):
 
         url = httpbin('post')
@@ -537,6 +567,17 @@ class RequestsTestCase(unittest.TestCase):
         r = requests.request(
             method=u('POST'), url=httpbin('post'), files=files)
         assert r.status_code == 200
+
+    def test_unicode_method_name_with_request_object(self):
+        files = {'file': open('test_requests.py', 'rb')}
+        s = requests.Session()
+        req = requests.Request(u("POST"), httpbin('post'), files=files)
+        prep = s.prepare_request(req)
+        assert isinstance(prep.method, builtin_str)
+        assert prep.method == "POST"
+
+        resp = s.send(prep)
+        assert resp.status_code == 200
 
     def test_custom_content_type(self):
         r = requests.post(
@@ -1052,6 +1093,13 @@ class RequestsTestCase(unittest.TestCase):
         assert 'application/json' in r.request.headers['Content-Type']
         assert {'life': 42} == r.json()['json']
 
+    def test_json_param_post_should_not_override_data_param(self):
+        r = requests.Request(method='POST', url='http://httpbin.org/post',
+                             data={'stuff': 'elixr'},
+                             json={'music': 'flute'})
+        prep = r.prepare()
+        assert 'stuff=elixr' == prep.body
+
     def test_response_iter_lines(self):
         r = requests.get(httpbin('stream/4'), stream=True)
         assert r.status_code == 200
@@ -1059,6 +1107,15 @@ class RequestsTestCase(unittest.TestCase):
         it = r.iter_lines()
         next(it)
         assert len(list(it)) == 3
+
+    def test_unconsumed_session_response_closes_connection(self):
+        s = requests.session()
+
+        with contextlib.closing(s.get(httpbin('stream/4'), stream=True)) as response:
+            pass
+
+        self.assertFalse(response._content_consumed)
+        self.assertTrue(response.raw.closed)
 
     @pytest.mark.xfail
     def test_response_iter_lines_reentrant(self):
@@ -1214,6 +1271,7 @@ class TestCaseInsensitiveDict(unittest.TestCase):
         del othercid['spam']
         assert cid != othercid
         assert cid == {'spam': 'blueval', 'eggs': 'redval'}
+        assert cid != object()
 
     def test_setdefault(self):
         cid = CaseInsensitiveDict({'Spam': 'blueval'})
@@ -1250,6 +1308,16 @@ class TestCaseInsensitiveDict(unittest.TestCase):
         assert frozenset(i[0] for i in cid.items()) == keyset
         assert frozenset(cid.keys()) == keyset
         assert frozenset(cid) == keyset
+
+    def test_copy(self):
+        cid = CaseInsensitiveDict({
+            'Accept': 'application/json',
+            'user-Agent': 'requests',
+        })
+        cid_copy = cid.copy()
+        assert cid == cid_copy
+        cid['changed'] = True
+        assert cid != cid_copy
 
 
 class UtilsTestCase(unittest.TestCase):
@@ -1296,6 +1364,15 @@ class UtilsTestCase(unittest.TestCase):
         assert get_environ_proxies(
             'http://localhost.localdomain:5000/v1.0/') == {}
         assert get_environ_proxies('http://www.requests.com/') != {}
+
+    def test_select_proxies(self):
+        """Make sure we can select per-host proxies correctly."""
+        from requests.utils import select_proxy
+        proxies = {'http': 'http://http.proxy',
+                   'http://some.host': 'http://some.host.proxy'}
+        assert select_proxy('hTTp://u:p@Some.Host/path', proxies) == 'http://some.host.proxy'
+        assert select_proxy('hTTp://u:p@Other.Host/path', proxies) == 'http://http.proxy'
+        assert select_proxy('hTTps://Other.Host', proxies) is None
 
     def test_guess_filename_when_int(self):
         from requests.utils import guess_filename
@@ -1613,7 +1690,6 @@ def test_prepare_unicode_url():
     p.prepare(
         method='GET',
         url=u('http://www.example.com/üniçø∂é'),
-        hooks=[]
     )
     assert_copy(p, p.copy())
 
@@ -1627,6 +1703,16 @@ def test_urllib3_retries():
 
     with pytest.raises(RetryError):
         s.get(httpbin('status/500'))
+
+
+def test_urllib3_pool_connection_closed():
+    s = requests.Session()
+    s.mount('http://', HTTPAdapter(pool_connections=0, pool_maxsize=0))
+
+    try:
+        s.get(httpbin('status/200'))
+    except ConnectionError as e:
+        assert u"HTTPConnectionPool(host='httpbin.org', port=80): Pool is closed." in str(e)
 
 def test_vendor_aliases():
     from requests.packages import urllib3

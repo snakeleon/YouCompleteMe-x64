@@ -73,13 +73,12 @@ You can see that the URL has been correctly encoded by printing the URL::
 Note that any dictionary key whose value is ``None`` will not be added to the
 URL's query string.
 
-In order to pass a list of items as a value you must mark the key as
-referring to a list like string by appending ``[]`` to the key::
+You can also pass a list of items as a value::
 
-    >>> payload = {'key1': 'value1', 'key2[]': ['value2', 'value3']}
+    >>> payload = {'key1': 'value1', 'key2': ['value2', 'value3']}
     >>> r = requests.get("http://httpbin.org/get", params=payload)
     >>> print(r.url)
-    http://httpbin.org/get?key1=value1&key2%5B%5D=value2&key2%5B%5D=value3
+    http://httpbin.org/get?key1=value1&key2=value2&key2=value3
 
 Response Content
 ----------------
@@ -146,8 +145,14 @@ There's also a builtin JSON decoder, in case you're dealing with JSON data::
     [{u'repository': {u'open_issues': 0, u'url': 'https://github.com/...
 
 In case the JSON decoding fails, ``r.json`` raises an exception. For example, if
-the response gets a 401 (Unauthorized), attempting ``r.json`` raises ``ValueError:
-No JSON object could be decoded``
+the response gets a 204 (No Content), or if the response contains invalid JSON,
+attempting ``r.json`` raises ``ValueError: No JSON object could be decoded``.
+
+It should be noted that the success of the call to ``r.json`` does **not**
+indicate the success of the response. Some servers may return a JSON object in a
+failed response (e.g. error details with HTTP 500). Such JSON will be decoded
+and returned. To check that a request is successful, use
+``r.raise_for_status()`` or check ``r.status_code`` is what you expect.
 
 
 Raw Response Content
@@ -182,14 +187,22 @@ Custom Headers
 If you'd like to add HTTP headers to a request, simply pass in a ``dict`` to the
 ``headers`` parameter.
 
-For example, we didn't specify our content-type in the previous example::
+For example, we didn't specify our user-agent in the previous example::
 
     >>> import json
     >>> url = 'https://api.github.com/some/endpoint'
-    >>> payload = {'some': 'data'}
-    >>> headers = {'content-type': 'application/json'}
+    >>> headers = {'user-agent': 'my-app/0.0.1'}
 
-    >>> r = requests.post(url, data=json.dumps(payload), headers=headers)
+    >>> r = requests.get(url, headers=headers)
+
+Note: Custom headers are given less precedence than more specific sources of information. For instance:
+
+* Authorization headers will be overridden if credentials are passed via the ``auth`` parameter or are specified in a ``.netrc`` accessible in the environment.
+* Authorization headers will be removed if you get redirected off-host.
+* Proxy-Authorization headers will be overridden by proxy credentials provided in the URL.
+* Content-Length headers will be overridden when we can determine the length of the content.
+
+Furthermore, Requests does not change its behavior at all based on which custom headers are specified. The headers are simply passed on into the final request.
 
 
 More complicated POST requests
@@ -222,6 +235,15 @@ For example, the GitHub API v3 accepts JSON-Encoded POST/PATCH data::
 
     >>> r = requests.post(url, data=json.dumps(payload))
 
+Instead of encoding the ``dict`` yourself, you can also pass it directly using
+the ``json`` parameter (added in version 2.4.2) and it will be encoded automatically::
+
+    >>> import json
+    >>> url = 'https://api.github.com/some/endpoint'
+    >>> payload = {'some': 'data'}
+
+    >>> r = requests.post(url, json=payload)
+
 
 POST a Multipart-Encoded File
 -----------------------------
@@ -241,7 +263,7 @@ Requests makes it simple to upload Multipart-encoded files::
       ...
     }
 
-You can set the filename, content_type and headers explicitly:
+You can set the filename, content_type and headers explicitly::
 
     >>> url = 'http://httpbin.org/post'
     >>> files = {'file': ('report.xls', open('report.xls', 'rb'), 'application/vnd.ms-excel', {'Expires': '0'})}
@@ -352,10 +374,10 @@ times with different values, but requests combines them so they can be
 represented in the dictionary within a single mapping, as per
 `RFC 7230 <http://tools.ietf.org/html/rfc7230#section-3.2>`_:
 
-    > A recipient MAY combine multiple header fields with the same field name
-    > into one "field-name: field-value" pair, without changing the semantics
-    > of the message, by appending each subsequent field value to the combined
-    > field value in order, separated by a comma.
+    A recipient MAY combine multiple header fields with the same field name
+    into one "field-name: field-value" pair, without changing the semantics
+    of the message, by appending each subsequent field value to the combined
+    field value in order, separated by a comma.
 
 Cookies
 -------
