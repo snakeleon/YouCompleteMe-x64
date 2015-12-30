@@ -31,6 +31,11 @@ YouCompleteMe: a code-completion engine for Vim
 - [FAQ](#faq)
 - [Contact](#contact)
 - [License](#license)
+- [中文入门指引](#中文入门指引)
+    - [关于版本](#关于版本)
+    - [脚本配置](#脚本配置)
+    - [使用技巧](#使用技巧)
+    - [Visual C Runtime问题](#Visual C Runtime问题)
 
 Intro
 -----
@@ -2560,6 +2565,112 @@ This software is licensed under the [GPL v3 license][gpl].
 
 [![Bitdeli Badge](https://d2weczhvl823v0.cloudfront.net/Valloric/youcompleteme/trend.png)](https://bitdeli.com/free "Bitdeli Badge")
 
+
+中文入门指引
+------------
+
+首先本中文入门指引只涉及 YouComplete 插件中 C-家族（C/C++/Objective-C/Objective-C++）的自动补全引擎 ycmd 的安装与配置，
+这里仅作简单的说明，而其它所支持语言的补全引擎请参阅官方安装配置说明。
+
+该入门指引参考了作者[Alexander Shukaev][Alexander Shukaev] （原Haroogan）的文档说明，和YouCompleteMe团队官方文档的指引。
+
+- (PS: 此项目仓库中已经集成了编译好的基于 Windows 系统的 ycmd 引擎，所以同时支持 Windows 版的 Emacs 的使用。
+  Linux系统安装编译太方便了，官方文档已经写的很详尽。)
+
+###关于版本
+
+- ycmd核心版本: 18 (2015.12.26) 静态编译
+- clang版本: 3.70 (2015.09.01) [Clang][Clang]
+
+支持操作系统:
+
+    - Windows 2000
+    - Windows XP
+    - Windows Vista
+    - Windows 7
+    - Windows 8
+    - Windows 10
+
+支持架构:
+
+    - x86 (x86-32, x32, i686);
+    - x64 (x86-64, amd64);
+
+[YouCompleteMe-x86][YouCompleteMe-x86] for windows 32bit
+
+[YouCompleteMe-x64][YouCompleteMe-x64] for windows 64bit
+
+NOTE: 该版本已经集成编译好的文件，直接安装加以配置就可正常使用；同时可用于Emacs。
+
+###脚本配置
+
+自用的 .ycm_extra_conf.py 模板文件在 python目录，可以默认全局加载该文件，参考 [使用技巧](#使用技巧) 第2条
+配置中相关的编译器编译开关请参考clang编译器手册自己增补。
+关于头文件的搜索配置方法如下:
+
+    GCC:
+        POSIX shell: g++ -E -x c++ - -v < /dev/null
+        windows: g++ -E -x c++ - -v < nul
+    LLVM/Clang:
+        POSIX shell: clang++ -E -x c++ - -v < /dev/null
+        windows: clang++ -E -x c++ - -v < nul
+
+其中 search starts here --- End of search list 之间的内容就是编译器默认的头文件搜索路径。
+
+###使用技巧
+
+- 1. 我自己使用的加载配置项(Vimrc中配置)片段:
+
+" 按操作系统选择使用版本:
+
+    if has("win64")
+        Bundle 'snakeleon/YouCompleteMe-x64'
+    elseif has("win32")
+        Bundle 'snakeleon/YouCompleteMe-x86'
+    else
+        Bundle 'Valloric/YouCompleteMe'
+    endif
+
+- 2. 全局python脚本(libclang工作方式)，Vimrc中配置:
+
+" 加载默认全局脚本配置文件:
+
+    if has("win64")
+        let g:ycm_global_ycm_extra_conf = $VIM.'/vimfiles/bundle/YouCompleteMe-x64/python/.ycm_extra_conf.py'
+    elseif has("win32")
+        let g:ycm_global_ycm_extra_conf = $VIM.'/vimfiles/bundle/YouCompleteMe-x86/python/.ycm_extra_conf.py'
+    else
+        let g:ycm_global_ycm_extra_conf = $HOME.'/.vim/bundle/YouCompleteMe/python/.ycm_extra_conf.py'
+    endif
+
+NOTE: 默认的全局脚本指定索引当前目录下的头文件，为了不想影响其它项目可以针对不同项目单独设置脚本文件;
+      将该个项目的 .ycm_extra_conf.py 文件放在该项目目录下，注意其中项目语言 如果是C项目请将 -x 项后的 c++ 改为 c ,
+      其中编译特性使用了c++11 (-std=c++11), 使用请根据具体情况调整。
+
+- 3. 如果你使用的VIM for Windows版本太低或支持的特性不满足自己的需求，自己编译又麻烦；那么特别推荐一个大神编译好的:
+    - [Vim builds for Windows][Vim builds for Windows]
+    此版本更新维护较频繁，官方出新补丁时都会跟上，如果大家喜欢可以在页面下方有编译者的E-Mail可以联系，或者赞助其服务器的租金。
+
+
+###Visual C Runtime问题
+
+如果各位在启动遇到如下错误提示:
+
+        Runtime Error!
+
+        Program: $VIM\gvim.exe
+
+        R6034
+        An application has made an attempt to load the C runtime
+        library incorrectly.
+        Please contact the application's support team for more
+        information.
+
+引起这个头痛问题的是因为msvcr90.dll版本兼容性，首先确保已经更新了官方最新的Visual C 运行库，默认Win7 SP1 已经带有此运行库，
+再排查你的系统环境变量 PATH 中，有没有其它的 msvcr90.dll 文件存在；如果有，请将其删除或者备份改名，大可放心，你的相关程序
+都依然能够很好的工作(前提是你的系统已经更新了最新的相关运行库文件)。
+
+
 [Clang]: http://clang.llvm.org/
 [vundle]: https://github.com/VundleVim/Vundle.vim#about
 [pathogen]: https://github.com/tpope/vim-pathogen#pathogenvim
@@ -2608,3 +2719,7 @@ This software is licensed under the [GPL v3 license][gpl].
 [Tern]: http://ternjs.net
 [tern-project]: http://ternjs.net/doc/manual.html#configuration
 [tern-docs]: http://ternjs.net/doc/manual.html#server
+[YouCompleteMe-x86]: https://github.com/snakeleon/YouCompleteMe-x86
+[YouCompleteMe-x64]: https://github.com/snakeleon/YouCompleteMe-x64
+[Vim builds for Windows]: https://tuxproject.de/projects/vim/
+[Alexander Shukaev]: https://bitbucket.org/Alexander-Shukaev/vim-youcompleteme-for-windows
