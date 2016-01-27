@@ -30,6 +30,7 @@ YouCompleteMe: a code-completion engine for Vim
     - [YcmCompleter subcommands](#ycmcompleter-subcommands)
 - [Options](#options)
 - [FAQ](#faq)
+- [Contributor Code of Conduct](#contributor-code-of-conduct)
 - [Contact](#contact)
 - [License](#license)
 - [中文入门指引](#中文入门指引)
@@ -2584,6 +2585,13 @@ If this is still really annoying, and you have a good reason not to have a
 and YCM will stop complaining.
 
 
+Contributor Code of Conduct
+---------------------------
+
+Please note that this project is released with a [Contributor Code of
+Conduct][ccoc]. By participating in this project you agree to abide by its
+terms.
+
 
 Contact
 -------
@@ -2598,6 +2606,7 @@ The latest version of the plugin is available at
 <http://valloric.github.io/YouCompleteMe/>.
 
 The author's homepage is <http://val.markovic.io>.
+
 
 License
 -------
@@ -2763,6 +2772,7 @@ NOTE: 默认的全局脚本指定索引当前目录下的头文件，为了不�
 [racer]: https://github.com/phildawes/racer
 [rust-install]: https://www.rust-lang.org/
 [rust-src]: https://www.rust-lang.org/downloads.html
+[ccoc]: https://github.com/Valloric/YouCompleteMe/blob/master/CODE_OF_CONDUCT.md
 [YouCompleteMe-x86]: https://github.com/snakeleon/YouCompleteMe-x86
 [YouCompleteMe-x64]: https://github.com/snakeleon/YouCompleteMe-x64
 [Vim builds for Windows]: https://tuxproject.de/projects/vim/
