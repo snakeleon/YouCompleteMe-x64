@@ -2776,7 +2776,7 @@ This software is licensed under the [GPL v3 license][gpl].
 
 ###关于版本
 
-- ycmd 核心版本: 18 (10 January 2016) 静态编译
+- ycmd 核心版本: 19 (29 February 2016) 静态编译
 - clang 版本: 3.7.1 (5 January 2016) [Clang][Clang]
 
 支持操作系统:
@@ -2793,9 +2793,9 @@ This software is licensed under the [GPL v3 license][gpl].
     - x86 (x86-32, x32, i686);
     - x64 (x86-64, amd64);
 
-[YouCompleteMe-x86][YouCompleteMe-x86] for windows 32bit
+[YouCompleteMe-x86][YouCompleteMe-x86] for Windows 32bit
 
-[YouCompleteMe-x64][YouCompleteMe-x64] for windows 64bit
+[YouCompleteMe-x64][YouCompleteMe-x64] for Windows 64bit
 
 NOTE: 该版本已经集成编译好的文件，直接安装加以配置就可正常使用；同时可用于Emacs。
 
