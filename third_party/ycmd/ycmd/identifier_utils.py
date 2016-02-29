@@ -1,21 +1,27 @@
-#!/usr/bin/env python
+# Copyright (C) 2014 Google Inc.
 #
-# Copyright (C) 2014  Google Inc.
+# This file is part of ycmd.
 #
-# This file is part of YouCompleteMe.
-#
-# YouCompleteMe is free software: you can redistribute it and/or modify
+# ycmd is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# YouCompleteMe is distributed in the hope that it will be useful,
+# ycmd is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
+# along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
+
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *  # noqa
 
 import re
 
@@ -73,6 +79,9 @@ FILETYPE_TO_IDENTIFIER_REGEX = {
     # Spec: http://www.haskell.org/onlinereport/lexemes.html
     # Section 2.4
     'haskell': re.compile( r"[_a-zA-Z][\w']*", re.UNICODE ),
+
+    # Spec: http://doc.perl6.org/language/syntax
+    'perl6': re.compile( r"[_a-zA-Z](?:\w|[-'](?=[_a-zA-Z]))*", re.UNICODE ),
 }
 
 FILETYPE_TO_IDENTIFIER_REGEX[ 'scss' ] = FILETYPE_TO_IDENTIFIER_REGEX[ 'css' ]
@@ -107,7 +116,7 @@ def StartOfLongestIdentifierEndingAtIndex( text, index, filetype = None ):
   if not text or index < 1 or index > len( text ):
     return index
 
-  for i in xrange( index ):
+  for i in range( index ):
     if IsIdentifier( text[ i : index ], filetype ):
       return i
   return index

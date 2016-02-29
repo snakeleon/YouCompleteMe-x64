@@ -19,12 +19,16 @@
 [submodule "third_party/gocode"]
 	path = third_party/gocode
 	url = https://github.com/nsf/gocode.git
-[submodule "third_party/tern"]
-	path = third_party/tern
-	url = https://github.com/ternjs/tern.git
 [submodule "third_party/JediHTTP"]
 	path = third_party/JediHTTP
 	url = https://github.com/vheon/JediHTTP
 [submodule "third_party/racerd"]
 	path = third_party/racerd
 	url = https://github.com/jwilm/racerd
+[submodule "third_party/godef"]
+	path = third_party/godef
+	url = https://github.com/Manishearth/godef.git
+	ignore = dirty
+[submodule "third_party/python-future"]
+	path = third_party/python-future
+	url = https://github.com/PythonCharmers/python-future

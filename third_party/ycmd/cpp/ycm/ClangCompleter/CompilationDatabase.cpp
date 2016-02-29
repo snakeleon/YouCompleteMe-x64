@@ -1,24 +1,25 @@
-// Copyright (C) 2011, 2012  Google Inc.
+// Copyright (C) 2011, 2012 Google Inc.
 //
-// This file is part of YouCompleteMe.
+// This file is part of ycmd.
 //
-// YouCompleteMe is free software: you can redistribute it and/or modify
+// ycmd is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// YouCompleteMe is distributed in the hope that it will be useful,
+// ycmd is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
+// along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "CompilationDatabase.h"
 #include "ClangUtils.h"
 #include "standard.h"
 #include "ReleaseGil.h"
+#include "PythonSupport.h"
 
 #include <boost/shared_ptr.hpp>
 #include <boost/make_shared.hpp>
@@ -39,11 +40,12 @@ remove_pointer< CXCompileCommands >::type > CompileCommandsWrap;
 
 
 CompilationDatabase::CompilationDatabase(
-  const std::string &path_to_directory )
+  const boost::python::object &path_to_directory )
   : is_loaded_( false ) {
   CXCompilationDatabase_Error status;
+  std::string path_to_directory_string = GetUtf8String( path_to_directory );
   compilation_database_ = clang_CompilationDatabase_fromDirectory(
-                            path_to_directory.c_str(),
+                            path_to_directory_string.c_str(),
                             &status );
   is_loaded_ = status == CXCompilationDatabase_NoError;
 }
@@ -66,19 +68,21 @@ bool CompilationDatabase::AlreadyGettingFlags() {
 
 
 CompilationInfoForFile CompilationDatabase::GetCompilationInfoForFile(
-  const std::string &path_to_file ) {
-  ReleaseGil unlock;
+  const boost::python::object &path_to_file ) {
   CompilationInfoForFile info;
 
   if ( !is_loaded_ )
     return info;
+
+  std::string path_to_file_string = GetUtf8String( path_to_file );
+  ReleaseGil unlock;
 
   lock_guard< mutex > lock( compilation_database_mutex_ );
 
   CompileCommandsWrap commands(
     clang_CompilationDatabase_getCompileCommands(
       compilation_database_,
-      path_to_file.c_str() ), clang_CompileCommands_dispose );
+      path_to_file_string.c_str() ), clang_CompileCommands_dispose );
 
   uint num_commands = clang_CompileCommands_getSize( commands.get() );
 

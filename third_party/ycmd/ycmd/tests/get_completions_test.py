@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-#
 # Copyright (C) 2013 Google Inc.
 #               2015 ycmd contributors
 #
@@ -17,6 +15,14 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
+
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *  # noqa
 
 from webtest import TestApp
 from nose.tools import eq_
@@ -150,21 +156,39 @@ class GetCompletions_test( Handlers_test ):
 
 
   def UltiSnipsCompleter_UnusedWhenOffWithOption_test( self ):
-    self._ChangeSpecificOptions( { 'use_ultisnips_completer': False } )
-    self._app = TestApp( handlers.app )
+    with self.UserOption( 'use_ultisnips_completer', False ):
+      self._app = TestApp( handlers.app )
 
-    event_data = self._BuildRequest(
-      event_name = 'BufferVisit',
-      ultisnips_snippets = [
-          {'trigger': 'foo', 'description': 'bar'},
-          {'trigger': 'zoo', 'description': 'goo'},
-      ] )
+      event_data = self._BuildRequest(
+        event_name = 'BufferVisit',
+        ultisnips_snippets = [
+            {'trigger': 'foo', 'description': 'bar'},
+            {'trigger': 'zoo', 'description': 'goo'},
+        ] )
 
-    self._app.post_json( '/event_notification', event_data )
+      self._app.post_json( '/event_notification', event_data )
 
-    completion_data = self._BuildRequest( contents = 'oo ',
-                                          column_num = 3 )
+      completion_data = self._BuildRequest( contents = 'oo ',
+                                            column_num = 3 )
 
-    eq_( [],
-         self._app.post_json( '/completions',
-                              completion_data ).json[ 'completions' ] )
+      eq_( [],
+           self._app.post_json( '/completions',
+                                completion_data ).json[ 'completions' ] )
+
+
+  @patch( 'ycmd.tests.test_utils.DummyCompleter.CandidatesList',
+          return_value = [ 'some_candidate' ] )
+  def SemanticCompleter_WorksWhenTriggerIsIdentifier_test( self, *args ):
+    with self.UserOption( 'semantic_triggers',
+                          { 'dummy_filetype': [ '_' ] } ):
+      with self.PatchCompleter( DummyCompleter, 'dummy_filetype' ):
+        completion_data = self._BuildRequest( filetype = 'dummy_filetype',
+                                              contents = 'some_can',
+                                              column_num = 9 )
+
+        results = self._app.post_json( '/completions',
+                                       completion_data ).json[ 'completions' ]
+        assert_that(
+          results,
+          has_items( self._CompletionEntryMatcher( 'some_candidate' ) )
+        )

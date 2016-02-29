@@ -20,8 +20,9 @@ Known ycmd clients:
 ------------------
 
 - [YouCompleteMe][ycm]: Vim client, stable and exposes all ycmd features.
-- [emacs-ycmd][]: Emacs client, still a bit experimental.
+- [emacs-ycmd][]: Emacs client.
 - [you-complete-me][atom-you-complete-me]: Atom client.
+- [YcmdCompletion][sublime-ycmd]: Sublime client
 - [kak-ycmd][]: Kakoune client.
 
 Feel free to send a pull request adding a link to your client here if you've
@@ -33,8 +34,12 @@ Building
 [Clients commonly build and set up ycmd for you; you are unlikely to need to
 build ycmd yourself unless you want to build a new client.]
 
+**If you're looking to develop ycmd, see the [instructions for setting up a dev
+environment][dev-setup] and for [running the tests][test-setup].**
+
 This is all for Ubuntu Linux. Details on getting ycmd running on other OS's can be
-found in [YCM's instructions][ycm-install] (ignore the Vim-specific parts).
+found in [YCM's instructions][ycm-install] (ignore the Vim-specific parts). Note
+that **ycmd runs on Python 2.6, 2.7 and 3.3+.**
 
 First, install the dependencies:
 ```
@@ -46,7 +51,7 @@ When you first clone the repository you'll need to update the submodules:
 git submodule update --init --recursive
 ```
 
-Then run `./build.py --clang-completer --omnisharp-completer --gocode-completer`.
+Then run `./build.py --all`.
 This should get you going.
 
 For more detailed instructions on building ycmd, see [YCM's
@@ -77,7 +82,8 @@ non-semantic.
 There are also several semantic engines in YCM. There's a libclang-based
 completer that provides semantic completion for C-family languages.  There's also a
 Jedi-based completer for semantic completion for Python, an OmniSharp-based
-completer for C#, a [Gocode][gocode]-based completer for Go, and a TSServer-based
+completer for C#, a [Gocode][gocode]-based completer for Go (using [Godef][godef]
+for jumping to definitions), and a TSServer-based
 completer for TypeScript. More will be added with time.
 
 There are also other completion engines, like the filepath completer (part of
@@ -178,7 +184,7 @@ Backwards compatibility
 -----------------------
 
 ycmd's HTTP+JSON interface follows [SemVer][]. While ycmd has seen extensive use
-over the last several months as part of YCM, the version number is below 1.0
+over the last several years as part of YCM, the version number is below 1.0
 because some parts of the API _might_ change slightly as people discover
 possible problems integrating ycmd with other editors. In other words, the
 current API might unintentionally be Vim-specific. We don't want that.
@@ -200,6 +206,14 @@ localhost if the user visits evil.com in a browser.
 code execution exploit [was created][exploit] for ycmd running on localhost. The
 HMAC auth was added to block this attack vector.
 
+
+Contributor Code of Conduct
+---------------------------
+
+Please note that this project is released with a [Contributor Code of
+Conduct][ccoc]. By participating in this project you agree to abide by its
+terms.
+
 Contact
 -------
 
@@ -217,6 +231,7 @@ This software is licensed under the [GPL v3 license][gpl].
 [ycmd-users]: https://groups.google.com/forum/?hl=en#!forum/ycmd-users
 [ycm]: http://valloric.github.io/YouCompleteMe/
 [atom-you-complete-me]: https://atom.io/packages/you-complete-me
+[sublime-ycmd]: https://packagecontrol.io/packages/YcmdCompletion
 [semver]: http://semver.org/
 [hmac]: http://en.wikipedia.org/wiki/Hash-based_message_authentication_code
 [exploit]: https://groups.google.com/d/topic/ycm-users/NZAPrvaYgxo/discussion
@@ -233,4 +248,9 @@ This software is licensed under the [GPL v3 license][gpl].
 [emacs-ycmd]: https://github.com/abingham/emacs-ycmd
 [gpl]: http://www.gnu.org/copyleft/gpl.html
 [gocode]: https://github.com/nsf/gocode
+[godef]: https://github.com/Manishearth/godef
 [kak-ycmd]: https://github.com/mawww/kak-ycmd
+[ccoc]: https://github.com/Valloric/ycmd/blob/master/CODE_OF_CONDUCT.md
+[dev-setup]: https://github.com/Valloric/ycmd/blob/master/DEV_SETUP.md
+[test-setup]: https://github.com/Valloric/ycmd/blob/master/TESTS.md
+

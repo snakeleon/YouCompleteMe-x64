@@ -1,32 +1,41 @@
-#!/usr/bin/env python
+# Copyright (C) 2011, 2012 Google Inc.
 #
-# Copyright (C) 2011, 2012  Google Inc.
+# This file is part of ycmd.
 #
-# This file is part of YouCompleteMe.
-#
-# YouCompleteMe is free software: you can redistribute it and/or modify
+# ycmd is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# YouCompleteMe is distributed in the hope that it will be useful,
+# ycmd is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
+# along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
+
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *  # noqa
 
 import ycm_core
 import os
 import inspect
 import re
+from future.utils import PY2, native
 from ycmd import extra_conf_store
-from ycmd.utils import ToUtf8IfNeeded, OnMac, OnWindows
+from ycmd.utils import ( ToCppStringCompatible, OnMac, OnWindows, ToUnicode,
+                         ToBytes )
 from ycmd.responses import NoExtraConfDetected
 
-INCLUDE_FLAGS = [ '-isystem', '-I', '-iquote', '--sysroot=', '-isysroot',
-                  '-include', '-iframework', '-F', '-imacros' ]
+INCLUDE_FLAGS = [ '-isystem', '-I', '-iquote', '-isysroot', '--sysroot',
+                  '-gcc-toolchain', '-include', '-include-pch', '-iframework',
+                  '-F', '-imacros' ]
 
 # We need to remove --fcolor-diagnostics because it will cause shell escape
 # sequences to show up in editors, which is bad. See Valloric/YouCompleteMe#1421
@@ -90,7 +99,7 @@ class Flags( object ):
       if not results or not results.get( 'flags_ready', True ):
         return None
 
-      flags = list( results[ 'flags' ] )
+      flags = _ExtractFlagsList( results )
       if not flags:
         return None
 
@@ -104,7 +113,8 @@ class Flags( object ):
 
 
   def UserIncludePaths( self, filename, client_data ):
-    flags = self.FlagsForFile( filename, client_data = client_data )
+    flags = [ ToUnicode( x ) for x in
+              self.FlagsForFile( filename, client_data = client_data ) ]
 
     quoted_include_paths = [ os.path.dirname( filename ) ]
     include_paths = []
@@ -114,21 +124,23 @@ class Flags( object ):
       path_flags = [ '-isystem', '-I' ]
 
       try:
-        it = iter(flags)
+        it = iter( flags )
         for flag in it:
           flag_len = len( flag )
           if flag.startswith( quote_flag ):
             quote_flag_len = len( quote_flag )
             # Add next flag to the include paths if current flag equals to
             # '-iquote', or add remaining string otherwise.
-            quoted_include_paths.append( it.next() if flag_len == quote_flag_len
-                                                 else flag[ quote_flag_len: ] )
+            quoted_include_paths.append( next( it )
+                                         if flag_len == quote_flag_len
+                                         else flag[ quote_flag_len: ] )
           else:
             for path_flag in path_flags:
               if flag.startswith( path_flag ):
                 path_flag_len = len( path_flag )
-                include_paths.append( it.next() if flag_len == path_flag_len
-                                              else flag[ path_flag_len: ] )
+                include_paths.append( next( it )
+                                      if flag_len == path_flag_len
+                                      else flag[ path_flag_len: ] )
                 break
       except StopIteration:
         pass
@@ -141,8 +153,23 @@ class Flags( object ):
     self.flags_for_file.clear()
 
 
+def _ExtractFlagsList( flags_for_file_output ):
+  return [ ToUnicode( x ) for x in flags_for_file_output[ 'flags' ] ]
+
+
 def _CallExtraConfFlagsForFile( module, filename, client_data ):
-  filename = ToUtf8IfNeeded( filename )
+  # We want to ensure we pass a native py2 `str` on py2 and a native py3 `str`
+  # (unicode) object on py3. That's the API we provide.
+  # In a vacuum, always passing a unicode object (`unicode` on py2 and `str` on
+  # py3) would be better, but we can't do that because that would break all the
+  # ycm_extra_conf files already out there that expect a py2 `str` object on
+  # py2, and WE DO NOT BREAK BACKWARDS COMPATIBILITY.
+  # Hindsight is 20/20.
+  if PY2:
+    filename = native( ToBytes( filename ) )
+  else:
+    filename = native( ToUnicode( filename ) )
+
   # For the sake of backwards compatibility, we need to first check whether the
   # FlagsForFile function in the extra conf module even allows keyword args.
   if inspect.getargspec( module.FlagsForFile ).keywords:
@@ -199,13 +226,13 @@ def _SanitizeFlags( flags ):
 
   vector = ycm_core.StringVector()
   for flag in sanitized_flags:
-    vector.append( ToUtf8IfNeeded( flag ) )
+    vector.append( ToCppStringCompatible( flag ) )
   return vector
 
 
 def _RemoveFlagsPrecedingCompiler( flags ):
-  """Assuming that the flag just before the first flag starting with a dash is
-  the compiler path, removes all flags preceding it."""
+  """Assuming that the flag just before the first flag (which starts with a
+  dash) is the compiler path, removes all flags preceding it."""
 
   for index, flag in enumerate( flags ):
     if flag.startswith( '-' ):
@@ -229,7 +256,7 @@ def _CompilerToLanguageFlag( flags ):
   language = ( 'c++' if CPP_COMPILER_REGEX.search( flags[ 0 ] ) else
                'c' )
 
-  return [ '-x', language ] + flags[ 1: ]
+  return flags[ :1 ] + [ '-x', language ] + flags[ 1: ]
 
 
 def _RemoveUnusedFlags( flags, filename ):
@@ -241,6 +268,13 @@ def _RemoveUnusedFlags( flags, filename ):
   dirs."""
 
   new_flags = []
+
+  # When flags come from the compile_commands.json file, the first flag is
+  # usually the path to the compiler that should be invoked. Directly move it to
+  # the new_flags list so it doesn't get stripped of in the loop below.
+  if not flags[ 0 ].startswith( '-' ):
+    new_flags = flags[ :1 ]
+    flags = flags[ 1: ]
 
   skip_next = False
   previous_flag_is_include = False
@@ -300,6 +334,6 @@ def _ExtraClangFlags():
 def _SpecialClangIncludes():
   libclang_dir = os.path.dirname( ycm_core.__file__ )
   path_to_includes = os.path.join( libclang_dir, 'clang_includes' )
-  return [ '-isystem', path_to_includes ]
+  return [ '-resource-dir=' + path_to_includes ]
 
 

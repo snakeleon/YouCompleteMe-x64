@@ -29,14 +29,6 @@ let s:cursor_moved = 0
 let s:moved_vertically_in_insert_mode = 0
 let s:previous_num_chars_on_current_line = strlen( getline('.') )
 
-let s:diagnostic_ui_filetypes = {
-      \ 'cpp': 1,
-      \ 'cs': 1,
-      \ 'c': 1,
-      \ 'objc': 1,
-      \ 'objcpp': 1,
-      \ }
-
 
 function! youcompleteme#Enable()
   " When vim is in diff mode, don't run
@@ -139,37 +131,38 @@ endfunction
 
 function! s:SetUpPython() abort
 python << EOF
-import sys
-import vim
 import os
-import subprocess
+import sys
+import traceback
+import vim
 
+# Add python sources folder to the system path.
 script_folder = vim.eval( 's:script_folder_path' )
-sys.path.insert( 0, os.path.join( script_folder, '../python' ) )
-sys.path.insert( 0, os.path.join( script_folder, '../third_party/ycmd' ) )
-from ycmd import utils
-utils.AddNearestThirdPartyFoldersToSysPath( script_folder )
+sys.path.insert( 0, os.path.join( script_folder, '..', 'python' ) )
 
-# We need to import ycmd's third_party folders as well since we import and
-# use ycmd code in the client.
-utils.AddNearestThirdPartyFoldersToSysPath( utils.__file__ )
-from ycm import base
-base.LoadJsonDefaultsIntoVim()
-from ycmd import user_options_store
-user_options_store.SetAll( base.BuildServerConf() )
-from ycm import paths, vimsupport
+from ycm.setup import SetUpSystemPaths, SetUpYCM
 
-popen_args = [ paths.PathToPythonInterpreter(),
-               paths.PathToCheckCoreVersion() ]
+# We enclose this code in a try/except block to avoid backtraces in Vim.
+try:
+  SetUpSystemPaths()
 
-if utils.SafePopen( popen_args ).wait() == 2:
-  vimsupport.PostVimMessage(
-    'YouCompleteMe unavailable: YCM support libs too old, PLEASE RECOMPILE' )
+  # Import the modules used in this file.
+  from ycm import base, vimsupport
+
+  ycm_state = SetUpYCM()
+except Exception as error:
+  # We don't use PostVimMessage or EchoText from the vimsupport module because
+  # importing this module may fail.
+  vim.command( 'redraw | echohl WarningMsg' )
+  for line in traceback.format_exc().splitlines():
+    vim.command( "echom '{0}'".format( line.replace( "'", "''" ) ) )
+
+  vim.command( "echo 'YouCompleteMe unavailable: {0}'"
+               .format( str( error ).replace( "'", "''" ) ) )
+  vim.command( 'echohl None' )
   vim.command( 'return 0' )
-
-from ycm.youcompleteme import YouCompleteMe
-ycm_state = YouCompleteMe( user_options_store.GetAll() )
-vim.command( 'return 1' )
+else:
+  vim.command( 'return 1' )
 EOF
 endfunction
 
@@ -305,11 +298,6 @@ function! s:TurnOffSyntasticForCFamily()
   let g:syntastic_c_checkers = []
   let g:syntastic_objc_checkers = []
   let g:syntastic_objcpp_checkers = []
-endfunction
-
-
-function! s:DiagnosticUiSupportedForCurrentFiletype()
-  return get( s:diagnostic_ui_filetypes, &filetype, 0 )
 endfunction
 
 
@@ -462,11 +450,11 @@ function! s:OnFileReadyToParse()
   " happen for special buffers.
   call s:SetUpYcmChangedTick()
 
-  " Order is important here; we need to extract any done diagnostics before
+  " Order is important here; we need to extract any information before
   " reparsing the file again. If we sent the new parse request first, then
   " the response would always be pending when we called
-  " UpdateDiagnosticNotifications.
-  call s:UpdateDiagnosticNotifications()
+  " HandleFileParseRequest.
+  py ycm_state.HandleFileParseRequest()
 
   let buffer_changed = b:changedtick != b:ycm_changedtick.file_ready_to_parse
   if buffer_changed
@@ -609,19 +597,6 @@ function! s:ClosePreviewWindowIfNeeded()
   " This command does the actual closing of the preview window. If no preview
   " window is shown, nothing happens.
   pclose
-endfunction
-
-
-function! s:UpdateDiagnosticNotifications()
-  let should_display_diagnostics = g:ycm_show_diagnostics_ui &&
-        \ s:DiagnosticUiSupportedForCurrentFiletype()
-
-  if !should_display_diagnostics
-    py ycm_state.ValidateParseRequest()
-    return
-  endif
-
-  py ycm_state.UpdateDiagnosticInterface()
 endfunction
 
 
@@ -853,15 +828,8 @@ function! s:ForceCompile()
 
   echom "Forcing compilation, this will block Vim until done."
   py ycm_state.OnFileReadyToParse()
-  while 1
-    let diagnostics_ready = pyeval(
-          \ 'ycm_state.DiagnosticsForCurrentFileReady()' )
-    if diagnostics_ready
-      break
-    endif
+  py ycm_state.HandleFileParseRequest( True )
 
-    sleep 100m
-  endwhile
   return 1
 endfunction
 
@@ -871,8 +839,6 @@ function! s:ForceCompileAndDiagnostics()
   if !compilation_succeeded
     return
   endif
-
-  call s:UpdateDiagnosticNotifications()
   echom "Diagnostics refreshed."
 endfunction
 
@@ -883,11 +849,7 @@ function! s:ShowDiagnostics()
     return
   endif
 
-  let diags = pyeval(
-        \ 'ycm_state.GetDiagnosticsFromStoredRequest( qflist_format = True )' )
-  if !empty( diags )
-    call setloclist( 0, diags )
-
+  if pyeval( 'ycm_state.PopulateLocationListWithLatestDiagnostics()' )
     if g:ycm_open_loclist_on_ycm_diags
       lopen
     endif

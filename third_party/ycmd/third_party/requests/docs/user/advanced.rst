@@ -201,7 +201,7 @@ I don't have SSL setup on this domain, so it fails. Excellent. GitHub does thoug
     >>> requests.get('https://github.com', verify=True)
     <Response [200]>
 
-You can pass ``verify`` the path to a CA_BUNDLE file with certificates of trusted CAs::
+You can pass ``verify`` the path to a CA_BUNDLE file or directory with certificates of trusted CAs::
 
     >>> requests.get('https://github.com', verify='/path/to/certfile')
 
@@ -315,6 +315,15 @@ file-like object for your body::
     with open('massive-body', 'rb') as f:
         requests.post('http://some.url/streamed', data=f)
 
+.. warning:: It is strongly recommended that you open files in `binary mode`_.
+             This is because Requests may attempt to provide the
+             ``Content-Length`` header for you, and if it does this value will
+             be set to the number of *bytes* in the file. Errors may occur if
+             you open the file in *text mode*.
+
+.. _binary mode: https://docs.python.org/2/tutorial/inputoutput.html#reading-and-writing-files
+
+
 .. _chunk-encoding:
 
 Chunk-Encoded Requests
@@ -361,6 +370,15 @@ To do that, just set files to a list of tuples of (form_field_name, file_info):
       'Content-Type': 'multipart/form-data; boundary=3131623adb2043caaeb5538cc7aa0b3a',
       ...
     }
+
+.. warning:: It is strongly recommended that you open files in `binary mode`_.
+             This is because Requests may attempt to provide the
+             ``Content-Length`` header for you, and if it does this value will
+             be set to the number of *bytes* in the file. Errors may occur if
+             you open the file in *text mode*.
+
+.. _binary mode: https://docs.python.org/2/tutorial/inputoutput.html#reading-and-writing-files
+
 
 .. _event-hooks:
 
@@ -519,7 +537,7 @@ any request to the given scheme and exact hostname.
     }
 
 Note that proxy URLs must include the scheme.
-    
+
 .. _compliance:
 
 Compliance

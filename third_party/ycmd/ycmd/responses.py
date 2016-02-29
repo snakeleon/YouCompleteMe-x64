@@ -1,21 +1,27 @@
-#!/usr/bin/env python
+# Copyright (C) 2013 Google Inc.
 #
-# Copyright (C) 2013  Google Inc.
+# This file is part of ycmd.
 #
-# This file is part of YouCompleteMe.
-#
-# YouCompleteMe is free software: you can redistribute it and/or modify
+# ycmd is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# YouCompleteMe is distributed in the hope that it will be useful,
+# ycmd is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
+# along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
+
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *  # noqa
 
 import os
 
@@ -119,6 +125,7 @@ def BuildCompletionResponse( completion_datas,
     'errors': errors if errors else [],
   }
 
+
 def BuildLocationData( location ):
   return {
     'line_num': location.line_number_,
@@ -126,14 +133,64 @@ def BuildLocationData( location ):
     'filepath': location.filename_,
   }
 
+
 def BuildRangeData( source_range ):
   return {
     'start': BuildLocationData( source_range.start_ ),
     'end': BuildLocationData( source_range.end_ ),
   }
 
-def BuildDiagnosticData( diagnostic ):
 
+class Diagnostic( object ):
+  def __init__ ( self, ranges, location, location_extent, text, kind ):
+    self.ranges_ = ranges
+    self.location_ = location
+    self.location_extent_ = location_extent
+    self.text_ = text
+    self.kind_ = kind
+
+
+class FixIt( object ):
+  """A set of replacements (of type FixItChunk) to be applied to fix a single
+  diagnostic. This can be used for any type of refactoring command, not just
+  quick fixes. The individual chunks may span multiple files."""
+
+  def __init__ ( self, location, chunks ):
+    """location of type Location, chunks of type list<FixItChunk>"""
+    self.location = location
+    self.chunks = chunks
+
+
+class FixItChunk( object ):
+  """An individual replacement within a FixIt (aka Refactor)"""
+
+  def __init__ ( self, replacement_text, range ):
+    """replacement_text of type string, range of type Range"""
+    self.replacement_text = replacement_text
+    self.range = range
+
+
+class Range( object ):
+  """Source code range relating to a diagnostic or FixIt (aka Refactor)."""
+
+  def __init__ ( self, start, end ):
+    "start of type Location, end of type Location"""
+    self.start_ = start
+    self.end_ = end
+
+
+class Location( object ):
+  """Source code location for a diagnostic or FixIt (aka Refactor)."""
+
+  def __init__ ( self, line, column, filename ):
+    """Line is 1-based line, column is 1-based column, filename is absolute
+    path of the file"""
+    self.line_number_ = line
+    self.column_number_ = column
+    self.filename_ = filename
+
+
+def BuildDiagnosticData( diagnostic ):
   kind = ( diagnostic.kind_.name if hasattr( diagnostic.kind_, 'name' )
            else diagnostic.kind_ )
 
@@ -148,7 +205,12 @@ def BuildDiagnosticData( diagnostic ):
     'fixit_available': len( fixits ) > 0,
   }
 
+
 def BuildFixItResponse( fixits ):
+  """Build a response from a list of FixIt (aka Refactor) objects. This response
+  can be used to apply arbitrary changes to arbitrary files and is suitable for
+  both quick fix and refactor operations"""
+
   def BuildFixitChunkData( chunk ):
     return {
       'replacement_text': chunk.replacement_text,

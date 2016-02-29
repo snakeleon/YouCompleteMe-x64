@@ -1,19 +1,19 @@
-// Copyright (C) 2011, 2012  Google Inc.
+// Copyright (C) 2011, 2012 Google Inc.
 //
-// This file is part of YouCompleteMe.
+// This file is part of ycmd.
 //
-// YouCompleteMe is free software: you can redistribute it and/or modify
+// ycmd is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// YouCompleteMe is distributed in the hope that it will be useful,
+// ycmd is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
+// along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "CandidateRepository.h"
 #include "Candidate.h"
@@ -32,6 +32,15 @@ namespace YouCompleteMe {
 
 using boost::all;
 using boost::is_print;
+
+namespace {
+
+// We set a reasonable max limit to prevent issues with huge candidate strings
+// entering the database. Such large candidates are almost never desirable.
+const int MAX_CANDIDATE_SIZE = 80;
+
+}  // unnamed namespace
+
 
 boost::mutex CandidateRepository::singleton_mutex_;
 CandidateRepository *CandidateRepository::instance_ = NULL;
@@ -64,9 +73,7 @@ std::vector< const Candidate * > CandidateRepository::GetCandidatesForStrings(
 
     foreach ( const std::string & candidate_text, strings ) {
       const std::string &validated_candidate_text =
-        all( candidate_text, is_print( std::locale::classic() ) ) ?
-        candidate_text :
-        empty_;
+        ValidatedCandidateText( candidate_text );
 
       const Candidate *&candidate = GetValueElseInsert(
                                       candidate_holder_,
@@ -94,12 +101,16 @@ std::vector< const Candidate * > CandidateRepository::GetCandidatesForStrings(
     boost::lock_guard< boost::mutex > locker( holder_mutex_ );
 
     foreach ( const CompletionData & data, datas ) {
-      const Candidate *&candidate = GetValueElseInsert( candidate_holder_,
-                                                        data.original_string_,
-                                                        NULL );
+      const std::string &validated_candidate_text =
+        ValidatedCandidateText( data.original_string_ );
+
+      const Candidate *&candidate = GetValueElseInsert(
+                                      candidate_holder_,
+                                      validated_candidate_text,
+                                      NULL );
 
       if ( !candidate )
-        candidate = new Candidate( data.original_string_ );
+        candidate = new Candidate( validated_candidate_text );
 
       candidates.push_back( candidate );
     }
@@ -115,6 +126,17 @@ CandidateRepository::~CandidateRepository() {
             candidate_holder_ ) {
     delete pair.second;
   }
+}
+
+
+// Returns a ref to empty_ if candidate not valid.
+const std::string &CandidateRepository::ValidatedCandidateText(
+  const std::string &candidate_text ) {
+  if ( candidate_text.size() <= MAX_CANDIDATE_SIZE &&
+       all( candidate_text, is_print( std::locale::classic() ) ) )
+    return candidate_text;
+
+  return empty_;
 }
 
 } // namespace YouCompleteMe

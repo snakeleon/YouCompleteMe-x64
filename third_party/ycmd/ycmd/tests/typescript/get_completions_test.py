@@ -1,6 +1,4 @@
-#!/usr/bin/env python
-#
-# Copyright (C) 2015 ycmd contributors.
+# Copyright (C) 2015 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -17,15 +15,25 @@
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-from hamcrest import assert_that, has_items
-from typescript_handlers_test import Typescript_Handlers_test
+from __future__ import absolute_import
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *  # noqa
+
+from hamcrest import assert_that, contains_inanyorder, has_entries
+from .typescript_handlers_test import Typescript_Handlers_test
+from ycmd.utils import ReadFile
+from mock import patch
 
 
 class TypeScript_GetCompletions_test( Typescript_Handlers_test ):
 
-  def Basic_test( self ):
+  def _RunTest( self, test ):
     filepath = self._PathToTestFile( 'test.ts' )
-    contents = open( filepath ).read()
+    contents = ReadFile( filepath )
 
     event_data = self._BuildRequest( filepath = filepath,
                                      filetype = 'typescript',
@@ -41,9 +49,37 @@ class TypeScript_GetCompletions_test( Typescript_Handlers_test ):
                                           line_num = 12,
                                           column_num = 6 )
 
-    results = self._app.post_json( '/completions',
-                                   completion_data ).json[ 'completions' ]
-    assert_that( results,
-                 has_items( self._CompletionEntryMatcher( 'methodA' ),
-                            self._CompletionEntryMatcher( 'methodB' ),
-                            self._CompletionEntryMatcher( 'methodC' ) ) )
+    response = self._app.post_json( '/completions', completion_data )
+    assert_that( response.json, test[ 'expect' ][ 'data' ] )
+
+
+  def Basic_test( self ):
+    self._RunTest( {
+      'expect': {
+        'data': has_entries( {
+          'completions': contains_inanyorder(
+            self.CompletionEntryMatcher( 'methodA',
+                                         'methodA (method) Foo.methodA(): void' ),
+            self.CompletionEntryMatcher( 'methodB',
+                                         'methodB (method) Foo.methodB(): void' ),
+            self.CompletionEntryMatcher( 'methodC',
+                                         'methodC (method) Foo.methodC(): void' ),
+          )
+        } )
+      }
+    } )
+
+
+  @patch( 'ycmd.completers.typescript.typescript_completer.MAX_DETAILED_COMPLETIONS', 2 )
+  def MaxDetailedCompletion_test( self ):
+    self._RunTest( {
+      'expect': {
+        'data': has_entries( {
+          'completions': contains_inanyorder(
+            self.CompletionEntryMatcher( 'methodA' ),
+            self.CompletionEntryMatcher( 'methodB' ),
+            self.CompletionEntryMatcher( 'methodC' )
+          )
+        } )
+      }
+    } )

@@ -1,20 +1,28 @@
-#!/usr/bin/env python
-#
 # Copyright (C) 2013 Stanislav Golovanov <stgolovanov@gmail.com>
 #                    Google Inc.
 #
-# YouCompleteMe is free software: you can redistribute it and/or modify
+# This file is part of ycmd.
+#
+# ycmd is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# YouCompleteMe is distributed in the hope that it will be useful,
+# ycmd is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
+# along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
+
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *  # noqa
 
 import os
 import re
@@ -25,7 +33,7 @@ from ycmd.completers.completer_utils import ( AtIncludeStatementStart,
                                               GetIncludeStatementValue )
 from ycmd.completers.cpp.clang_completer import InCFamilyFile
 from ycmd.completers.cpp.flags import Flags
-from ycmd.utils import ToUtf8IfNeeded, ToUnicodeIfNeeded, OnWindows
+from ycmd.utils import ToUnicode, OnWindows
 from ycmd import responses
 
 EXTRA_INFO_MAP = { 1 : '[File]', 2 : '[Dir]', 3 : '[File&Dir]' }
@@ -94,10 +102,9 @@ class FilenameCompleter( Completer ):
   def ComputeCandidatesInner( self, request_data ):
     current_line = request_data[ 'line_value' ]
     start_column = request_data[ 'start_column' ] - 1
-    orig_filepath = request_data[ 'filepath' ]
-    filetypes = request_data[ 'file_data' ][ orig_filepath ][ 'filetypes' ]
+    filepath = request_data[ 'filepath' ]
+    filetypes = request_data[ 'file_data' ][ filepath ][ 'filetypes' ]
     line = current_line[ :start_column ]
-    utf8_filepath = ToUtf8IfNeeded( orig_filepath )
 
     if InCFamilyFile( filetypes ):
       path_dir, quoted_include = (
@@ -109,7 +116,7 @@ class FilenameCompleter( Completer ):
         return _GenerateCandidatesForPaths(
           self.GetPathsIncludeCase( path_dir,
                                     quoted_include,
-                                    utf8_filepath,
+                                    filepath,
                                     client_data ) )
 
     path_match = self._path_regex.search( line )
@@ -124,7 +131,7 @@ class FilenameCompleter( Completer ):
       _GetPathsStandardCase(
         path_dir,
         self.user_options[ 'filepath_completion_use_working_dir' ],
-        utf8_filepath,
+        filepath,
         working_dir) )
 
 
@@ -138,7 +145,7 @@ class FilenameCompleter( Completer ):
       include_paths.extend( quoted_include_paths )
 
     for include_path in include_paths:
-      unicode_path = ToUnicodeIfNeeded( os.path.join( include_path, path_dir ) )
+      unicode_path = ToUnicode( os.path.join( include_path, path_dir ) )
       try:
         # We need to pass a unicode string to get unicode strings out of
         # listdir.
@@ -179,7 +186,6 @@ def _GetAbsolutePathForCompletions( path_dir,
 
 
 def _GetPathsStandardCase( path_dir, use_working_dir, filepath, working_dir ):
-
   absolute_path_dir = _GetAbsolutePathForCompletions( path_dir,
                                                       use_working_dir,
                                                       filepath,
@@ -188,7 +194,7 @@ def _GetPathsStandardCase( path_dir, use_working_dir, filepath, working_dir ):
   try:
     # We need to pass a unicode string to get unicode strings out of
     # listdir.
-    relative_paths = os.listdir( ToUnicodeIfNeeded( absolute_path_dir ) )
+    relative_paths = os.listdir( ToUnicode( absolute_path_dir ) )
   except:
     relative_paths = []
 

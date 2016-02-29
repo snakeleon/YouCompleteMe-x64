@@ -1,19 +1,19 @@
-// Copyright (C) 2013  Google Inc.
+// Copyright (C) 2013 Google Inc.
 //
-// This file is part of YouCompleteMe.
+// This file is part of ycmd.
 //
-// YouCompleteMe is free software: you can redistribute it and/or modify
+// ycmd is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// YouCompleteMe is distributed in the hope that it will be useful,
+// ycmd is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
+// along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "IdentifierDatabase.h"
 #include "standard.h"
@@ -137,6 +137,7 @@ std::set< const Candidate * > &IdentifierDatabase::GetCandidateSet(
   return *candidates;
 }
 
+
 // WARNING: You need to hold the filetype_candidate_map_mutex_ before calling
 // this function and while using the returned set.
 void IdentifierDatabase::AddIdentifiersNoLock(
@@ -152,7 +153,6 @@ void IdentifierDatabase::AddIdentifiersNoLock(
   candidates.insert( repository_candidates.begin(),
                      repository_candidates.end() );
 }
-
 
 
 } // namespace YouCompleteMe

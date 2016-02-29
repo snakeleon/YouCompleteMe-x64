@@ -1,19 +1,19 @@
-// Copyright (C) 2011, 2012  Google Inc.
+// Copyright (C) 2011, 2012 Google Inc.
 //
-// This file is part of YouCompleteMe.
+// This file is part of ycmd.
 //
-// YouCompleteMe is free software: you can redistribute it and/or modify
+// ycmd is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// YouCompleteMe is distributed in the hope that it will be useful,
+// ycmd is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
+// along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "Result.h"
 #include "standard.h"
@@ -32,25 +32,26 @@ namespace {
 char ChangeCharCase( char c ) {
   if ( std::isupper( c, std::locale() ) )
     return std::tolower( c, std::locale() );
+
   return std::toupper( c, std::locale() );
 }
 
 
-bool CharLessThanWithLowercasePriority(const char &first,
-                                       const char &second) {
+bool CharLessThanWithLowercasePriority( const char &first,
+                                        const char &second ) {
   char swap_first = ChangeCharCase( first );
   char swap_second = ChangeCharCase( second );
   return swap_first < swap_second;
 }
 
 
-bool StringLessThanWithLowercasePriority(const std::string &first,
-                                         const std::string &second) {
+bool StringLessThanWithLowercasePriority( const std::string &first,
+                                          const std::string &second ) {
   return std::lexicographical_compare(
-      first.begin(), first.end(),
-      second.begin(), second.end(),
-      boost::function< bool( const char&, const char& ) >(
-          &CharLessThanWithLowercasePriority ) );
+           first.begin(), first.end(),
+           second.begin(), second.end(),
+           boost::function< bool( const char &, const char & ) >(
+             &CharLessThanWithLowercasePriority ) );
 }
 
 

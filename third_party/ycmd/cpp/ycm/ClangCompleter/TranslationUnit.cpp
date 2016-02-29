@@ -1,19 +1,19 @@
-// Copyright (C) 2011, 2012  Google Inc.
+// Copyright (C) 2011, 2012 Google Inc.
 //
-// This file is part of YouCompleteMe.
+// This file is part of ycmd.
 //
-// YouCompleteMe is free software: you can redistribute it and/or modify
+// ycmd is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// YouCompleteMe is distributed in the hope that it will be useful,
+// ycmd is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
+// along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "TranslationUnit.h"
 #include "CompletionData.h"
@@ -35,7 +35,7 @@ namespace YouCompleteMe {
 
 namespace {
 
-unsigned editingOptions() {
+unsigned EditingOptions() {
   return CXTranslationUnit_DetailedPreprocessingRecord |
          CXTranslationUnit_Incomplete |
          CXTranslationUnit_IncludeBriefCommentsInCodeCompletion |
@@ -44,14 +44,21 @@ unsigned editingOptions() {
          clang_defaultEditingTranslationUnitOptions();
 }
 
-unsigned reparseOptions( CXTranslationUnit translationUnit ) {
-    return clang_defaultReparseOptions( translationUnit );
+unsigned ReparseOptions( CXTranslationUnit translationUnit ) {
+  return clang_defaultReparseOptions( translationUnit );
 }
 
 
-unsigned completionOptions() {
+unsigned CompletionOptions() {
   return clang_defaultCodeCompleteOptions() |
          CXCodeComplete_IncludeBriefComments;
+}
+
+void EnsureCompilerNamePresent( std::vector< const char * > &flags ) {
+  bool no_compiler_name_set = !flags.empty() && flags.front()[ 0 ] == '-';
+
+  if ( flags.empty() || no_compiler_name_set )
+    flags.insert( flags.begin(), "clang" );
 }
 
 }  // unnamed namespace
@@ -74,25 +81,31 @@ TranslationUnit::TranslationUnit(
   std::vector< const char * > pointer_flags;
   pointer_flags.reserve( flags.size() );
 
-  foreach ( const std::string &flag, flags ) {
+  foreach ( const std::string & flag, flags ) {
     pointer_flags.push_back( flag.c_str() );
   }
+
+  EnsureCompilerNamePresent( pointer_flags );
 
   std::vector< CXUnsavedFile > cxunsaved_files =
     ToCXUnsavedFiles( unsaved_files );
   const CXUnsavedFile *unsaved = cxunsaved_files.size() > 0
                                  ? &cxunsaved_files[ 0 ] : NULL;
 
-  clang_translation_unit_ = clang_parseTranslationUnit(
-                              clang_index,
-                              filename.c_str(),
-                              &pointer_flags[ 0 ],
-                              pointer_flags.size(),
-                              const_cast<CXUnsavedFile *>( unsaved ),
-                              cxunsaved_files.size(),
-                              editingOptions() );
+  // Actually parse the translation unit.
+  // TODO: Stop stripping argv[0] here and use
+  // clang_parseTranslationUnit2FullArgv, which is available in libclang 3.8.
+  CXErrorCode result = clang_parseTranslationUnit2(
+                         clang_index,
+                         filename.c_str(),
+                         &pointer_flags[ 1 ],
+                         pointer_flags.size() - 1,
+                         const_cast<CXUnsavedFile *>( unsaved ),
+                         cxunsaved_files.size(),
+                         EditingOptions(),
+                         &clang_translation_unit_ );
 
-  if ( !clang_translation_unit_ )
+  if ( result != CXError_Success )
     boost_throw( ClangParseError() );
 
   // Only with a reparse is the preamble precompiled. This issue was fixed
@@ -179,7 +192,7 @@ std::vector< CompletionData > TranslationUnit::CandidatesForLocation(
                           column,
                           const_cast<CXUnsavedFile *>( unsaved ),
                           cxunsaved_files.size(),
-                          completionOptions() ),
+                          CompletionOptions() ),
     clang_disposeCodeCompleteResults );
 
   std::vector< CompletionData > candidates = ToCompletionDataVector(
@@ -250,7 +263,7 @@ std::string TranslationUnit::GetTypeAtLocation(
   const std::vector< UnsavedFile > &unsaved_files,
   bool reparse ) {
 
-  if (reparse)
+  if ( reparse )
     Reparse( unsaved_files );
 
   unique_lock< mutex > lock( clang_access_mutex_ );
@@ -266,7 +279,7 @@ std::string TranslationUnit::GetTypeAtLocation(
   CXType type = clang_getCursorType( cursor );
 
   std::string type_description =
-                        CXStringToString( clang_getTypeSpelling( type ) );
+    CXStringToString( clang_getTypeSpelling( type ) );
 
   if ( type_description.empty() )
     return "Unknown type";
@@ -295,7 +308,7 @@ std::string TranslationUnit::GetTypeAtLocation(
   if ( !clang_equalTypes( type, canonical_type ) ) {
     type_description += " => ";
     type_description += CXStringToString(
-                                  clang_getTypeSpelling( canonical_type ) );
+                          clang_getTypeSpelling( canonical_type ) );
   }
 
   return type_description;
@@ -307,7 +320,7 @@ std::string TranslationUnit::GetEnclosingFunctionAtLocation(
   const std::vector< UnsavedFile > &unsaved_files,
   bool reparse ) {
 
-  if (reparse)
+  if ( reparse )
     Reparse( unsaved_files );
 
   unique_lock< mutex > lock( clang_access_mutex_ );
@@ -323,9 +336,9 @@ std::string TranslationUnit::GetEnclosingFunctionAtLocation(
   CXCursor parent = clang_getCursorSemanticParent( cursor );
 
   std::string parent_str =
-                  CXStringToString( clang_getCursorDisplayName( parent ) );
+    CXStringToString( clang_getCursorDisplayName( parent ) );
 
-  if (parent_str.empty())
+  if ( parent_str.empty() )
     return "Unknown semantic parent";
 
   return parent_str;
@@ -337,7 +350,7 @@ std::string TranslationUnit::GetEnclosingFunctionAtLocation(
 void TranslationUnit::Reparse(
   std::vector< CXUnsavedFile > &unsaved_files ) {
   unsigned options = ( clang_translation_unit_
-                       ? reparseOptions( clang_translation_unit_ )
+                       ? ReparseOptions( clang_translation_unit_ )
                        : static_cast<unsigned>( CXReparse_None ) );
 
   Reparse( unsaved_files, options );
@@ -394,23 +407,23 @@ void TranslationUnit::UpdateLatestDiagnostics() {
 }
 
 namespace {
-  /// Sort a FixIt container by its location's distance from a given column
-  /// (such as the cursor location).
-  ///
-  /// PreCondition: All FixIts in the container are on the same line.
-  struct sort_by_location {
-    sort_by_location( int column ) : column_( column ) { }
+/// Sort a FixIt container by its location's distance from a given column
+/// (such as the cursor location).
+///
+/// PreCondition: All FixIts in the container are on the same line.
+struct sort_by_location {
+  sort_by_location( int column ) : column_( column ) { }
 
-    bool operator()( const FixIt& a, const FixIt& b ) {
-      int a_distance = a.location.column_number_ - column_;
-      int b_distance = b.location.column_number_ - column_;
+  bool operator()( const FixIt &a, const FixIt &b ) {
+    int a_distance = a.location.column_number_ - column_;
+    int b_distance = b.location.column_number_ - column_;
 
-      return std::abs( a_distance ) < std::abs( b_distance );
-    }
+    return std::abs( a_distance ) < std::abs( b_distance );
+  }
 
-  private:
-    int column_;
-  };
+private:
+  int column_;
+};
 }
 
 std::vector< FixIt > TranslationUnit::GetFixItsForLocationInFile(
@@ -428,9 +441,9 @@ std::vector< FixIt > TranslationUnit::GetFixItsForLocationInFile(
     unique_lock< mutex > lock( diagnostics_mutex_ );
 
     for ( std::vector< Diagnostic >::const_iterator it
-                                        = latest_diagnostics_.begin();
+          = latest_diagnostics_.begin();
           it != latest_diagnostics_.end();
-          ++it) {
+          ++it ) {
 
       // Find all fixits for the supplied line
       if ( it->fixits_.size() > 0 &&
@@ -474,6 +487,7 @@ DocumentationData TranslationUnit::GetDocsForLocationInFile(
   // If the original cursor is a reference, then we return the documentation
   // for the type/method/etc. that is referenced
   CXCursor referenced_cursor = clang_getCursorReferenced( cursor );
+
   if ( CursorIsValid( referenced_cursor ) )
     cursor = referenced_cursor;
 

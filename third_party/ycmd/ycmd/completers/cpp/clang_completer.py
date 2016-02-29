@@ -1,21 +1,28 @@
-#!/usr/bin/env python
+# Copyright (C) 2011, 2012 Google Inc.
 #
-# Copyright (C) 2011, 2012  Google Inc.
+# This file is part of ycmd.
 #
-# This file is part of YouCompleteMe.
-#
-# YouCompleteMe is free software: you can redistribute it and/or modify
+# ycmd is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# YouCompleteMe is distributed in the hope that it will be useful,
+# ycmd is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
+# along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
+
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *  # noqa
+from future.utils import iteritems
 
 from collections import defaultdict
 import ycm_core
@@ -24,7 +31,7 @@ import os.path
 import textwrap
 from ycmd import responses
 from ycmd import extra_conf_store
-from ycmd.utils import ToUtf8IfNeeded
+from ycmd.utils import ToCppStringCompatible
 from ycmd.completers.completer import Completer
 from ycmd.completers.completer_utils import GetIncludeStatementValue
 from ycmd.completers.cpp.flags import Flags, PrepareFlagsForClang
@@ -60,7 +67,7 @@ class ClangCompleter( Completer ):
 
   def GetUnsavedFilesVector( self, request_data ):
     files = ycm_core.UnsavedFileVector()
-    for filename, file_data in request_data[ 'file_data' ].iteritems():
+    for filename, file_data in iteritems( request_data[ 'file_data' ] ):
       if not ClangAvailableForFiletypes( file_data[ 'filetypes' ] ):
         continue
       contents = file_data[ 'contents' ]
@@ -68,10 +75,10 @@ class ClangCompleter( Completer ):
         continue
 
       unsaved_file = ycm_core.UnsavedFile()
-      utf8_contents = ToUtf8IfNeeded( contents )
+      utf8_contents = ToCppStringCompatible( contents )
       unsaved_file.contents_ = utf8_contents
       unsaved_file.length_ = len( utf8_contents )
-      unsaved_file.filename_ = ToUtf8IfNeeded( filename )
+      unsaved_file.filename_ = ToCppStringCompatible( filename )
 
       files.append( unsaved_file )
     return files
@@ -82,7 +89,8 @@ class ClangCompleter( Completer ):
     if not filename:
       return
 
-    if self._completer.UpdatingTranslationUnit( ToUtf8IfNeeded( filename ) ):
+    if self._completer.UpdatingTranslationUnit(
+        ToCppStringCompatible( filename ) ):
       raise RuntimeError( PARSING_FILE_MESSAGE )
 
     flags = self._FlagsForRequest( request_data )
@@ -94,7 +102,7 @@ class ClangCompleter( Completer ):
     column = request_data[ 'start_column' ]
     with self._files_being_compiled.GetExclusive( filename ):
       results = self._completer.CandidatesForLocationInFile(
-          ToUtf8IfNeeded( filename ),
+          ToCppStringCompatible( filename ),
           line,
           column,
           files,
@@ -153,7 +161,7 @@ class ClangCompleter( Completer ):
     line = request_data[ 'line_num' ]
     column = request_data[ 'column_num' ]
     return getattr( self._completer, goto_function )(
-        ToUtf8IfNeeded( filename ),
+        ToCppStringCompatible( filename ),
         line,
         column,
         files,
@@ -215,7 +223,7 @@ class ClangCompleter( Completer ):
     if not include_file_name:
       return None
 
-    current_file_path = ToUtf8IfNeeded( request_data[ 'filepath' ] )
+    current_file_path = request_data[ 'filepath' ]
     client_data = request_data.get( 'extra_conf_data', None )
     quoted_include_paths, include_paths = (
             self._flags.UserIncludePaths( current_file_path, client_data ) )
@@ -242,11 +250,12 @@ class ClangCompleter( Completer ):
     return include_response
 
 
-  def _GetSemanticInfo( self,
-                        request_data,
-                        func,
-                        response_builder = responses.BuildDisplayMessageResponse,
-                        reparse = True ):
+  def _GetSemanticInfo(
+      self,
+      request_data,
+      func,
+      response_builder = responses.BuildDisplayMessageResponse,
+      reparse = True ):
     filename = request_data[ 'filepath' ]
     if not filename:
       raise ValueError( INVALID_FILE_MESSAGE )
@@ -260,7 +269,7 @@ class ClangCompleter( Completer ):
     column = request_data[ 'column_num' ]
 
     message = getattr( self._completer, func )(
-        ToUtf8IfNeeded( filename ),
+        ToCppStringCompatible( filename ),
         line,
         column,
         files,
@@ -289,7 +298,7 @@ class ClangCompleter( Completer ):
     column = request_data[ 'column_num' ]
 
     fixits = getattr( self._completer, "GetFixItsForLocationInFile" )(
-        ToUtf8IfNeeded( filename ),
+        ToCppStringCompatible( filename ),
         line,
         column,
         files,
@@ -312,7 +321,7 @@ class ClangCompleter( Completer ):
 
     with self._files_being_compiled.GetExclusive( filename ):
       diagnostics = self._completer.UpdateTranslationUnit(
-        ToUtf8IfNeeded( filename ),
+        ToCppStringCompatible( filename ),
         self.GetUnsavedFilesVector( request_data ),
         flags )
 
@@ -324,7 +333,7 @@ class ClangCompleter( Completer ):
 
   def OnBufferUnload( self, request_data ):
     self._completer.DeleteCachesForFile(
-        ToUtf8IfNeeded( request_data[ 'unloaded_buffer' ] ) )
+        ToCppStringCompatible( request_data[ 'unloaded_buffer' ] ) )
 
 
   def GetDetailedDiagnostic( self, request_data ):
@@ -364,7 +373,7 @@ class ClangCompleter( Completer ):
 
 
   def _FlagsForRequest( self, request_data ):
-    filename = ToUtf8IfNeeded( request_data[ 'filepath' ] )
+    filename = request_data[ 'filepath' ]
     if 'compilation_flags' in request_data:
       return PrepareFlagsForClang( request_data[ 'compilation_flags' ],
                                    filename )
@@ -379,7 +388,8 @@ def ConvertCompletionData( completion_data ):
     extra_menu_info = completion_data.ExtraMenuInfo(),
     kind = completion_data.kind_.name,
     detailed_info = completion_data.DetailedInfoForPreviewWindow(),
-    extra_data = { 'doc_string': completion_data.DocString() } if completion_data.DocString() else None )
+    extra_data = ( { 'doc_string': completion_data.DocString() }
+                   if completion_data.DocString() else None ) )
 
 
 def DiagnosticsToDiagStructure( diagnostics ):

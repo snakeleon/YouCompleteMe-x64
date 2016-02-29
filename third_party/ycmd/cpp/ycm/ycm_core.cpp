@@ -1,19 +1,19 @@
-// Copyright (C) 2011, 2012  Google Inc.
+// Copyright (C) 2011, 2012 Google Inc.
 //
-// This file is part of YouCompleteMe.
+// This file is part of ycmd.
 //
-// YouCompleteMe is free software: you can redistribute it and/or modify
+// ycmd is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// YouCompleteMe is distributed in the hope that it will be useful,
+// ycmd is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
+// along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "IdentifierCompleter.h"
 #include "PythonSupport.h"
@@ -55,6 +55,9 @@ BOOST_PYTHON_MODULE(ycm_core)
   def( "HasClangSupport", HasClangSupport );
   def( "FilterAndSortCandidates", FilterAndSortCandidates );
   def( "YcmCoreVersion", YcmCoreVersion );
+
+  // This is exposed so that we can test it.
+  def( "GetUtf8String", GetUtf8String );
 
   class_< IdentifierCompleter, boost::noncopyable >( "IdentifierCompleter" )
     .def( "AddIdentifiersToDatabase",
@@ -187,7 +190,7 @@ BOOST_PYTHON_MODULE(ycm_core)
     .def_readonly( "display_name", &DocumentationData::display_name );
 
   class_< CompilationDatabase, boost::noncopyable >(
-      "CompilationDatabase", init< std::string >() )
+      "CompilationDatabase", init< boost::python::object >() )
     .def( "DatabaseSuccessfullyLoaded",
           &CompilationDatabase::DatabaseSuccessfullyLoaded )
     .def( "AlreadyGettingFlags",

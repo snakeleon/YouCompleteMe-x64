@@ -40,9 +40,14 @@ The server may be started with HMAC authentication. To query the server when
 HMAC is enabled, you must add an `x-racerd-hmac` header to your request. The
 value can be computed with the formula
 
-`hmac(hmac(secret, method) + hmac(secret, path) + hmac(secret, body))`
+`hmac(secret, hmac(secret, method) + hmac(secret, path) + hmac(secret, body))`
 
 where `hmac()` is an SHA-256 HMAC routine.
+
+An important note is that the final output should be hex-encoded but the steps
+in between should not.
+
+A correct implementation can be found at https://github.com/jwilm/racerd/blob/master/tests/util/mod.rs#L26
 
 ## Common types
 
@@ -156,13 +161,17 @@ curl -H "Content-Type: application/json" -d '{"buffers":[{"file_path":"src.rs","
 | text      | string | Text of found definition                   |
 | line      | number | Line in file where definition was found    |
 | column    | number | Column in file where definition was found  |
+| context   | string | Surrounding text of definition             |
+| kind      | string | Type of definition                         |
 
 ```json
 {
   "file_path":"/Users/jwilm/rs/std/stable/libstd/path.rs",
   "column":11,
   "line":1267,
-  "text":"new"
+  "text":"new",
+  "context":"pub fn new<S: AsRef<OsStr> + ?Sized>(s: &S) -> &Path {",
+  "kind":"Function"
 }
 ```
 

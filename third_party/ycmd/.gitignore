@@ -34,6 +34,7 @@ pip-log.txt
 cover/
 .tox
 nosetests.xml
+.noseids
 
 # custom
 ycm_core_tests
@@ -46,3 +47,9 @@ cpp/build
 
 # Exclude auto generated vim doc tags.
 doc/tags
+
+# Exclude tern installation area
+third_party/tern_runtime/node_modules
+
+# Exclude vagrant directory
+.vagrant/

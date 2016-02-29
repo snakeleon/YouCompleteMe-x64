@@ -1,21 +1,29 @@
-#!/usr/bin/env python
-#
 # Copyright (C) 2014 Google Inc.
 #
-# YouCompleteMe is free software: you can redistribute it and/or modify
+# This file is part of ycmd.
+#
+# ycmd is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# YouCompleteMe is distributed in the hope that it will be useful,
+# ycmd is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
+# along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-from ycmd.utils import ToUnicodeIfNeeded, ToUtf8IfNeeded
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *  # noqa
+
+from ycmd.utils import ToUnicode, ToBytes
 from ycmd.identifier_utils import StartOfLongestIdentifierEndingAtIndex
 from ycmd.request_validation import EnsureRequestValid
 
@@ -95,10 +103,10 @@ def CompletionStartColumn( line_value, column_num, filetype ):
   # NOTE: column_num and other numbers on the wire are byte indices, but we need
   # to walk codepoints for identifier checks.
 
-  utf8_line_value = ToUtf8IfNeeded( line_value )
-  unicode_line_value = ToUnicodeIfNeeded( line_value )
+  utf8_line_value = ToBytes( line_value )
+  unicode_line_value = ToUnicode( line_value )
   codepoint_column_num = len(
-      unicode( utf8_line_value[ : column_num -1 ], 'utf8' ) ) + 1
+      str( utf8_line_value[ : column_num -1 ], 'utf8' ) ) + 1
 
   # -1 and then +1 to account for difference betwen 0-based and 1-based
   # indices/columns

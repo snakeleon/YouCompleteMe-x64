@@ -19,31 +19,66 @@ env:
   global:
     - MONO_THREADS_PER_CPU=2000
     - MONO_MANAGED_WATCHER=disabled
-    # Travis can run out of RAM when compiling if we don't prevent parallelization.
-    - YCM_CORES=1
+    # Travis can run out of RAM, so we need to be careful here.
+    - YCM_CORES=3
   matrix:
+    # Don't forget to take the below matrix exclusions into account.
     - USE_CLANG_COMPLETER=true YCMD_PYTHON_VERSION=2.7
-    - USE_CLANG_COMPLETER=false YCMD_PYTHON_VERSION=2.7
-    - USE_CLANG_COMPLETER=true YCMD_PYTHON_VERSION=2.6
-    - USE_CLANG_COMPLETER=false YCMD_PYTHON_VERSION=2.6
     - USE_CLANG_COMPLETER=true YCMD_PYTHON_VERSION=2.7 COVERAGE=true
+    - USE_CLANG_COMPLETER=false YCMD_PYTHON_VERSION=2.6
+    - USE_CLANG_COMPLETER=true YCMD_PYTHON_VERSION=2.6
+    - USE_CLANG_COMPLETER=true YCMD_PYTHON_VERSION=3.3
 matrix:
   exclude:
     - os: osx
       env: USE_CLANG_COMPLETER=true YCMD_PYTHON_VERSION=2.7 COVERAGE=true
+    - os: osx
+      env: USE_CLANG_COMPLETER=false YCMD_PYTHON_VERSION=2.6
+    - os: osx
+      env: USE_CLANG_COMPLETER=true YCMD_PYTHON_VERSION=2.6
+    - os: linux
+      env: USE_CLANG_COMPLETER=true YCMD_PYTHON_VERSION=2.7
 addons:
+  # If this doesn't make much sense to you, see the travis docs:
+  #    https://docs.travis-ci.com/user/migrating-from-legacy/
   apt:
     sources:
-     - ubuntu-toolchain-r-test
-     - deadsnakes
+     # The Travis apt source whitelist can be found here:
+     #   https://github.com/travis-ci/apt-source-whitelist/blob/master/ubuntu.json
+     - ubuntu-toolchain-r-test  # for new libstdc++
+     - llvm-toolchain-precise-3.7  # for clang
+     - deadsnakes  # for various versions of python
+     - kalakris-cmake # for a more recent version of cmake (needed for ninja-build)
     packages:
-     - g++-4.8
-     - python2.6
-     - python2.6-dev
-     - python2.7
-     - python2.7-dev
-     - python-virtualenv
+     - cmake
+     - clang-3.7
+     - ninja-build
+     # The confusing part is that on Travis Linux with YCMD_PYTHON_VERSION=3.3,
+     # we build the C++ parts against the below system python3.3, but run
+     # against the pyenv python3.3. This is because stupid cmake 2.8.11 has a
+     # bug preventing it from finding the pyenv pythons (ostensibly; I haven't
+     # checked, but online reports say the issue is gone with cmake 3.4).
+     # Everything still works though, it's just weird.
+     - python3.3
+     - python3.3-dev
+     # Everything below is a Python build dep (though it depends on Python
+     # version). We need them because pyenv builds Python.
+     - libssl-dev
+     - zlib1g-dev
+     - libbz2-dev
+     - libreadline-dev
+     - libsqlite3-dev
+     - wget
+     - curl
+     - llvm
+     - libncurses5-dev
+     - libncursesw5-dev
 cache:
   directories:
-    - $HOME/.cache/pip
-    - $HOME/.dnx/packages
+    - $HOME/.cache/pip  # Python packages from pip
+    - $HOME/.npm  # Node packages from npm
+    - $HOME/.multirust  # What multirust downloads
+    - $HOME/.cargo  # Cargo package deps
+    - $HOME/.pyenv  # pyenv
+    - $TRAVIS_BUILD_DIR/clang_archives  # Clang downloads
+    - $TRAVIS_BUILD_DIR/third_party/racerd/target  # Racerd compilation

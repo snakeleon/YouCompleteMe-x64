@@ -1,19 +1,19 @@
-// Copyright (C) 2013  Google Inc.
+// Copyright (C) 2013 Google Inc.
 //
-// This file is part of YouCompleteMe.
+// This file is part of ycmd.
 //
-// YouCompleteMe is free software: you can redistribute it and/or modify
+// ycmd is free software: you can redistribute it and/or modify
 // it under the terms of the GNU General Public License as published by
 // the Free Software Foundation, either version 3 of the License, or
 // (at your option) any later version.
 //
-// YouCompleteMe is distributed in the hope that it will be useful,
+// ycmd is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 // GNU General Public License for more details.
 //
 // You should have received a copy of the GNU General Public License
-// along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
+// along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "standard.h"
 #include "ClangHelpers.h"
@@ -100,7 +100,7 @@ std::vector< Range > GetRanges( const DiagnosticWrap &diagnostic_wrap ) {
 
   for ( uint i = 0; i < num_ranges; ++i ) {
     ranges.push_back(
-        Range( clang_getDiagnosticRange( diagnostic_wrap.get(), i ) ) );
+      Range( clang_getDiagnosticRange( diagnostic_wrap.get(), i ) ) );
   }
 
   return ranges;
@@ -117,19 +117,21 @@ Range GetLocationExtent( CXSourceLocation source_location,
   // situations.
 
   CXSourceRange range = clang_getCursorExtent(
-      clang_getCursor( translation_unit, source_location ) );
+                          clang_getCursor( translation_unit, source_location ) );
   CXToken *tokens;
   uint num_tokens;
   clang_tokenize( translation_unit, range, &tokens, &num_tokens );
 
   Location location( source_location );
   Range final_range;
+
   for ( uint i = 0; i < num_tokens; ++i ) {
     Location token_location( clang_getTokenLocation( translation_unit,
                                                      tokens[ i ] ) );
+
     if ( token_location == location ) {
       std::string name = CXStringToString(
-          clang_getTokenSpelling( translation_unit, tokens[ i ] ) );
+                           clang_getTokenSpelling( translation_unit, tokens[ i ] ) );
       Location end_location = location;
       end_location.column_number_ += name.length();
       final_range = Range( location, end_location );
@@ -215,7 +217,7 @@ Diagnostic BuildDiagnostic( DiagnosticWrap diagnostic_wrap,
     return diagnostic;
 
   CXSourceLocation source_location =
-      clang_getDiagnosticLocation( diagnostic_wrap.get() );
+    clang_getDiagnosticLocation( diagnostic_wrap.get() );
   diagnostic.location_ = Location( source_location );
   diagnostic.location_extent_ = GetLocationExtent( source_location,
                                                    translation_unit );
@@ -229,14 +231,15 @@ Diagnostic BuildDiagnostic( DiagnosticWrap diagnostic_wrap,
   // If there are any fixits supplied by libclang, cache them in the diagnostic
   // object.
   diagnostic.fixits_.reserve( num_fixits );
+
   for ( uint fixit_idx = 0; fixit_idx < num_fixits; ++fixit_idx ) {
     FixItChunk chunk;
     CXSourceRange sourceRange;
 
     chunk.replacement_text = CXStringToString(
-                                clang_getDiagnosticFixIt( diagnostic_wrap.get(),
-                                                          fixit_idx,
-                                                          &sourceRange) );
+                               clang_getDiagnosticFixIt( diagnostic_wrap.get(),
+                                                         fixit_idx,
+                                                         &sourceRange ) );
 
     chunk.range = sourceRange;
 

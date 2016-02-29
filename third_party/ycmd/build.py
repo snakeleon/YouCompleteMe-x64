@@ -1,13 +1,24 @@
 #!/usr/bin/env python
 
+# Passing an environment variable containing unicode literals to a subprocess
+# on Windows and Python2 raises a TypeError. Since there is no unicode
+# string in this script, we don't import unicode_literals to avoid the issue.
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+
 import os
 import subprocess
 import os.path as p
 import sys
+import shlex
+import errno
 
-major, minor = sys.version_info[ 0 : 2 ]
-if major != 2 or minor < 6:
-  sys.exit( 'The build script requires Python version >= 2.6 and < 3.0; '
+PY_MAJOR, PY_MINOR = sys.version_info[ 0 : 2 ]
+if not ( ( PY_MAJOR == 2 and PY_MINOR in [ 6, 7 ] ) or
+         ( PY_MAJOR == 3 and PY_MINOR >= 3 ) or
+         PY_MAJOR > 3 ):
+  sys.exit( 'ycmd requires Python 2.6, 2.7 or >= 3.3; '
             'your version of Python is ' + sys.version )
 
 DIR_OF_THIS_SCRIPT = p.dirname( p.abspath( __file__ ) )
@@ -35,6 +46,10 @@ def OnMac():
 
 def OnWindows():
   return platform.system() == 'Windows'
+
+
+def OnTravisOrAppVeyor():
+  return 'CI' in os.environ
 
 
 # On Windows, distutils.spawn.find_executable only works for .exe files
@@ -88,7 +103,7 @@ def CheckDeps():
 
 
 # Shamelessly stolen from https://gist.github.com/edufelipe/1027906
-def _CheckOutput( *popen_args, **kwargs ):
+def CheckOutput( *popen_args, **kwargs ):
   """Run command with arguments and return its output as a byte string.
   Backported from Python 2.7."""
 
@@ -111,37 +126,69 @@ def CustomPythonCmakeArgs():
 
   print( 'Searching for python libraries...' )
 
-  python_prefix = _CheckOutput( [
-      'python-config',
-      '--prefix'
-  ] ).strip()
+  python_prefix = CheckOutput( [
+    'python-config',
+    '--prefix'
+  ] ).strip().decode( 'utf8' )
 
   if p.isfile( p.join( python_prefix, '/Python' ) ):
     python_library = p.join( python_prefix, '/Python' )
     python_include = p.join( python_prefix, '/Headers' )
     print( 'Using OSX-style libs from {0}'.format( python_prefix ) )
   else:
-    which_python = _CheckOutput( [
+    major_minor = CheckOutput( [
       'python',
       '-c',
-      'import sys;i=sys.version_info;print( "python%d.%d" % (i[0], i[1]) )'
-    ] ).strip()
+      'import sys;i=sys.version_info;print( "%d.%d" % (i[0], i[1]) )'
+    ] ).strip().decode( 'utf8' )
+    which_python = 'python' + major_minor
+
+    # Python 3 has an 'm' suffix, for instance libpython3.3m.a
+    if major_minor.startswith( '3' ):
+      which_python += 'm'
+
     lib_python = '{0}/lib/lib{1}'.format( python_prefix, which_python ).strip()
 
     print( 'Searching for python with prefix: {0} and lib {1}:'.format(
       python_prefix, which_python ) )
 
-    if p.isfile( '{0}.a'.format( lib_python ) ):
-      python_library = '{0}.a'.format( lib_python )
-    # This check is for CYGWIN
-    elif p.isfile( '{0}.dll.a'.format( lib_python ) ):
-      python_library = '{0}.dll.a'.format( lib_python )
-    elif p.isfile( '{0}.dylib'.format( lib_python ) ):
+    # On MacOS, ycmd does not work with statically linked python library.
+    # It typically manifests with the following error when there is a
+    # self-compiled python without --enable-framework (or, technically
+    # --enable-shared):
+    #
+    #   Fatal Python error: PyThreadState_Get: no current thread
+    #
+    # The most likely explanation for this is that both the ycm_core.so and the
+    # python binary include copies of libpython.a (or whatever included
+    # objects). When the python interpreter starts it initializes only the
+    # globals within its copy, so when ycm_core.so's copy starts executing, it
+    # points at its own copy which is uninitialized.
+    #
+    # Some platforms' dynamic linkers (ld.so) are able to resolve this when
+    # loading shared libraries at runtime[citation needed], but OSX seemingly
+    # cannot.
+    #
+    # So we do 2 things special on OS X:
+    #  - look for a .dylib first
+    #  - if we find a .a, raise an error.
+
+    if p.isfile( '{0}.dylib'.format( lib_python ) ):
       python_library = '{0}.dylib'.format( lib_python )
     elif p.isfile( '/usr/lib/lib{0}.dylib'.format( which_python ) ):
       # For no clear reason, python2.6 only exists in /usr/lib on OS X and
       # not in the python prefix location
       python_library = '/usr/lib/lib{0}.dylib'.format( which_python )
+    elif p.isfile( '{0}.a'.format( lib_python ) ):
+      if OnMac():
+        sys.exit( 'ERROR: You must use a python compiled with '
+                  '--enable-shared or --enable-framework (and thus a {0}.dylib '
+                  'library) on OS X'.format( lib_python ) )
+
+      python_library = '{0}.a'.format( lib_python )
+    # This check is for CYGWIN
+    elif p.isfile( '{0}.dll.a'.format( lib_python ) ):
+      python_library = '{0}.dll.a'.format( lib_python )
     else:
       sys.exit( 'ERROR: Unable to find an appropriate python library' )
 
@@ -167,9 +214,10 @@ def GetGenerator( args ):
     if ( not args.arch and platform.architecture()[ 0 ] == '64bit'
          or args.arch == 64 ):
       generator = generator + ' Win64'
-
     return generator
 
+  if PathToFirstExistingExecutable( ['ninja'] ):
+    return 'Ninja'
   return 'Unix Makefiles'
 
 
@@ -198,6 +246,10 @@ def ParseArguments():
   parser.add_argument( '--tern-completer',
                        action = 'store_true',
                        help   = 'Enable tern javascript completer' ),
+  parser.add_argument( '--all',
+                       action = 'store_true',
+                       help   = 'Enable all supported completers',
+                       dest   = 'all_completers' )
 
   args = parser.parse_args()
 
@@ -209,7 +261,7 @@ def ParseArguments():
 
 def GetCmakeArgs( parsed_args ):
   cmake_args = []
-  if parsed_args.clang_completer:
+  if parsed_args.clang_completer or parsed_args.all_completers:
     cmake_args.append( '-DUSE_CLANG_COMPLETER=ON' )
 
   if parsed_args.system_libclang:
@@ -218,8 +270,12 @@ def GetCmakeArgs( parsed_args ):
   if parsed_args.system_boost:
     cmake_args.append( '-DUSE_SYSTEM_BOOST=ON' )
 
+  use_python2 = 'ON' if PY_MAJOR == 2 else 'OFF'
+  cmake_args.append( '-DUSE_PYTHON2=' + use_python2 )
+
   extra_cmake_args = os.environ.get( 'EXTRA_CMAKE_ARGS', '' )
-  cmake_args.extend( extra_cmake_args.split() )
+  # We use shlex split to properly parse quoted CMake arguments.
+  cmake_args.extend( shlex.split( extra_cmake_args ) )
   return cmake_args
 
 
@@ -229,14 +285,37 @@ def RunYcmdTests( build_dir ):
   new_env = os.environ.copy()
 
   if OnWindows():
-    new_env[ 'PATH' ] = DIR_OF_THIS_SCRIPT
+    # We prepend the folder of the ycm_core_tests executable to the PATH
+    # instead of overwriting it so that the executable is able to find the
+    # python35.dll library.
+    new_env[ 'PATH' ] = DIR_OF_THIS_SCRIPT + ';' + new_env[ 'PATH' ]
   else:
     new_env[ 'LD_LIBRARY_PATH' ] = DIR_OF_THIS_SCRIPT
 
   subprocess.check_call( p.join( tests_dir, 'ycm_core_tests' ), env = new_env )
 
 
-def BuildYcmdLibs( args ):
+# On Windows, if the ycmd library is in use while building it, a LNK1104
+# fatal error will occur during linking. Exit the script early with an
+# error message if this is the case.
+def ExitIfYcmdLibInUseOnWindows():
+  if not OnWindows():
+    return
+
+  ycmd_library = p.join( DIR_OF_THIS_SCRIPT, 'ycm_core.pyd' )
+
+  if not p.exists( ycmd_library ):
+    return
+
+  try:
+    open( p.join( ycmd_library ), 'a' ).close()
+  except IOError as error:
+    if error.errno == errno.EACCES:
+      sys.exit( 'ERROR: ycmd library is currently in use. '
+                'Stop all ycmd instances before compilation.' )
+
+
+def BuildYcmdLib( args ):
   build_dir = mkdtemp( prefix = 'ycm_build.' )
 
   try:
@@ -249,7 +328,7 @@ def BuildYcmdLibs( args ):
     os.chdir( build_dir )
     subprocess.check_call( [ 'cmake' ] + full_cmake_args )
 
-    build_target = ( 'ycm_support_libs' if 'YCM_TESTRUN' not in os.environ else
+    build_target = ( 'ycm_core' if 'YCM_TESTRUN' not in os.environ else
                      'ycm_core_tests' )
 
     build_command = [ 'cmake', '--build', '.', '--target', build_target ]
@@ -264,7 +343,7 @@ def BuildYcmdLibs( args ):
       RunYcmdTests( build_dir )
   finally:
     os.chdir( DIR_OF_THIS_SCRIPT )
-    rmtree( build_dir )
+    rmtree( build_dir, ignore_errors = OnTravisOrAppVeyor() )
 
 
 def BuildOmniSharp():
@@ -283,6 +362,8 @@ def BuildGoCode():
 
   os.chdir( p.join( DIR_OF_THIS_SCRIPT, 'third_party', 'gocode' ) )
   subprocess.check_call( [ 'go', 'build' ] )
+  os.chdir( p.join( DIR_OF_THIS_SCRIPT, 'third_party', 'godef' ) )
+  subprocess.check_call( [ 'go', 'build' ] )
 
 
 def BuildRacerd():
@@ -293,7 +374,12 @@ def BuildRacerd():
     sys.exit( 'cargo is required for the rust completer' )
 
   os.chdir( p.join( DIR_OF_THIRD_PARTY, 'racerd' ) )
-  subprocess.check_call( [ 'cargo', 'build', '--release' ] )
+  args = [ 'cargo', 'build' ]
+  # We don't use the --release flag on Travis/AppVeyor because it makes building
+  # racerd 2.5x slower and we don't care about the speed of the produced racerd.
+  if not OnTravisOrAppVeyor():
+    args.append( '--release' )
+  subprocess.check_call( args )
 
 
 def SetUpTern():
@@ -305,22 +391,52 @@ def SetUpTern():
     else:
       paths[ exe ] = path
 
-  os.chdir( p.join( DIR_OF_THIS_SCRIPT, 'third_party', 'tern' ) )
+  # We install Tern into a runtime directory. This allows us to control
+  # precisely the version (and/or git commit) that is used by ycmd.  We use a
+  # separate runtime directory rather than a submodule checkout directory
+  # because we want to allow users to install third party plugins to
+  # node_modules of the Tern runtime.  We also want to be able to install our
+  # own plugins to improve the user experience for all users.
+  #
+  # This is not possible if we use a git submodle for Tern and simply run 'npm
+  # install' within the submodule source directory, as subsequent 'npm install
+  # tern-my-plugin' will (heinously) install another (arbitrary) version of Tern
+  # within the Tern source tree (e.g. third_party/tern/node_modules/tern. The
+  # reason for this is that the plugin that gets installed has "tern" as a
+  # dependency, and npm isn't smart enough to know that you're installing
+  # *within* the Tern distribution. Or it isn't intended to work that way.
+  #
+  # So instead, we have a package.json within our "Tern runtime" directory
+  # (third_party/tern_runtime) that defines the packages that we require,
+  # including Tern and any plugins which we require as standard.
+  TERN_RUNTIME_DIR = os.path.join( DIR_OF_THIS_SCRIPT,
+                                   'third_party',
+                                   'tern_runtime' )
+  try:
+    os.makedirs( TERN_RUNTIME_DIR )
+  except Exception:
+    # os.makedirs throws if the dir already exists, it also throws if the
+    # permissions prevent creating the directory. There's no way to know the
+    # difference, so we just let the call to os.chdir below throw if this fails
+    # to create the target directory.
+    pass
 
+  os.chdir( TERN_RUNTIME_DIR )
   subprocess.check_call( [ paths[ 'npm' ], 'install', '--production' ] )
 
 
 def Main():
   CheckDeps()
   args = ParseArguments()
-  BuildYcmdLibs( args )
-  if args.omnisharp_completer:
+  ExitIfYcmdLibInUseOnWindows()
+  BuildYcmdLib( args )
+  if args.omnisharp_completer or args.all_completers:
     BuildOmniSharp()
-  if args.gocode_completer:
+  if args.gocode_completer or args.all_completers:
     BuildGoCode()
-  if args.tern_completer:
+  if args.tern_completer or args.all_completers:
     SetUpTern()
-  if args.racer_completer:
+  if args.racer_completer or args.all_completers:
     BuildRacerd()
 
 if __name__ == '__main__':

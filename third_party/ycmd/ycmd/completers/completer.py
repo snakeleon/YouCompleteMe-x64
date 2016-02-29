@@ -1,37 +1,38 @@
-#!/usr/bin/env python
+# Copyright (C) 2011, 2012, 2013 Google Inc.
 #
-# Copyright (C) 2011, 2012, 2013  Google Inc.
+# This file is part of ycmd.
 #
-# This file is part of YouCompleteMe.
-#
-# YouCompleteMe is free software: you can redistribute it and/or modify
+# ycmd is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# YouCompleteMe is distributed in the hope that it will be useful,
+# ycmd is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
+# along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
+
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *  # noqa
 
 import abc
 import threading
-from ycmd.utils import ToUtf8IfNeeded, ForceSemanticCompletion, RunningInsideVim
-
-if RunningInsideVim():
-  from ycm_client_support import FilterAndSortCandidates
-else:
-  from ycm_core import FilterAndSortCandidates
-
+from ycmd.utils import ForceSemanticCompletion
 from ycmd.completers import completer_utils
 from ycmd.responses import NoDiagnosticSupport
+from future.utils import with_metaclass
 
 NO_USER_COMMANDS = 'This completer does not define any commands.'
 
-class Completer( object ):
+class Completer( with_metaclass( abc.ABCMeta, object ) ):
   """A base class for all Completers in YCM.
 
   Here's several important things you need to know if you're writing a custom
@@ -102,8 +103,6 @@ class Completer( object ):
   implement the ServerIsReady member function to handle the /ready request. This
   is very useful for the test suite."""
 
-  __metaclass__ = abc.ABCMeta
-
   def __init__( self, user_options ):
     self.user_options = user_options
     self.min_num_chars = user_options[ 'min_num_of_chars_for_completion' ]
@@ -147,10 +146,11 @@ class Completer( object ):
       return False
     current_line = request_data[ 'line_value' ]
     start_column = request_data[ 'start_column' ] - 1
+    column_num = request_data[ 'column_num' ] - 1
     filetype = self._CurrentFiletype( request_data[ 'filetypes' ] )
 
     return self.prepared_triggers.MatchesForFiletype(
-        current_line, start_column, filetype )
+        current_line, start_column, column_num, filetype )
 
 
   def QueryLengthAboveMinThreshold( self, request_data ):
@@ -231,20 +231,22 @@ class Completer( object ):
 
     # We need to handle both an omni_completer style completer and a server
     # style completer
-    if 'words' in candidates:
+    if isinstance( candidates, dict ) and 'words' in candidates:
       candidates = candidates[ 'words' ]
 
     sort_property = ''
-    if 'word' in candidates[ 0 ]:
-      sort_property = 'word'
-    elif 'insertion_text' in candidates[ 0 ]:
-      sort_property = 'insertion_text'
+    if isinstance( candidates[ 0 ], dict ):
+      if 'word' in candidates[ 0 ]:
+        sort_property = 'word'
+      elif 'insertion_text' in candidates[ 0 ]:
+        sort_property = 'insertion_text'
 
-    matches = FilterAndSortCandidates( candidates,
-                                       sort_property,
-                                       ToUtf8IfNeeded( query ) )
+    return self.FilterAndSortCandidatesInner( candidates, sort_property, query )
 
-    return matches
+
+  def FilterAndSortCandidatesInner( self, candidates, sort_property, query ):
+    return completer_utils.FilterAndSortCandidatesWrap(
+      candidates, sort_property, query )
 
 
   def OnFileReadyToParse( self, request_data ):
@@ -345,9 +347,11 @@ class CompletionsCache( object ):
       return self._completions
 
 
-  def GetCompletionsIfCacheValid( self, current_line, start_column, completion_type ):
+  def GetCompletionsIfCacheValid( self, current_line, start_column,
+                                  completion_type ):
     with self._access_lock:
-      if not self._CacheValidNoLock( current_line, start_column, completion_type ):
+      if not self._CacheValidNoLock( current_line, start_column,
+                                     completion_type ):
         return None
       return self._completions
 
@@ -358,5 +362,6 @@ class CompletionsCache( object ):
 
 
   def _CacheValidNoLock( self, current_line, start_column, completion_type ):
-    return current_line == self._line and start_column == self._column and completion_type == self._completion_type
+    return ( current_line == self._line and start_column == self._column and
+             completion_type == self._completion_type )
 

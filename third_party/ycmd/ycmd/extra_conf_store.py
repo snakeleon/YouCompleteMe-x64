@@ -1,26 +1,31 @@
-#!/usr/bin/env python
+# Copyright (C) 2011, 2012 Google Inc.
 #
-# Copyright (C) 2011, 2012  Google Inc.
+# This file is part of ycmd.
 #
-# This file is part of YouCompleteMe.
-#
-# YouCompleteMe is free software: you can redistribute it and/or modify
+# ycmd is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# YouCompleteMe is distributed in the hope that it will be useful,
+# ycmd is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
+# along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
 # NOTE: This module is used as a Singleton
 
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *  # noqa
+
 import os
-import imp
 import random
 import string
 import sys
@@ -28,6 +33,7 @@ import logging
 from threading import Lock
 from ycmd import user_options_store
 from ycmd.responses import UnknownExtraConf, YCM_EXTRA_CONF_FILENAME
+from ycmd.utils import LoadPythonSource, PathsToAllParentFolders
 from fnmatch import fnmatch
 
 
@@ -140,7 +146,7 @@ def Load( module_file, force = False ):
   # anymore, but there are a lot of old ycm_extra_conf.py files that we don't
   # want to break.
   sys.path.insert( 0, _PathToCppCompleterFolder() )
-  module = imp.load_source( _RandomName(), module_file )
+  module = LoadPythonSource( _RandomName(), module_file )
   del sys.path[ 0 ]
 
   with _module_for_module_file_lock:
@@ -162,7 +168,7 @@ def _ExtraConfModuleSourceFilesForFile( filename ):
   files that will compute the flags necessary to compile the file.
   If _GlobalYcmExtraConfFileLocation() exists it is returned as a fallback."""
 
-  for folder in _PathsToAllParentFolders( filename ):
+  for folder in PathsToAllParentFolders( filename ):
     candidate = os.path.join( folder, YCM_EXTRA_CONF_FILENAME )
     if os.path.exists( candidate ):
       yield candidate
@@ -170,31 +176,6 @@ def _ExtraConfModuleSourceFilesForFile( filename ):
   if ( global_ycm_extra_conf
        and os.path.exists( global_ycm_extra_conf ) ):
     yield global_ycm_extra_conf
-
-
-def _PathsToAllParentFolders( filename ):
-  """Build a list of all parent folders of a file.
-  The nearest folders will be returned first.
-  Example: _PathsToAllParentFolders( '/home/user/projects/test.c' )
-    [ '/home/user/projects', '/home/user', '/home', '/' ]"""
-
-  def PathFolderComponents( filename ):
-    folders = []
-    path = os.path.normpath( os.path.dirname( filename ) )
-    while True:
-      path, folder = os.path.split( path )
-      if folder:
-        folders.append( folder )
-      else:
-        if path:
-          folders.append( path )
-        break
-    return list( reversed( folders ) )
-
-  parent_folders = PathFolderComponents( filename )
-  parent_folders = [ os.path.join( *parent_folders[:i + 1] )
-                     for i in xrange( len( parent_folders ) ) ]
-  return reversed( parent_folders )
 
 
 def _PathToCppCompleterFolder():

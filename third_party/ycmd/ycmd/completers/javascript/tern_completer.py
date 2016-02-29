@@ -1,5 +1,4 @@
-#
-# Copyright (C) 2015 ycmd contributors.
+# Copyright (C) 2015 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -16,7 +15,23 @@
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-import httplib, logging, os, requests, traceback, threading
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+from builtins import *  # noqa
+from future.utils import iterkeys
+from future import standard_library
+standard_library.install_aliases()
+
+import http.client
+import logging
+import os
+import requests
+import threading
+import traceback
+
+from subprocess import PIPE
 from ycmd import utils, responses
 from ycmd.completers.completer import Completer
 
@@ -29,6 +44,8 @@ PATH_TO_TERNJS_BINARY = os.path.abspath(
       '..',
       '..',
       'third_party',
+      'tern_runtime',
+      'node_modules',
       'tern',
       'bin',
       'tern' ) )
@@ -54,17 +71,11 @@ def ShouldEnableTernCompleter():
 
   _logger.info( 'Using node binary from: ' + PATH_TO_NODE )
 
-  installed = os.path.exists(
-      os.path.join( os.path.abspath( os.path.dirname( __file__ ) ),
-                    '..',
-                    '..',
-                    '..',
-                    'third_party',
-                    'tern',
-                    'node_modules' ) )
+  installed = os.path.exists( PATH_TO_TERNJS_BINARY )
 
   if not installed:
-    _logger.info( 'Not using Tern completer: not installed' )
+    _logger.info( 'Not using Tern completer: not installed at '
+                  + PATH_TO_TERNJS_BINARY )
     return False
 
   return True
@@ -78,12 +89,7 @@ def GlobalConfigExists( tern_config ):
 
 
 def FindTernProjectFile( starting_directory ):
-  # We use a dummy_file here because AncestorFolders requires a file name and we
-  # don't have one. Something like '.' doesn't work because, while
-  # os.path.dirname( /a/b/c/. ) returns /a/b/c, AncestorFolders calls
-  # os.path.abspath on it, so the /. is removed.
-  starting_file = os.path.join( starting_directory, 'dummy_file' )
-  for folder in utils.AncestorFolders( starting_file ):
+  for folder in utils.PathsToAllParentFolders( starting_directory ):
     tern_project = os.path.join( folder, '.tern-project' )
     if os.path.exists( tern_project ):
       return tern_project
@@ -188,6 +194,16 @@ class TernCompleter( Completer ):
   def OnFileReadyToParse( self, request_data ):
     self._WarnIfMissingTernProject()
 
+    # Keep tern server up to date with the file data. We do this by sending an
+    # empty request just containing the file data
+    try:
+      self._PostRequest( {}, request_data )
+    except:
+      # The server might not be ready yet or the server might not be running.
+      # in any case, just ignore this we'll hopefully get another parse request
+      # soon.
+      pass
+
 
   def GetSubcommandsMap( self ):
     return {
@@ -205,6 +221,8 @@ class TernCompleter( Completer ):
                                          self._GetType( request_data) ),
       'GetDoc':         ( lambda self, request_data, args:
                                          self._GetDoc( request_data) ),
+      'RefactorRename': ( lambda self, request_data, args:
+                                         self._Rename( request_data, args ) ),
     }
 
 
@@ -249,7 +267,7 @@ class TernCompleter( Completer ):
     try:
       target = self._GetServerAddress() + '/ping'
       response = requests.get( target )
-      return response.status_code == httplib.OK
+      return response.status_code == http.client.OK
     except requests.ConnectionError:
       return False
 
@@ -258,10 +276,10 @@ class TernCompleter( Completer ):
     """Callers must hold self._server_state_mutex"""
 
     if not self._server_keep_logfiles:
-      if self._server_stdout and os.path.exists( self._server_stdout ):
-        os.unlink( self._server_stdout )
-      if self._server_stderr and os.path.exists( self._server_stderr ):
-        os.unlink( self._server_stderr )
+      if self._server_stdout:
+        utils.RemoveIfExists( self._server_stdout )
+      if self._server_stderr:
+        utils.RemoveIfExists( self._server_stderr )
 
     self._server_handle = None
     self._server_port   = 0
@@ -293,14 +311,14 @@ class TernCompleter( Completer ):
 
     full_request = {
       'files': [ MakeIncompleteFile( x, file_data[ x ] )
-                 for x in file_data.keys() ],
+                 for x in iterkeys( file_data ) ],
     }
     full_request.update( request )
 
     response = requests.post( self._GetServerAddress(),
-                              data = utils.ToUtf8Json( full_request ) )
+                              json = full_request )
 
-    if response.status_code != httplib.OK:
+    if response.status_code != http.client.OK:
       raise RuntimeError( response.text )
 
     return response.json()
@@ -368,36 +386,25 @@ class TernCompleter( Completer ):
                    + ' '.join( command ) )
 
     try:
-      if utils.OnWindows():
-        # FIXME:
-        # For unknown reasons, redirecting stdout and stderr on windows for this
-        # particular Completer does not work. It causes tern to crash with an
-        # access error on startup. Rather than spending too much time trying to
-        # understand this (it's either a bug in Python, node or our code, and it
-        # isn't obvious which), we just suppress the log files on this platform.
-        # ATOW the only output from the server is the line saying it is
-        # listening anyway. Verbose logging includes requests and responses, but
-        # they can be tested on other platforms.
-        self._server_stdout = "<Not supported on this platform>"
-        self._server_stderr = "<Not supported on this platform>"
-        self._server_handle = utils.SafePopen( command )
-      else:
-        logfile_format = os.path.join( utils.PathToTempDir(),
-                                       u'tern_{port}_{std}.log' )
+      logfile_format = os.path.join( utils.PathToCreatedTempDir(),
+                                     u'tern_{port}_{std}.log' )
 
-        self._server_stdout = logfile_format.format(
-            port = self._server_port,
-            std = 'stdout' )
+      self._server_stdout = logfile_format.format(
+          port = self._server_port,
+          std = 'stdout' )
 
-        self._server_stderr = logfile_format.format(
-            port = self._server_port,
-            std = 'stderr' )
+      self._server_stderr = logfile_format.format(
+          port = self._server_port,
+          std = 'stderr' )
 
-        with open( self._server_stdout, 'w' ) as stdout:
-          with open( self._server_stderr, 'w' ) as stderr:
-            self._server_handle = utils.SafePopen( command,
-                                                   stdout = stdout,
-                                                   stderr = stderr )
+      # On Windows, we need to open a pipe to stdin to prevent Tern crashing
+      # with following error: "Implement me. Unknown stdin file type!"
+      with open( self._server_stdout, 'w' ) as stdout:
+        with open( self._server_stderr, 'w' ) as stderr:
+          self._server_handle = utils.SafePopen( command,
+                                                 stdin_windows = PIPE,
+                                                 stdout = stdout,
+                                                 stderr = stderr )
     except Exception:
       _logger.warning( 'Unable to start Tern.js server: '
                        + traceback.format_exc() )
@@ -432,16 +439,16 @@ class TernCompleter( Completer ):
                     + str( self._server_handle.pid )
                     + '...' )
 
-      self._server_handle.kill()
+      self._server_handle.terminate()
+      self._server_handle.wait()
 
-      _logger.info( 'Tern.js server killed.' )
+      _logger.info( 'Tern.js server terminated.' )
 
       self._Reset()
 
 
   def _ServerIsRunning( self ):
-    return ( self._server_handle is not None and
-             self._server_handle.poll() is None )
+    return utils.ProcessIsRunning( self._server_handle )
 
 
   def _GetType( self, request_data ):
@@ -500,3 +507,90 @@ class TernCompleter( Completer ):
                                           ref[ 'start' ][ 'line' ] + 1,
                                           ref[ 'start' ][ 'ch' ] + 1 )
              for ref in response[ 'refs' ] ]
+
+
+  def _Rename( self, request_data, args ):
+    if len( args ) != 1:
+      raise ValueError( 'Please specify a new name to rename it to.\n'
+                        'Usage: RefactorRename <new name>' )
+
+    query = {
+      'type': 'rename',
+      'newName': args[ 0 ],
+    }
+
+    response = self._GetResponse( query, request_data )
+
+    # Tern response format:
+    # 'changes': [
+    #     {
+    #         'file'
+    #         'start' {
+    #             'line'
+    #             'ch'
+    #         }
+    #         'end' {
+    #             'line'
+    #             'ch'
+    #         }
+    #         'text'
+    #     }
+    # ]
+
+    # ycmd response format:
+    #
+    # {
+    #     'fixits': [
+    #         'chunks': (list<Chunk>) [
+    #             {
+    #                  'replacement_text',
+    #                  'range' (Range) {
+    #                      'start_' (Location): {
+    #                          'line_number_',
+    #                          'column_number_',
+    #                          'filename_'
+    #                      },
+    #                      'end_' (Location): {
+    #                          'line_number_',
+    #                          'column_number_',
+    #                          'filename_'
+    #                      }
+    #                  }
+    #              }
+    #         ],
+    #         'location' (Location) {
+    #              'line_number_',
+    #              'column_number_',
+    #              'filename_'
+    #         }
+    #
+    #     ]
+    # }
+
+    def BuildRange( filename, start, end ):
+      return responses.Range(
+        responses.Location( start[ 'line' ] + 1,
+                            start[ 'ch' ] + 1,
+                            filename ),
+        responses.Location( end[ 'line' ] + 1,
+                            end[ 'ch' ] + 1,
+                            filename ) )
+
+
+    def BuildFixItChunk( change ):
+      return responses.FixItChunk(
+        change[ 'text' ],
+        BuildRange( os.path.abspath( change[ 'file'] ),
+                    change[ 'start' ],
+                    change[ 'end' ] ) )
+
+
+    # From an API perspective, Refactor and FixIt are the same thing - it just
+    # applies a set of changes to a set of files. So we re-use all of the
+    # existing FixIt infrastructure.
+    return responses.BuildFixItResponse( [
+      responses.FixIt(
+        responses.Location( request_data[ 'line_num' ],
+                            request_data[ 'column_num' ],
+                            request_data[ 'filepath' ] ),
+        [ BuildFixItChunk( x ) for x in response[ 'changes' ] ] ) ] )

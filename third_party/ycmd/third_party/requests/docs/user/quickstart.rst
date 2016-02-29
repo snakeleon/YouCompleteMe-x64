@@ -37,12 +37,12 @@ get all the information we need from this object.
 Requests' simple API means that all forms of HTTP request are as obvious. For
 example, this is how you make an HTTP POST request::
 
-    >>> r = requests.post("http://httpbin.org/post")
+    >>> r = requests.post("http://httpbin.org/post", data = {"key":"value"})
 
 Nice, right? What about the other HTTP request types: PUT, DELETE, HEAD and
 OPTIONS? These are all just as simple::
 
-    >>> r = requests.put("http://httpbin.org/put")
+    >>> r = requests.put("http://httpbin.org/put", data = {"key":"value"})
     >>> r = requests.delete("http://httpbin.org/delete")
     >>> r = requests.head("http://httpbin.org/get")
     >>> r = requests.options("http://httpbin.org/get")
@@ -238,7 +238,6 @@ For example, the GitHub API v3 accepts JSON-Encoded POST/PATCH data::
 Instead of encoding the ``dict`` yourself, you can also pass it directly using
 the ``json`` parameter (added in version 2.4.2) and it will be encoded automatically::
 
-    >>> import json
     >>> url = 'https://api.github.com/some/endpoint'
     >>> payload = {'some': 'data'}
 
@@ -301,6 +300,14 @@ support this, but there is a separate package which does -
 
 For sending multiple files in one request refer to the :ref:`advanced <advanced>`
 section.
+
+.. warning:: It is strongly recommended that you open files in `binary mode`_.
+             This is because Requests may attempt to provide the
+             ``Content-Length`` header for you, and if it does this value will
+             be set to the number of *bytes* in the file. Errors may occur if
+             you open the file in *text mode*.
+
+.. _binary mode: https://docs.python.org/2/tutorial/inputoutput.html#reading-and-writing-files
 
 
 Response Status Codes

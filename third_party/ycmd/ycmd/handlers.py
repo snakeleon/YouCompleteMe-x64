@@ -1,21 +1,27 @@
-#!/usr/bin/env python
+# Copyright (C) 2013 Google Inc.
 #
-# Copyright (C) 2013  Google Inc.
+# This file is part of ycmd.
 #
-# This file is part of YouCompleteMe.
-#
-# YouCompleteMe is free software: you can redistribute it and/or modify
+# ycmd is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# YouCompleteMe is distributed in the hope that it will be useful,
+# ycmd is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
+# along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
+
+from __future__ import absolute_import
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *  # noqa
 
 from os import path
 
@@ -33,15 +39,17 @@ import atexit
 import logging
 import json
 import bottle
-import httplib
+import http.client
 import traceback
-from bottle import request, response
-import server_state
+from bottle import request
+from . import server_state
 from ycmd import user_options_store
 from ycmd.responses import BuildExceptionResponse, BuildCompletionResponse
 from ycmd import hmac_plugin
 from ycmd import extra_conf_store
 from ycmd.request_wrap import RequestWrap
+from ycmd.bottle_utils import SetResponseHeader
+from ycmd.completers.completer_utils import FilterAndSortCandidatesWrap
 
 
 # num bytes for the request body buffer; request.json only works if the request
@@ -49,7 +57,7 @@ from ycmd.request_wrap import RequestWrap
 bottle.Request.MEMFILE_MAX = 1000 * 1024
 
 _server_state = None
-_hmac_secret = None
+_hmac_secret = bytes()
 _logger = logging.getLogger( __name__ )
 app = bottle.Bottle()
 
@@ -126,12 +134,25 @@ def GetCompletions():
                                errors = errors ) )
 
 
+@app.post( '/filter_and_sort_candidates' )
+def FilterAndSortCandidates():
+  _logger.info( 'Received filter & sort request' )
+  # Not using RequestWrap because no need and the requests coming in aren't like
+  # the usual requests we handle.
+  request_data = request.json
+
+  return _JsonResponse( FilterAndSortCandidatesWrap(
+    request_data[ 'candidates'],
+    request_data[ 'sort_property' ],
+    request_data[ 'query' ] ) )
+
+
 @app.get( '/healthy' )
 def GetHealthy():
   _logger.info( 'Received health request' )
   if request.query.include_subservers:
     cs_completer = _server_state.GetFiletypeCompleter( ['cs'] )
-    return _JsonResponse( cs_completer.ServerIsRunning() )
+    return _JsonResponse( cs_completer.ServerIsHealthy() )
   return _JsonResponse( True )
 
 
@@ -213,7 +234,7 @@ def DebugInfo():
 
 
 # The type of the param is Bottle.HTTPError
-@app.error( httplib.INTERNAL_SERVER_ERROR )
+@app.error( http.client.INTERNAL_SERVER_ERROR )
 def ErrorHandler( httperror ):
   body = _JsonResponse( BuildExceptionResponse( httperror.exception,
                                                 httperror.traceback ) )
@@ -222,7 +243,7 @@ def ErrorHandler( httperror ):
 
 
 def _JsonResponse( data ):
-  response.set_header( 'Content-Type', 'application/json' )
+  SetResponseHeader( 'Content-Type', 'application/json' )
   return json.dumps( data, default = _UniversalSerialize )
 
 
