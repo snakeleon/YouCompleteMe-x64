@@ -57,7 +57,7 @@ flags = [
     'c++',
     '-I',
     '.',
-	'-isystem',
+        '-isystem',
     'd:/MSYS64/mingw64/include',
         '-isystem',
     'd:/MSYS64/mingw64/lib/gcc/x86_64-w64-mingw32/5.3.0/include',
