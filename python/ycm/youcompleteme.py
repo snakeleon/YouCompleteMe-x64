@@ -15,17 +15,28 @@
 # You should have received a copy of the GNU General Public License
 # along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *  # noqa
+
+from future.utils import iteritems
 import os
 import vim
-import tempfile
 import json
 import re
 import signal
 import base64
 from subprocess import PIPE
-from ycm import paths, vimsupport
+from tempfile import NamedTemporaryFile
+from ycm import base, paths, vimsupport
 from ycmd import utils
+from ycmd import server_utils
 from ycmd.request_wrap import RequestWrap
+from ycmd.responses import ServerError
 from ycm.diagnostic_interface import DiagnosticInterface
 from ycm.omni_completer import OmniCompleter
 from ycm import syntax_parse
@@ -38,13 +49,8 @@ from ycm.client.completion_request import ( CompletionRequest,
 from ycm.client.omni_completion_request import OmniCompletionRequest
 from ycm.client.event_notification import ( SendEventNotificationAsync,
                                             EventNotification )
-from ycmd.responses import ServerError
+from ycm.client.shutdown_request import SendShutdownRequest
 
-try:
-  from UltiSnips import UltiSnips_Manager
-  USE_ULTISNIPS_DATA = True
-except ImportError:
-  USE_ULTISNIPS_DATA = False
 
 def PatchNoProxy():
   current_value = os.environ.get('no_proxy', '')
@@ -67,19 +73,36 @@ PatchNoProxy()
 signal.signal( signal.SIGINT, signal.SIG_IGN )
 
 HMAC_SECRET_LENGTH = 16
-SERVER_CRASH_MESSAGE_STDERR_FILE = (
-  "The ycmd server SHUT DOWN (restart with ':YcmRestartServer'). "
+SERVER_SHUTDOWN_MESSAGE = (
+  "The ycmd server SHUT DOWN (restart with ':YcmRestartServer')." )
+STDERR_FILE_MESSAGE = (
   "Run ':YcmToggleLogs stderr' to check the logs." )
-SERVER_CRASH_MESSAGE_STDERR_FILE_DELETED = (
-  "The ycmd server SHUT DOWN (restart with ':YcmRestartServer'). "
+STDERR_FILE_DELETED_MESSAGE = (
   "Logfile was deleted; set 'g:ycm_server_keep_logfiles' to see errors "
   "in the future." )
+CORE_UNEXPECTED_MESSAGE = (
+  'Unexpected error while loading the YCM core library.' )
+CORE_MISSING_MESSAGE = (
+  'YCM core library not detected; you need to compile YCM before using it. '
+  'Follow the instructions in the documentation.' )
+CORE_PYTHON2_MESSAGE = (
+  "YCM core library compiled for Python 2 but loaded in Python 3. "
+  "Set the 'g:ycm_server_python_interpreter' option to a Python 2 "
+  "interpreter path." )
+CORE_PYTHON3_MESSAGE = (
+  "YCM core library compiled for Python 3 but loaded in Python 2. "
+  "Set the 'g:ycm_server_python_interpreter' option to a Python 3 "
+  "interpreter path." )
+CORE_OUTDATED_MESSAGE = (
+  'YCM core library too old; PLEASE RECOMPILE by running the install.py '
+  'script. See the documentation for more details.' )
 SERVER_IDLE_SUICIDE_SECONDS = 10800  # 3 hours
 DIAGNOSTIC_UI_FILETYPES = set( [ 'cpp', 'cs', 'c', 'objc', 'objcpp' ] )
 
 
 class YouCompleteMe( object ):
   def __init__( self, user_options ):
+    self._available_completers = {}
     self._user_options = user_options
     self._user_notified_about_crash = False
     self._diag_interface = DiagnosticInterface( user_options )
@@ -95,17 +118,19 @@ class YouCompleteMe( object ):
     self._SetupServer()
     self._ycmd_keepalive.Start()
     self._complete_done_hooks = {
-      'cs': lambda( self ): self._OnCompleteDone_Csharp()
+      'cs': lambda self: self._OnCompleteDone_Csharp()
     }
 
   def _SetupServer( self ):
     self._available_completers = {}
+    self._user_notified_about_crash = False
     server_port = utils.GetUnusedLocalhostPort()
     # The temp options file is deleted by ycmd during startup
-    with tempfile.NamedTemporaryFile( delete = False ) as options_file:
+    with NamedTemporaryFile( delete = False, mode = 'w+' ) as options_file:
       hmac_secret = os.urandom( HMAC_SECRET_LENGTH )
       options_dict = dict( self._user_options )
-      options_dict[ 'hmac_secret' ] = base64.b64encode( hmac_secret )
+      options_dict[ 'hmac_secret' ] = utils.ToUnicode(
+        base64.b64encode( hmac_secret ) )
       json.dump( options_dict, options_file )
       options_file.flush()
 
@@ -115,7 +140,7 @@ class YouCompleteMe( object ):
                '--options_file={0}'.format( options_file.name ),
                '--log={0}'.format( self._user_options[ 'server_log_level' ] ),
                '--idle_suicide_seconds={0}'.format(
-                  SERVER_IDLE_SUICIDE_SECONDS )]
+                  SERVER_IDLE_SUICIDE_SECONDS ) ]
 
       filename_format = os.path.join( utils.PathToCreatedTempDir(),
                                       'server_{port}_{std}.log' )
@@ -148,11 +173,28 @@ class YouCompleteMe( object ):
     if self._user_notified_about_crash or self.IsServerAlive():
       return
     self._user_notified_about_crash = True
+
     try:
       vimsupport.CheckFilename( self._server_stderr )
-      vimsupport.PostVimMessage( SERVER_CRASH_MESSAGE_STDERR_FILE )
+      stderr_message = STDERR_FILE_MESSAGE
     except RuntimeError:
-      vimsupport.PostVimMessage( SERVER_CRASH_MESSAGE_STDERR_FILE_DELETED )
+      stderr_message = STDERR_FILE_DELETED_MESSAGE
+
+    message = SERVER_SHUTDOWN_MESSAGE
+    return_code = self._server_popen.poll()
+    if return_code == server_utils.CORE_UNEXPECTED_STATUS:
+      message += ' ' + CORE_UNEXPECTED_MESSAGE + ' ' + stderr_message
+    elif return_code == server_utils.CORE_MISSING_STATUS:
+      message += ' ' + CORE_MISSING_MESSAGE
+    elif return_code == server_utils.CORE_PYTHON2_STATUS:
+      message += ' ' + CORE_PYTHON2_MESSAGE
+    elif return_code == server_utils.CORE_PYTHON3_STATUS:
+      message += ' ' + CORE_PYTHON3_MESSAGE
+    elif return_code == server_utils.CORE_OUTDATED_STATUS:
+      message += ' ' + CORE_OUTDATED_MESSAGE
+    else:
+      message += ' ' + stderr_message
+    vimsupport.PostVimMessage( message )
 
 
   def ServerPid( self ):
@@ -161,16 +203,15 @@ class YouCompleteMe( object ):
     return self._server_popen.pid
 
 
-  def _ServerCleanup( self ):
+  def _ShutdownServer( self ):
     if self.IsServerAlive():
-      self._server_popen.terminate()
+      SendShutdownRequest()
 
 
   def RestartServer( self ):
     self._CloseLogs()
     vimsupport.PostVimMessage( 'Restarting ycmd server...' )
-    self._user_notified_about_crash = False
-    self._ServerCleanup()
+    self._ShutdownServer()
     self._SetupServer()
 
 
@@ -191,6 +232,20 @@ class YouCompleteMe( object ):
       request_data[ 'force_semantic' ] = True
     self._latest_completion_request = CompletionRequest( request_data )
     return self._latest_completion_request
+
+
+  def GetCompletions( self ):
+    request = self.GetCurrentCompletionRequest()
+    request.Start()
+    while not request.Done():
+      try:
+        if vimsupport.GetBoolValue( 'complete_check()' ):
+          return { 'words' : [], 'refresh' : 'always' }
+      except KeyboardInterrupt:
+        return { 'words' : [], 'refresh' : 'always' }
+
+    results = base.AdjustCandidateInsertionText( request.Response() )
+    return { 'words' : results, 'refresh' : 'always' }
 
 
   def SendCommandRequest( self, arguments, completer ):
@@ -245,10 +300,11 @@ class YouCompleteMe( object ):
 
 
   def OnFileReadyToParse( self ):
-    self._omnicomp.OnFileReadyToParse( None )
-
     if not self.IsServerAlive():
       self._NotifyUserIfServerCrashed()
+      return
+
+    self._omnicomp.OnFileReadyToParse( None )
 
     extra_data = {}
     self._AddTagsFilesIfNeeded( extra_data )
@@ -271,7 +327,7 @@ class YouCompleteMe( object ):
     if not self.IsServerAlive():
       return
     extra_data = {}
-    _AddUltiSnipsDataIfNeeded( extra_data )
+    self._AddUltiSnipsDataIfNeeded( extra_data )
     SendEventNotificationAsync( 'BufferVisit', extra_data )
 
 
@@ -286,7 +342,7 @@ class YouCompleteMe( object ):
 
 
   def OnVimLeave( self ):
-    self._ServerCleanup()
+    self._ShutdownServer()
 
 
   def OnCurrentIdentifierFinished( self ):
@@ -303,7 +359,7 @@ class YouCompleteMe( object ):
 
   def GetCompleteDoneHooks( self ):
     filetypes = vimsupport.CurrentFiletypes()
-    for key, value in self._complete_done_hooks.iteritems():
+    for key, value in iteritems( self._complete_done_hooks ):
       if key in filetypes:
         yield value
 
@@ -354,15 +410,20 @@ class YouCompleteMe( object ):
         self._HasCompletionsThatCouldBeCompletedWithMoreText_OlderVim
 
 
-  def _FilterToMatchingCompletions_NewerVim( self, completions,
+  def _FilterToMatchingCompletions_NewerVim( self,
+                                             completions,
                                              full_match_only ):
-    """ Filter to completions matching the item Vim said was completed """
+    """Filter to completions matching the item Vim said was completed"""
     completed = vimsupport.GetVariableValue( 'v:completed_item' )
     for completion in completions:
       item = ConvertCompletionDataToVimData( completion )
       match_keys = ( [ "word", "abbr", "menu", "info" ] if full_match_only
                       else [ 'word' ] )
-      matcher = lambda key: completed.get( key, "" ) == item.get( key, "" )
+
+      def matcher( key ):
+        return ( utils.ToUnicode( completed.get( key, "" ) ) ==
+                 utils.ToUnicode( item.get( key, "" ) ) )
+
       if all( [ matcher( i ) for i in match_keys ] ):
         yield completion
 
@@ -389,12 +450,12 @@ class YouCompleteMe( object ):
     if not completed_item:
       return False
 
-    completed_word = completed_item[ 'word' ]
+    completed_word = utils.ToUnicode( completed_item[ 'word' ] )
     if not completed_word:
       return False
 
-    # Sometime CompleteDone is called after the next character is inserted
-    # If so, use inserted character to filter possible completions further
+    # Sometimes CompleteDone is called after the next character is inserted.
+    # If so, use inserted character to filter possible completions further.
     text = vimsupport.TextBeforeCursor()
     reject_exact_match = True
     if text and text[ -1 ] != completed_word[ -1 ]:
@@ -402,7 +463,8 @@ class YouCompleteMe( object ):
       completed_word += text[ -1 ]
 
     for completion in completions:
-      word = ConvertCompletionDataToVimData( completion )[ 'word' ]
+      word = utils.ToUnicode(
+          ConvertCompletionDataToVimData( completion )[ 'word' ] )
       if reject_exact_match and word == completed_word:
         continue
       if word.startswith( completed_word ):
@@ -415,12 +477,12 @@ class YouCompleteMe( object ):
     # No support for multiple line completions
     text = vimsupport.TextBeforeCursor()
     for completion in completions:
-      word = ConvertCompletionDataToVimData( completion )[ 'word' ]
+      word = utils.ToUnicode(
+          ConvertCompletionDataToVimData( completion )[ 'word' ] )
       for i in range( 1, len( word ) - 1 ): # Excluding full word
-        if text[ -1 * i  : ] == word[ : i ]:
+        if text[ -1 * i : ] == word[ : i ]:
           return True
     return False
-
 
 
   def _OnCompleteDone_Csharp( self ):
@@ -433,7 +495,7 @@ class YouCompleteMe( object ):
 
     if len( namespaces ) > 1:
       choices = [ "{0} {1}".format( i + 1, n )
-                  for i,n in enumerate( namespaces ) ]
+                  for i, n in enumerate( namespaces ) ]
       choice = vimsupport.PresentDialog( "Insert which namespace:", choices )
       if choice < 0:
         return
@@ -524,7 +586,8 @@ class YouCompleteMe( object ):
       debug_info = BaseRequest.PostDataToHandler( BuildRequestData(),
                                                   'detailed_diagnostic' )
       if 'message' in debug_info:
-        vimsupport.EchoText( debug_info[ 'message' ] )
+        vimsupport.PostVimMessage( debug_info[ 'message' ],
+                                   warning = False )
     except ServerError as e:
       vimsupport.PostVimMessage( str( e ) )
 
@@ -635,25 +698,16 @@ class YouCompleteMe( object ):
         extra_conf_vim_data )
 
 
-def _AddUltiSnipsDataIfNeeded( extra_data ):
-  if not USE_ULTISNIPS_DATA:
-    return
+  def _AddUltiSnipsDataIfNeeded( self, extra_data ):
+    # See :h UltiSnips#SnippetsInCurrentScope.
+    try:
+      vim.eval( 'UltiSnips#SnippetsInCurrentScope( 1 )' )
+    except vim.error:
+      return
 
-  try:
-    # Since UltiSnips may run in a different python interpreter (python 3) than
-    # YCM, UltiSnips_Manager singleton is not necessary the same as the one
-    # used by YCM. In particular, it means that we cannot rely on UltiSnips to
-    # set the current filetypes to the singleton. We need to do it ourself.
-    UltiSnips_Manager.reset_buffer_filetypes()
-    UltiSnips_Manager.add_buffer_filetypes(
-      vimsupport.GetVariableValue( '&filetype' ) )
-    rawsnips = UltiSnips_Manager._snips( '', True )
-  except:
-    return
-
-  # UltiSnips_Manager._snips() returns a class instance where:
-  # class.trigger - name of snippet trigger word ( e.g. defn or testcase )
-  # class.description - description of the snippet
-  extra_data[ 'ultisnips_snippets' ] = [ { 'trigger': x.trigger,
-                                           'description': x.description
-                                         } for x in rawsnips ]
+    snippets = vimsupport.GetVariableValue( 'g:current_ulti_dict_info' )
+    extra_data[ 'ultisnips_snippets' ] = [
+      { 'trigger': trigger,
+        'description': snippet[ 'description' ] }
+      for trigger, snippet in iteritems( snippets )
+    ]

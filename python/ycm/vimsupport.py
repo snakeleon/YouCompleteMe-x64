@@ -15,13 +15,22 @@
 # You should have received a copy of the GNU General Public License
 # along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *  # noqa
+
+from future.utils import iterkeys
 import vim
 import os
 import tempfile
 import json
 import re
 from collections import defaultdict
-from ycmd.utils import ToBytes, ToUnicode
+from ycmd.utils import ToUnicode, ToBytes
 from ycmd import user_options_store
 
 BUFFER_COMMAND_MAP = { 'same-buffer'      : 'edit',
@@ -34,6 +43,8 @@ FIXIT_OPENING_BUFFERS_MESSAGE_FORMAT = (
     'currently open. This will therefore open {0} new files in the hidden '
     'buffers. The quickfix list can then be used to review the changes. No '
     'files will be written to disk. Do you wish to continue?' )
+
+NO_SELECTION_MADE_MSG = "No valid selection was made; aborting."
 
 
 def CurrentLineAndColumn():
@@ -59,17 +70,17 @@ def CurrentColumn():
 
 
 def CurrentLineContents():
-  return vim.current.line
+  return ToUnicode( vim.current.line )
 
 
 def TextAfterCursor():
   """Returns the text after CurrentColumn."""
-  return vim.current.line[ CurrentColumn(): ]
+  return ToUnicode( vim.current.line[ CurrentColumn(): ] )
 
 
 def TextBeforeCursor():
   """Returns the text before CurrentColumn."""
-  return vim.current.line[ :CurrentColumn() ]
+  return ToUnicode( vim.current.line[ :CurrentColumn() ] )
 
 
 # Expects version_string in 'MAJOR.MINOR.PATCH' format, e.g. '7.4.301'
@@ -114,7 +125,7 @@ def GetUnsavedAndCurrentBufferData():
 
     buffers_data[ GetBufferFilepath( buffer_object ) ] = {
       # Add a newline to match what gets saved to disk. See #1455 for details.
-      'contents': '\n'.join( buffer_object ) + '\n',
+      'contents': '\n'.join( ToUnicode( x ) for x in buffer_object ) + '\n',
       'filetypes': FiletypesForBuffer( buffer_object )
     }
 
@@ -197,33 +208,36 @@ def ClearYcmSyntaxMatches():
       vim.eval( 'matchdelete({0})'.format( match[ 'id' ] ) )
 
 
-# Returns the ID of the newly added match
-# Both line and column numbers are 1-based
 def AddDiagnosticSyntaxMatch( line_num,
                               column_num,
                               line_end_num = None,
                               column_end_num = None,
                               is_error = True ):
+  """Highlight a range in the current window starting from
+  (|line_num|, |column_num|) included to (|line_end_num|, |column_end_num|)
+  excluded. If |line_end_num| or |column_end_num| are not given, highlight the
+  character at (|line_num|, |column_num|). Both line and column numbers are
+  1-based. Return the ID of the newly added match."""
   group = 'YcmErrorSection' if is_error else 'YcmWarningSection'
 
-  if not line_end_num:
-    line_end_num = line_num
-
   line_num, column_num = LineAndColumnNumbersClamped( line_num, column_num )
-  line_end_num, column_end_num = LineAndColumnNumbersClamped( line_end_num,
-                                                              column_end_num )
 
-  if not column_end_num:
+  if not line_end_num or not column_end_num:
     return GetIntValue(
       "matchadd('{0}', '\%{1}l\%{2}c')".format( group, line_num, column_num ) )
-  else:
-    return GetIntValue(
-      "matchadd('{0}', '\%{1}l\%{2}c\_.\\{{-}}\%{3}l\%{4}c')".format(
-        group, line_num, column_num, line_end_num, column_end_num ) )
+
+  # -1 and then +1 to account for column end not included in the range.
+  line_end_num, column_end_num = LineAndColumnNumbersClamped(
+      line_end_num, column_end_num - 1 )
+  column_end_num += 1
+
+  return GetIntValue(
+    "matchadd('{0}', '\%{1}l\%{2}c\_.\\{{-}}\%{3}l\%{4}c')".format(
+      group, line_num, column_num, line_end_num, column_end_num ) )
 
 
 # Clamps the line and column numbers so that they are not past the contents of
-# the buffer. Numbers are 1-based.
+# the buffer. Numbers are 1-based byte offsets.
 def LineAndColumnNumbersClamped( line_num, column_num ):
   new_line_num = line_num
   new_column_num = column_num
@@ -244,13 +258,42 @@ def SetLocationList( diagnostics ):
   vim.eval( 'setloclist( 0, {0} )'.format( json.dumps( diagnostics ) ) )
 
 
-def SetQuickFixList( quickfix_list, display=False ):
-  """list should be in qflist format: see ":h setqflist" for details"""
+def SetQuickFixList( quickfix_list, focus = False, autoclose = False ):
+  """Populate the quickfix list and open it. List should be in qflist format:
+  see ":h setqflist" for details. When focus is set to True, the quickfix
+  window becomes the active window. When autoclose is set to True, the quickfix
+  window is automatically closed after an entry is selected."""
   vim.eval( 'setqflist( {0} )'.format( json.dumps( quickfix_list ) ) )
+  OpenQuickFixList( focus, autoclose )
 
-  if display:
-    vim.command( 'copen {0}'.format( len( quickfix_list ) ) )
+
+def OpenQuickFixList( focus = False, autoclose = False ):
+  """Open the quickfix list to full width at the bottom of the screen with its
+  height automatically set to fit all entries. This behavior can be overridden
+  by using the YcmQuickFixOpened autocommand.
+  See the SetQuickFixList function for the focus and autoclose options."""
+  vim.command( 'botright copen' )
+
+  SetFittingHeightForCurrentWindow()
+
+  if autoclose:
+    # This autocommand is automatically removed when the quickfix window is
+    # closed.
+    vim.command( 'au WinLeave <buffer> q' )
+
+  if VariableExists( '#User#YcmQuickFixOpened' ):
+    vim.command( 'doautocmd User YcmQuickFixOpened' )
+
+  if not focus:
     JumpToPreviousWindow()
+
+
+def SetFittingHeightForCurrentWindow():
+  window_width = GetIntValue( 'winwidth( 0 )' )
+  fitting_height = 0
+  for line in vim.current.buffer:
+    fitting_height += len( line ) // window_width + 1
+  vim.command( '{0}wincmd _'.format( fitting_height ) )
 
 
 def ConvertDiagnosticsToQfList( diagnostics ):
@@ -277,7 +320,7 @@ def ConvertDiagnosticsToQfList( diagnostics ):
       'bufnr' : GetBufferNumberForFilename( location[ 'filepath' ] ),
       'lnum'  : line_num,
       'col'   : location[ 'column_num' ],
-      'text'  : ToBytes( text ),
+      'text'  : text,
       'type'  : diagnostic[ 'kind' ][ 0 ],
       'valid' : 1
     }
@@ -285,37 +328,25 @@ def ConvertDiagnosticsToQfList( diagnostics ):
   return [ ConvertDiagnosticToQfFormat( x ) for x in diagnostics ]
 
 
-# Given a dict like {'a': 1}, loads it into Vim as if you ran 'let g:a = 1'
-# When |overwrite| is True, overwrites the existing value in Vim.
-def LoadDictIntoVimGlobals( new_globals, overwrite = True ):
-  extend_option = '"force"' if overwrite else '"keep"'
-
-  # We need to use json.dumps because that won't use the 'u' prefix on strings
-  # which Vim would bork on.
-  vim.eval( 'extend( g:, {0}, {1})'.format( json.dumps( new_globals ),
-                                            extend_option ) )
-
-
-# Changing the returned dict will NOT change the value in Vim.
-def GetReadOnlyVimGlobals( force_python_objects = False ):
-  if force_python_objects:
-    return vim.eval( 'g:' )
-
-  try:
-    # vim.vars is fairly new so it might not exist
-    return vim.vars
-  except:
-    return vim.eval( 'g:' )
+def GetVimGlobalsKeys():
+  return vim.eval( 'keys( g: )' )
 
 
 def VimExpressionToPythonType( vim_expression ):
+  """Returns a Python type from the return value of the supplied Vim expression.
+  If the expression returns a list, dict or other non-string type, then it is
+  returned unmodified. If the string return can be converted to an
+  integer, returns an integer, otherwise returns the result converted to a
+  Unicode string."""
+
   result = vim.eval( vim_expression )
-  if not isinstance( result, basestring ):
+  if not ( isinstance( result, str ) or isinstance( result, bytes ) ):
     return result
+
   try:
     return int( result )
   except ValueError:
-    return result
+    return ToUnicode( result )
 
 
 def HiddenEnabled( buffer_object ):
@@ -405,19 +436,47 @@ def NumLinesInBuffer( buffer_object ):
 # Calling this function from the non-GUI thread will sometimes crash Vim. At
 # the time of writing, YCM only uses the GUI thread inside Vim (this used to
 # not be the case).
-# We redraw the screen before displaying the message to avoid the "Press ENTER
-# or type command to continue" prompt when editing a new C-family file.
-def PostVimMessage( message ):
-  vim.command( "redraw | echohl WarningMsg | echom '{0}' | echohl None"
-               .format( EscapeForVim( ToUnicode( message ) ) ) )
+def PostVimMessage( message, warning = True, truncate = False ):
+  """Display a message on the Vim status line. By default, the message is
+  highlighted and logged to Vim command-line history (see :h history).
+  Unset the |warning| parameter to disable this behavior. Set the |truncate|
+  parameter to avoid hit-enter prompts (see :h hit-enter) when the message is
+  longer than the window width."""
+  echo_command = 'echom' if warning else 'echo'
 
+  # Displaying a new message while previous ones are still on the status line
+  # might lead to a hit-enter prompt or the message appearing without a
+  # newline so we do a redraw first.
+  vim.command( 'redraw' )
 
-# Unlike PostVimMesasge, this supports messages with newlines in them because it
-# uses 'echo' instead of 'echomsg'. This also means that the message will NOT
-# appear in Vim's message log.
-def PostMultiLineNotice( message ):
-  vim.command( "echohl WarningMsg | echo '{0}' | echohl None"
-               .format( EscapeForVim( ToUnicode( message ) ) ) )
+  if warning:
+    vim.command( 'echohl WarningMsg' )
+
+  message = ToUnicode( message )
+
+  if truncate:
+    vim_width = GetIntValue( '&columns' )
+
+    message = message.replace( '\n', ' ' )
+    if len( message ) > vim_width:
+      message = message[ : vim_width - 4 ] + '...'
+
+    old_ruler = GetIntValue( '&ruler' )
+    old_showcmd = GetIntValue( '&showcmd' )
+    vim.command( 'set noruler noshowcmd' )
+
+    vim.command( "{0} '{1}'".format( echo_command,
+                                     EscapeForVim( message ) ) )
+
+    SetVariableValue( '&ruler', old_ruler )
+    SetVariableValue( '&showcmd', old_showcmd )
+  else:
+    for line in message.split( '\n' ):
+      vim.command( "{0} '{1}'".format( echo_command,
+                                       EscapeForVim( line ) ) )
+
+  if warning:
+    vim.command( 'echohl None' )
 
 
 def PresentDialog( message, choices, default_choice_index = 0 ):
@@ -432,6 +491,10 @@ def PresentDialog( message, choices, default_choice_index = 0 ):
   PresentDialog will return a 0-based index into the list
   or -1 if the dialog was dismissed by using <Esc>, Ctrl-C, etc.
 
+  If you are presenting a list of options for the user to choose from, such as
+  a list of imports, or lines to insert (etc.), SelectFromList is a better
+  option.
+
   See also:
     :help confirm() in vim (Note that vim uses 1-based indexes)
 
@@ -443,7 +506,10 @@ def PresentDialog( message, choices, default_choice_index = 0 ):
     EscapeForVim( ToUnicode( message ) ),
     EscapeForVim( ToUnicode( "\n" .join( choices ) ) ),
     default_choice_index + 1 )
-  return int( vim.eval( to_eval ) ) - 1
+  try:
+    return GetIntValue( to_eval ) - 1
+  except KeyboardInterrupt:
+    return -1
 
 
 def Confirm( message ):
@@ -452,39 +518,64 @@ def Confirm( message ):
   return bool( PresentDialog( message, [ "Ok", "Cancel" ] ) == 0 )
 
 
-def EchoText( text, log_as_message = True ):
-  def EchoLine( text ):
-    command = 'echom' if log_as_message else 'echo'
-    vim.command( "{0} '{1}'".format( command,
-                                     EscapeForVim( text ) ) )
+def SelectFromList( prompt, items ):
+  """Ask the user to select an item from the list |items|.
 
-  for line in ToUnicode( text ).split( '\n' ):
-    EchoLine( line )
+  Presents the user with |prompt| followed by a numbered list of |items|,
+  from which they select one. The user is asked to enter the number of an
+  item or click it.
 
+  |items| should not contain leading ordinals: they are added automatically.
 
-# Echos text but truncates it so that it all fits on one line
-def EchoTextVimWidth( text ):
-  vim_width = GetIntValue( '&columns' )
-  truncated_text = ToUnicode( text )[ : int( vim_width * 0.9 ) ]
-  truncated_text.replace( '\n', ' ' )
+  Returns the 0-based index in the list |items| that the user selected, or a
+  negative number if no valid item was selected.
 
-  old_ruler = GetIntValue( '&ruler' )
-  old_showcmd = GetIntValue( '&showcmd' )
-  vim.command( 'set noruler noshowcmd' )
-  vim.command( 'redraw' )
+  See also :help inputlist()."""
 
-  EchoText( truncated_text, False )
+  vim_items = [ prompt ]
+  vim_items.extend( [ "{0}: {1}".format( i + 1, item )
+                      for i, item in enumerate( items ) ] )
 
-  vim.command( 'let &ruler = {0}'.format( old_ruler ) )
-  vim.command( 'let &showcmd = {0}'.format( old_showcmd ) )
+  # The vim documentation warns not to present lists larger than the number of
+  # lines of display. This is sound advice, but there really isn't any sensible
+  # thing we can do in that scenario. Testing shows that Vim just pages the
+  # message; that behaviour is as good as any, so we don't manipulate the list,
+  # or attempt to page it.
+
+  # For an explanation of the purpose of inputsave() / inputrestore(),
+  # see :help input(). Briefly, it makes inputlist() work as part of a mapping.
+  vim.eval( 'inputsave()' )
+  try:
+    # Vim returns the number the user entered, or the line number the user
+    # clicked. This may be wildly out of range for our list. It might even be
+    # negative.
+    #
+    # The first item is index 0, and this maps to our "prompt", so we subtract 1
+    # from the result and return that, assuming it is within the range of the
+    # supplied list. If not, we return negative.
+    #
+    # See :help input() for explanation of the use of inputsave() and inpput
+    # restore(). It is done in try/finally in case vim.eval ever throws an
+    # exception (such as KeyboardInterrupt)
+    selected = GetIntValue( "inputlist( " + json.dumps( vim_items ) + " )" ) - 1
+  except KeyboardInterrupt:
+    selected = -1
+  finally:
+    vim.eval( 'inputrestore()' )
+
+  if selected < 0 or selected >= len( items ):
+    # User selected something outside of the range
+    raise RuntimeError( NO_SELECTION_MADE_MSG )
+
+  return selected
 
 
 def EscapeForVim( text ):
-  return text.replace( "'", "''" )
+  return ToUnicode( text.replace( "'", "''" ) )
 
 
 def CurrentFiletypes():
-  return vim.eval( "&filetype" ).split( '.' )
+  return VimExpressionToPythonType( "&filetype" ).split( '.' )
 
 
 def FiletypesForBuffer( buffer_object ):
@@ -498,7 +589,7 @@ def VariableExists( variable ):
 
 
 def SetVariableValue( variable, value ):
-  vim.command( "let {0} = '{1}'".format( variable, EscapeForVim( value ) ) )
+  vim.command( "let {0} = {1}".format( variable, json.dumps( value ) ) )
 
 
 def GetVariableValue( variable ):
@@ -607,7 +698,7 @@ def ReplaceChunks( chunks ):
   chunks_by_file = _SortChunksByFile( chunks )
 
   # We sort the file list simply to enable repeatable testing
-  sorted_file_list = sorted( chunks_by_file.iterkeys() )
+  sorted_file_list = sorted( iterkeys( chunks_by_file ) )
 
   # Make sure the user is prepared to have her screen mutilated by the new
   # buffers
@@ -644,9 +735,10 @@ def ReplaceChunks( chunks ):
 
   # Open the quickfix list, populated with entries for each location we changed.
   if locations:
-    SetQuickFixList( locations, True )
+    SetQuickFixList( locations )
 
-  EchoTextVimWidth( "Applied " + str( len( chunks ) ) + " changes" )
+  PostVimMessage( 'Applied {0} changes'.format( len( chunks ) ),
+                  warning = False )
 
 
 def ReplaceChunksInBuffer( chunks, vim_buffer, locations ):
@@ -693,6 +785,9 @@ def ReplaceChunksInBuffer( chunks, vim_buffer, locations ):
 #
 # returns the delta (in lines and characters) that any position after the end
 # needs to be adjusted by.
+#
+# NOTE: Works exclusively with bytes() instances and byte offsets as returned
+# by ycmd and used within the Vim buffers
 def ReplaceChunk( start, end, replacement_text, line_delta, char_delta,
                   vim_buffer, locations = None ):
   # ycmd's results are all 1-based, but vim's/python's are all 0-based
@@ -706,13 +801,17 @@ def ReplaceChunk( start, end, replacement_text, line_delta, char_delta,
   if source_lines_count == 1:
     end_column += char_delta
 
-  replacement_lines = replacement_text.splitlines( False )
+  # NOTE: replacement_text is unicode, but all our offsets are byte offsets,
+  # so we convert to bytes
+  replacement_lines = ToBytes( replacement_text ).splitlines( False )
   if not replacement_lines:
-    replacement_lines = [ '' ]
+    replacement_lines = [ bytes( b'' ) ]
   replacement_lines_count = len( replacement_lines )
 
-  end_existing_text = vim_buffer[ end_line ][ end_column : ]
-  start_existing_text = vim_buffer[ start_line ][ : start_column ]
+  # NOTE: Vim buffers are a list of byte objects on Python 2 but unicode
+  # objects on Python 3.
+  end_existing_text = ToBytes( vim_buffer[ end_line ] )[ end_column : ]
+  start_existing_text = ToBytes( vim_buffer[ start_line ] )[ : start_column ]
 
   new_char_delta = ( len( replacement_lines[ -1 ] )
                      - ( end_column - start_column ) )
@@ -754,7 +853,7 @@ def InsertNamespace( namespace ):
   new_line = "{0}using {1};\n\n".format( existing_indent, namespace )
   replace_pos = { 'line_num': line + 1, 'column_num': 1 }
   ReplaceChunk( replace_pos, replace_pos, new_line, 0, 0 )
-  PostVimMessage( "Add namespace: {0}".format( namespace ) )
+  PostVimMessage( 'Add namespace: {0}'.format( namespace ), warning = False )
 
 
 def SearchInCurrentBuffer( pattern ):
@@ -829,18 +928,21 @@ def WriteToPreviewWindow( message ):
     # We couldn't get to the preview window, but we still want to give the user
     # the information we have. The only remaining option is to echo to the
     # status area.
-    EchoText( message )
+    PostVimMessage( message, warning = False )
 
 
 def CheckFilename( filename ):
   """Check if filename is openable."""
   try:
-    open( filename ).close()
+    # We don't want to check for encoding issues when trying to open the file
+    # so we open it in binary mode.
+    open( filename, mode = 'rb' ).close()
   except TypeError:
     raise RuntimeError( "'{0}' is not a valid filename".format( filename ) )
   except IOError as error:
     raise RuntimeError(
-      "filename '{0}' cannot be opened. {1}".format( filename, error ) )
+      "filename '{0}' cannot be opened. {1}.".format( filename,
+                                                      error.strerror ) )
 
 
 def BufferIsVisibleForFilename( filename ):
@@ -852,7 +954,7 @@ def BufferIsVisibleForFilename( filename ):
 def CloseBuffersForFilename( filename ):
   """Close all buffers for a specific file."""
   buffer_number = GetBufferNumberForFilename( filename, False )
-  while buffer_number is not -1:
+  while buffer_number != -1:
     vim.command( 'silent! bwipeout! {0}'.format( buffer_number ) )
     new_buffer_number = GetBufferNumberForFilename( filename, False )
     if buffer_number == new_buffer_number:
@@ -885,7 +987,7 @@ def OpenFilename( filename, options = {} ):
 
   # There is no command in Vim to return to the previous tab so we need to
   # remember the current tab if needed.
-  if not focus and command is 'tabedit':
+  if not focus and command == 'tabedit':
     previous_tab = GetIntValue( 'tabpagenr()' )
   else:
     previous_tab = None
@@ -920,7 +1022,7 @@ def OpenFilename( filename, options = {} ):
   # focus back (if the focus option is disabled) when opening a new tab or
   # window.
   if not focus:
-    if command is 'tabedit':
+    if command == 'tabedit':
       JumpToTab( previous_tab )
     if command in [ 'split', 'vsplit' ]:
       JumpToPreviousWindow()
@@ -930,9 +1032,9 @@ def _SetUpLoadedBuffer( command, filename, fix, position, watch ):
   """After opening a buffer, configure it according to the supplied options,
   which are as defined by the OpenFilename method."""
 
-  if command is 'split':
+  if command == 'split':
     vim.current.window.options[ 'winfixheight' ] = fix
-  if command is 'vsplit':
+  if command == 'vsplit':
     vim.current.window.options[ 'winfixwidth' ] = fix
 
   if watch:
@@ -940,6 +1042,5 @@ def _SetUpLoadedBuffer( command, filename, fix, position, watch ):
     vim.command( "exec 'au BufEnter <buffer> :silent! checktime {0}'"
                  .format( filename ) )
 
-  if position is 'end':
+  if position == 'end':
     vim.command( 'silent! normal G zz' )
-

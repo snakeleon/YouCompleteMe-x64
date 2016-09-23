@@ -26,13 +26,15 @@ from builtins import *  # noqa
 from nose.tools import eq_, ok_
 from ycmd.completers.cpp import flags
 from mock import patch, Mock
+from ycmd.tests.test_utils import MacOnly
+
+from hamcrest import assert_that, contains
 
 
 @patch( 'ycmd.extra_conf_store.ModuleForSourceFile', return_value = Mock() )
 def FlagsForFile_BadNonUnicodeFlagsAreAlsoRemoved_test( *args ):
   fake_flags = {
-    'flags': [ bytes( b'-c' ), '-c', bytes( b'-foo' ), '-bar' ],
-    'do_cache': True
+    'flags': [ bytes( b'-c' ), '-c', bytes( b'-foo' ), '-bar' ]
   }
 
   with patch( 'ycmd.completers.cpp.flags._CallExtraConfFlagsForFile',
@@ -40,6 +42,63 @@ def FlagsForFile_BadNonUnicodeFlagsAreAlsoRemoved_test( *args ):
     flags_object = flags.Flags()
     flags_list = flags_object.FlagsForFile( '/foo', False )
     eq_( list( flags_list ), [ '-foo', '-bar' ] )
+
+
+@patch( 'ycmd.extra_conf_store.ModuleForSourceFile', return_value = Mock() )
+def FlagsForFile_FlagsCachedByDefault_test( *args ):
+  flags_object = flags.Flags()
+
+  results = { 'flags': [ '-x', 'c' ] }
+  with patch( 'ycmd.completers.cpp.flags._CallExtraConfFlagsForFile',
+              return_value = results ):
+    flags_list = flags_object.FlagsForFile( '/foo', False )
+    assert_that( flags_list, contains( '-x', 'c' ) )
+
+  results[ 'flags' ] = [ '-x', 'c++' ]
+  with patch( 'ycmd.completers.cpp.flags._CallExtraConfFlagsForFile',
+              return_value = results ):
+    flags_list = flags_object.FlagsForFile( '/foo', False )
+    assert_that( flags_list, contains( '-x', 'c' ) )
+
+
+@patch( 'ycmd.extra_conf_store.ModuleForSourceFile', return_value = Mock() )
+def FlagsForFile_FlagsNotCachedWhenDoCacheIsFalse_test( *args ):
+  flags_object = flags.Flags()
+
+  results = {
+    'flags': [ '-x', 'c' ],
+    'do_cache': False
+  }
+  with patch( 'ycmd.completers.cpp.flags._CallExtraConfFlagsForFile',
+              return_value = results ):
+    flags_list = flags_object.FlagsForFile( '/foo', False )
+    assert_that( flags_list, contains( '-x', 'c' ) )
+
+  results[ 'flags' ] = [ '-x', 'c++' ]
+  with patch( 'ycmd.completers.cpp.flags._CallExtraConfFlagsForFile',
+              return_value = results ):
+    flags_list = flags_object.FlagsForFile( '/foo', False )
+    assert_that( flags_list, contains( '-x', 'c++' ) )
+
+
+@patch( 'ycmd.extra_conf_store.ModuleForSourceFile', return_value = Mock() )
+def FlagsForFile_FlagsCachedWhenDoCacheIsTrue_test( *args ):
+  flags_object = flags.Flags()
+
+  results = {
+    'flags': [ '-x', 'c' ],
+    'do_cache': True
+  }
+  with patch( 'ycmd.completers.cpp.flags._CallExtraConfFlagsForFile',
+              return_value = results ):
+    flags_list = flags_object.FlagsForFile( '/foo', False )
+    assert_that( flags_list, contains( '-x', 'c' ) )
+
+  results[ 'flags' ] = [ '-x', 'c++' ]
+  with patch( 'ycmd.completers.cpp.flags._CallExtraConfFlagsForFile',
+              return_value = results ):
+    flags_list = flags_object.FlagsForFile( '/foo', False )
+    assert_that( flags_list, contains( '-x', 'c' ) )
 
 
 def SanitizeFlags_Passthrough_test():
@@ -140,8 +199,8 @@ def RemoveUnusedFlags_RemoveFilename_test():
        flags._RemoveUnusedFlags( expected + to_remove, filename ) )
 
   eq_( expected,
-        flags._RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
-                                  filename ) )
+       flags._RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
+                                 filename ) )
 
   eq_( expected,
        flags._RemoveUnusedFlags(
@@ -157,8 +216,48 @@ def RemoveUnusedFlags_RemoveFlagWithoutPrecedingDashFlag_test():
        flags._RemoveUnusedFlags( expected + to_remove, filename ) )
 
   eq_( expected,
-        flags._RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
-                                  filename ) )
+       flags._RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
+                                 filename ) )
+
+
+def RemoveUnusedFlags_Depfiles_test():
+  full_flags = [
+    '/bin/clang',
+    '-x', 'objective-c',
+    '-arch', 'armv7',
+    '-MMD',
+    '-MT', 'dependencies',
+    '-MF', 'file',
+    '--serialize-diagnostics', 'diagnostics'
+  ]
+
+  expected = [
+    '/bin/clang',
+    '-x', 'objective-c',
+    '-arch', 'armv7',
+  ]
+
+  assert_that( flags._RemoveUnusedFlags( full_flags, 'test.m' ),
+               contains( *expected ) )
+
+
+def EnableTypoCorrection_Empty_test():
+  eq_( flags._EnableTypoCorrection( [] ), [ '-fspell-checking' ] )
+
+
+def EnableTypoCorrection_Trivial_test():
+  eq_( flags._EnableTypoCorrection( [ '-x', 'c++' ] ),
+                                    [ '-x', 'c++', '-fspell-checking' ] )
+
+
+def EnableTypoCorrection_Reciprocal_test():
+  eq_( flags._EnableTypoCorrection( [ '-fno-spell-checking' ] ),
+                                    [ '-fno-spell-checking' ] )
+
+
+def EnableTypoCorrection_ReciprocalOthers_test():
+  eq_( flags._EnableTypoCorrection( [ '-x', 'c++', '-fno-spell-checking' ] ),
+                                    [ '-x', 'c++', '-fno-spell-checking' ] )
 
 
 def RemoveUnusedFlags_RemoveFilenameWithoutPrecedingInclude_test():
@@ -248,3 +347,31 @@ def ExtraClangFlags_test():
       num_found += 1
 
   eq_( 1, num_found )
+
+
+@MacOnly
+@patch( 'ycmd.completers.cpp.flags._GetMacClangVersionList',
+        return_value = [ '1.0.0', '7.0.1', '7.0.2', '___garbage__' ] )
+@patch( 'ycmd.completers.cpp.flags._MacClangIncludeDirExists',
+        side_effect = [ False, True, True, True ] )
+def Mac_LatestMacClangIncludes_test( *args ):
+  eq_( flags._LatestMacClangIncludes(),
+       [ '/Applications/Xcode.app/Contents/Developer/Toolchains/'
+         'XcodeDefault.xctoolchain/usr/lib/clang/7.0.2/include' ] )
+
+
+@MacOnly
+def Mac_LatestMacClangIncludes_NoSuchDirectory_test():
+  def RaiseOSError( x ):
+    raise OSError( x )
+
+  with patch( 'os.listdir', side_effect = RaiseOSError ):
+    eq_( flags._LatestMacClangIncludes(), [] )
+
+
+@MacOnly
+def Mac_PathsForAllMacToolchains_test():
+  eq_( flags._PathsForAllMacToolchains( 'test' ),
+       [ '/Applications/Xcode.app/Contents/Developer/Toolchains/'
+         'XcodeDefault.xctoolchain/test',
+         '/Library/Developer/CommandLineTools/test' ] )

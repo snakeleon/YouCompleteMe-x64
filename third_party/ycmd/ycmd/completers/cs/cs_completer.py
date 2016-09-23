@@ -27,12 +27,12 @@ from future.utils import itervalues
 
 from collections import defaultdict
 import os
-import time
 import re
 from ycmd.completers.completer import Completer
-from ycmd.utils import ForceSemanticCompletion
+from ycmd.utils import ForceSemanticCompletion, CodepointOffsetToByteOffset
 from ycmd import responses
 from ycmd import utils
+from ycmd.completers.completer_utils import GetFileContents
 import requests
 import urllib.parse
 import logging
@@ -44,10 +44,10 @@ SERVER_NOT_FOUND_MSG = ( 'OmniSharp server binary not found at {0}. ' +
                          '"./install.py --omnisharp-completer".' )
 INVALID_FILE_MESSAGE = 'File is invalid.'
 NO_DIAGNOSTIC_MESSAGE = 'No diagnostic for current line!'
-PATH_TO_OMNISHARP_BINARY = os.path.join(
-  os.path.abspath( os.path.dirname( __file__ ) ),
-  '..', '..', '..', 'third_party', 'OmniSharpServer',
-  'OmniSharp', 'bin', 'Release', 'OmniSharp.exe' )
+PATH_TO_OMNISHARP_BINARY = os.path.abspath(
+  os.path.join( os.path.dirname( __file__ ), '..', '..', '..',
+                'third_party', 'OmniSharpServer', 'OmniSharp',
+                'bin', 'Release', 'OmniSharp.exe' ) )
 
 
 class CsharpCompleter( Completer ):
@@ -71,10 +71,9 @@ class CsharpCompleter( Completer ):
 
 
   def Shutdown( self ):
-    if ( self.user_options[ 'auto_stop_csharp_server' ] ):
+    if self.user_options[ 'auto_stop_csharp_server' ]:
       for solutioncompleter in itervalues( self._completer_per_solution ):
-        if solutioncompleter.ServerIsRunning():
-          solutioncompleter._StopServer()
+        solutioncompleter._StopServer()
 
 
   def SupportedFiletypes( self ):
@@ -127,16 +126,12 @@ class CsharpCompleter( Completer ):
   def FilterAndSortCandidates( self, candidates, query ):
     result = super( CsharpCompleter, self ).FilterAndSortCandidates( candidates,
                                                                      query )
-    result.sort( key = _CompleteIsFromImport );
+    result.sort( key = _CompleteIsFromImport )
     return result
 
 
   def GetSubcommandsMap( self ):
     return {
-      'StartServer'                      : ( lambda self, request_data, args:
-         self._SolutionSubcommand( request_data,
-                                   method = '_StartServer',
-                                   no_request_data = True ) ),
       'StopServer'                       : ( lambda self, request_data, args:
          self._SolutionSubcommand( request_data,
                                    method = '_StopServer',
@@ -182,28 +177,7 @@ class CsharpCompleter( Completer ):
                                    method = '_FixIt' ) ),
       'GetDoc'                           : ( lambda self, request_data, args:
          self._SolutionSubcommand( request_data,
-                                   method = '_GetDoc' ) ),
-      'ServerIsRunning'                  : ( lambda self, request_data, args:
-         self._SolutionSubcommand( request_data,
-                                   method = 'ServerIsRunning',
-                                   no_request_data = True ) ),
-      'ServerIsHealthy'                  : ( lambda self, request_data, args:
-         self._SolutionSubcommand( request_data,
-                                   method = 'ServerIsHealthy',
-                                   no_request_data = True ) ),
-      'ServerIsReady'                    : ( lambda self, request_data, args:
-         self._SolutionSubcommand( request_data,
-                                   method = 'ServerIsReady',
-                                   no_request_data = True ) ),
-      'SetOmnisharpPort'                 : ( lambda self, request_data, args:
-         self._SolutionSubcommand( request_data,
-                                   method = '_SetOmnisharpPort',
-                                   port = args[ 0 ],
-                                   no_request_data = True ) ),
-      'GetOmnisharpPort'                 : ( lambda self, request_data, args:
-         self._SolutionSubcommand( request_data,
-                                   method = '_GetOmnisharpPort',
-                                   no_request_data = True ) ),
+                                   method = '_GetDoc' ) )
     }
 
 
@@ -221,7 +195,7 @@ class CsharpCompleter( Completer ):
     # Only start the server associated to this solution if the option to
     # automatically start one is set and no server process is already running.
     if ( self.user_options[ 'auto_start_csharp_server' ]
-         and not solutioncompleter.ServerIsRunning() ):
+         and not solutioncompleter._ServerIsRunning() ):
       solutioncompleter._StartServer()
       return
 
@@ -232,7 +206,7 @@ class CsharpCompleter( Completer ):
 
     errors = solutioncompleter.CodeCheck( request_data )
 
-    diagnostics = [ self._QuickFixToDiagnostic( x ) for x in
+    diagnostics = [ self._QuickFixToDiagnostic( request_data, x ) for x in
                     errors[ "QuickFixes" ] ]
 
     self._diagnostic_store = DiagnosticsToDiagStructure( diagnostics )
@@ -241,18 +215,26 @@ class CsharpCompleter( Completer ):
              diagnostics[ : self._max_diagnostics_to_display ] ]
 
 
-  def _QuickFixToDiagnostic( self, quick_fix ):
+  def _QuickFixToDiagnostic( self, request_data, quick_fix ):
     filename = quick_fix[ "FileName" ]
-
-    location = responses.Location( quick_fix[ "Line" ],
-                                   quick_fix[ "Column" ],
-                                   filename )
-    location_range = responses.Range( location, location )
+    # NOTE: end of diagnostic range returned by the OmniSharp server is not
+    # included.
+    location = _BuildLocation( request_data,
+                               filename,
+                               quick_fix[ 'Line' ],
+                               quick_fix[ 'Column' ] )
+    location_end = _BuildLocation( request_data,
+                                   filename,
+                                   quick_fix[ 'EndLine' ],
+                                   quick_fix[ 'EndColumn' ] )
+    if not location_end:
+      location_end = location
+    location_extent = responses.Range( location, location_end )
     return responses.Diagnostic( list(),
                                  location,
-                                 location_range,
-                                 quick_fix[ "Text" ],
-                                 quick_fix[ "LogLevel" ].upper() )
+                                 location_extent,
+                                 quick_fix[ 'Text' ],
+                                 quick_fix[ 'LogLevel' ].upper() )
 
 
   def GetDetailedDiagnostic( self, request_data ):
@@ -270,6 +252,9 @@ class CsharpCompleter( Completer ):
     closest_diagnostic = None
     distance_to_closest_diagnostic = 999
 
+    # FIXME: all of these calculations are currently working with byte
+    # offsets, which are technically incorrect. We should be working with
+    # codepoint offsets, as we want the nearest character-wise diagnostic
     for diagnostic in diagnostics:
       distance = abs( current_column - diagnostic.location_.column_number_ )
       if distance < distance_to_closest_diagnostic:
@@ -281,15 +266,50 @@ class CsharpCompleter( Completer ):
 
 
   def DebugInfo( self, request_data ):
-    solutioncompleter = self._GetSolutionCompleter( request_data )
-    if solutioncompleter.ServerIsRunning():
-      return ( 'OmniSharp Server running at: {0}\n'
-               'OmniSharp logfiles:\n{1}\n{2}' ).format(
-                   solutioncompleter._ServerLocation(),
-                   solutioncompleter._filename_stdout,
-                   solutioncompleter._filename_stderr )
-    else:
-      return 'OmniSharp Server is not running'
+    try:
+      completer = self._GetSolutionCompleter( request_data )
+    except RuntimeError:
+      return (
+        'C# completer debug information:\n'
+        '  OmniSharp not running\n'
+        '  OmniSharp executable: {0}\n'
+        '  OmniSharp solution: not found'.format( PATH_TO_OMNISHARP_BINARY ) )
+
+    with completer._server_state_lock:
+      if completer._ServerIsRunning():
+        return (
+          'C# completer debug information:\n'
+          '  OmniSharp running at: {0}\n'
+          '  OmniSharp process ID: {1}\n'
+          '  OmniSharp executable: {2}\n'
+          '  OmniSharp logfiles:\n'
+          '    {3}\n'
+          '    {4}\n'
+          '  OmniSharp solution: {5}'.format( completer._ServerLocation(),
+                                              completer._omnisharp_phandle.pid,
+                                              PATH_TO_OMNISHARP_BINARY,
+                                              completer._filename_stdout,
+                                              completer._filename_stderr,
+                                              completer._solution_path ) )
+
+      if completer._filename_stdout and completer._filename_stderr:
+        return (
+          'C# completer debug information:\n'
+          '  OmniSharp no longer running\n'
+          '  OmniSharp executable: {0}\n'
+          '  OmniSharp logfiles:\n'
+          '    {1}\n'
+          '    {2}\n'
+          '  OmniSharp solution: {3}'.format( PATH_TO_OMNISHARP_BINARY,
+                                              completer._filename_stdout,
+                                              completer._filename_stderr,
+                                              completer._solution_path ) )
+
+      return ( 'C# completer debug information:\n'
+               '  OmniSharp is not running\n'
+               '  OmniSharp executable: {0}\n'
+               '  OmniSharp solution: {1}'.format( PATH_TO_OMNISHARP_BINARY,
+                                                   completer._solution_path ) )
 
 
   def ServerIsHealthy( self ):
@@ -305,16 +325,16 @@ class CsharpCompleter( Completer ):
   def _CheckAllRunning( self, action ):
     solutioncompleters = itervalues( self._completer_per_solution )
     return all( action( completer ) for completer in solutioncompleters
-                if completer.ServerIsRunning() )
+                if completer._ServerIsRunning() )
 
 
   def _GetSolutionFile( self, filepath ):
-    if not filepath in self._solution_for_file:
+    if filepath not in self._solution_for_file:
       # NOTE: detection could throw an exception if an extra_conf_store needs
       # to be confirmed
       path_to_solutionfile = solutiondetection.FindSolutionPath( filepath )
       if not path_to_solutionfile:
-          raise RuntimeError( 'Autodetection of solution file failed. \n' )
+        raise RuntimeError( 'Autodetection of solution file failed.' )
       self._solution_for_file[ filepath ] = path_to_solutionfile
 
     return self._solution_for_file[ filepath ]
@@ -331,7 +351,6 @@ class CsharpSolutionCompleter( object ):
     self._omnisharp_phandle = None
     self._desired_omnisharp_port = desired_omnisharp_port
     self._server_state_lock = threading.RLock()
-    self._external_omnisharp = False
 
 
   def CodeCheck( self, request_data ):
@@ -347,7 +366,7 @@ class CsharpSolutionCompleter( object ):
     """ Start the OmniSharp server if not already running. Use a lock to avoid
     starting the server multiple times for the same solution. """
     with self._server_state_lock:
-      if self.ServerIsRunning():
+      if self._ServerIsRunning():
         return
 
       self._logger.info( 'Starting OmniSharp server' )
@@ -379,11 +398,10 @@ class CsharpSolutionCompleter( object ):
       self._filename_stderr = filename_format.format(
           port = self._omnisharp_port, sln = solutionfile, std = 'stderr' )
 
-      with open( self._filename_stderr, 'w' ) as fstderr:
-        with open( self._filename_stdout, 'w' ) as fstdout:
+      with utils.OpenForStdHandle( self._filename_stderr ) as fstderr:
+        with utils.OpenForStdHandle( self._filename_stdout ) as fstdout:
           self._omnisharp_phandle = utils.SafePopen(
               command, stdout = fstdout, stderr = fstderr )
-          self._external_omnisharp = False
 
       self._solution_path = path_to_solutionfile
 
@@ -391,43 +409,30 @@ class CsharpSolutionCompleter( object ):
   def _StopServer( self ):
     """ Stop the OmniSharp server using a lock. """
     with self._server_state_lock:
-      if not self.ServerIsRunning():
-        return
+      if self._ServerIsRunning():
+        self._logger.info( 'Stopping OmniSharp server with PID {0}'.format(
+                               self._omnisharp_phandle.pid ) )
+        self._GetResponse( '/stopserver' )
+        try:
+          utils.WaitUntilProcessIsTerminated( self._omnisharp_phandle,
+                                              timeout = 5 )
+          self._logger.info( 'OmniSharp server stopped' )
+        except RuntimeError:
+          self._logger.exception( 'Error while stopping OmniSharp server' )
 
-      self._logger.info( 'Stopping OmniSharp server' )
-
-      self._TryToStopServer()
-
-      # Kill it if it's still up
-      if self.ServerIsRunning() and not self.ServerIsExternal():
-        self._logger.info( 'Killing OmniSharp server' )
-        self._omnisharp_phandle.kill()
-
-      self._CleanupAfterServerStop()
-
-      self._logger.info( 'Stopped OmniSharp server' )
+      self._CleanUp()
 
 
-  def _TryToStopServer( self ):
-    for _ in range( 5 ):
-      try:
-        self._GetResponse( '/stopserver', timeout = .1 )
-      except:
-        pass
-      for _ in range( 10 ):
-        if not self.ServerIsRunning():
-          return
-        time.sleep( .1 )
-
-
-  def _CleanupAfterServerStop( self ):
+  def _CleanUp( self ):
     self._omnisharp_port = None
     self._omnisharp_phandle = None
-    if ( not self._keep_logfiles ):
+    if not self._keep_logfiles:
       if self._filename_stdout:
-        os.unlink( self._filename_stdout )
+        utils.RemoveIfExists( self._filename_stdout )
+        self._filename_stdout = None
       if self._filename_stderr:
-        os.unlink( self._filename_stderr )
+        utils.RemoveIfExists( self._filename_stderr )
+        self._filename_stderr = None
 
 
   def _RestartServer( self ):
@@ -454,17 +459,19 @@ class CsharpSolutionCompleter( object ):
     parameters[ 'ForceSemanticCompletion' ] = completion_type
     parameters[ 'WantDocumentationForEveryCompletionResult' ] = True
     completions = self._GetResponse( '/autocomplete', parameters )
-    return completions if completions != None else []
+    return completions if completions is not None else []
 
 
   def _GoToDefinition( self, request_data ):
     """ Jump to definition of identifier under cursor """
     definition = self._GetResponse( '/gotodefinition',
                                     self._DefaultParameters( request_data ) )
-    if definition[ 'FileName' ] != None:
-      return responses.BuildGoToResponse( definition[ 'FileName' ],
-                                          definition[ 'Line' ],
-                                          definition[ 'Column' ] )
+    if definition[ 'FileName' ] is not None:
+      return responses.BuildGoToResponseFromLocation(
+        _BuildLocation( request_data,
+                        definition[ 'FileName' ],
+                        definition[ 'Line' ],
+                        definition[ 'Column' ] ) )
     else:
       raise RuntimeError( 'Can\'t jump to definition' )
 
@@ -477,19 +484,23 @@ class CsharpSolutionCompleter( object ):
 
     if implementation[ 'QuickFixes' ]:
       if len( implementation[ 'QuickFixes' ] ) == 1:
-        return responses.BuildGoToResponse(
+        return responses.BuildGoToResponseFromLocation(
+          _BuildLocation(
+            request_data,
             implementation[ 'QuickFixes' ][ 0 ][ 'FileName' ],
             implementation[ 'QuickFixes' ][ 0 ][ 'Line' ],
-            implementation[ 'QuickFixes' ][ 0 ][ 'Column' ] )
+            implementation[ 'QuickFixes' ][ 0 ][ 'Column' ] ) )
       else:
-        return [ responses.BuildGoToResponse( x[ 'FileName' ],
-                                              x[ 'Line' ],
-                                              x[ 'Column' ] )
+        return [ responses.BuildGoToResponseFromLocation(
+                   _BuildLocation( request_data,
+                                   x[ 'FileName' ],
+                                   x[ 'Line' ],
+                                   x[ 'Column' ] ) )
                  for x in implementation[ 'QuickFixes' ] ]
     else:
       if ( fallback_to_declaration ):
         return self._GoToDefinition( request_data )
-      elif implementation[ 'QuickFixes' ] == None:
+      elif implementation[ 'QuickFixes' ] is None:
         raise RuntimeError( 'Can\'t jump to implementation' )
       else:
         raise RuntimeError( 'No implementations found' )
@@ -510,9 +521,11 @@ class CsharpSolutionCompleter( object ):
 
     result = self._GetResponse( '/fixcodeissue', request )
     replacement_text = result[ "Text" ]
-    location = responses.Location( request_data['line_num'],
-                                   request_data['column_num'],
-                                   request_data['filepath'] )
+    # Note: column_num is already a byte offset so we don't need to use
+    # _BuildLocation.
+    location = responses.Location( request_data[ 'line_num' ],
+                                   request_data[ 'column_num' ],
+                                   request_data[ 'filepath' ] )
     fixits = [ responses.FixIt( location,
                                 _BuildChunks( request_data,
                                               replacement_text ) ) ]
@@ -536,7 +549,8 @@ class CsharpSolutionCompleter( object ):
     """ Some very common request parameters """
     parameters = {}
     parameters[ 'line' ] = request_data[ 'line_num' ]
-    parameters[ 'column' ] = request_data[ 'column_num' ]
+    parameters[ 'column' ] = request_data[ 'column_codepoint' ]
+
     filepath = request_data[ 'filepath' ]
     parameters[ 'buffer' ] = (
       request_data[ 'file_data' ][ filepath ][ 'contents' ] )
@@ -544,27 +558,14 @@ class CsharpSolutionCompleter( object ):
     return parameters
 
 
-  def ServerIsExternal( self ):
-    return self._external_omnisharp
-
-
-  def ServerIsRunning( self, external_check = True ):
+  def _ServerIsRunning( self ):
     """ Check if our OmniSharp server is running (process is up)."""
-    if not self.ServerIsExternal():
-      return utils.ProcessIsRunning( self._omnisharp_phandle )
-
-    if self._omnisharp_port is None:
-      return False
-
-    if external_check:
-      return self.ServerIsHealthy()
-
-    return True
+    return utils.ProcessIsRunning( self._omnisharp_phandle )
 
 
   def ServerIsHealthy( self ):
     """ Check if our OmniSharp server is healthy (up and serving)."""
-    if not self.ServerIsRunning( external_check = False ):
+    if not self._ServerIsRunning():
       return False
 
     try:
@@ -575,7 +576,7 @@ class CsharpSolutionCompleter( object ):
 
   def ServerIsReady( self ):
     """ Check if our OmniSharp server is ready (loaded solution file)."""
-    if not self.ServerIsRunning( external_check = False ):
+    if not self._ServerIsRunning():
       return False
 
     try:
@@ -593,19 +594,6 @@ class CsharpSolutionCompleter( object ):
     # We cannot use 127.0.0.1 like we do in other places because OmniSharp
     # server only listens on localhost.
     return 'http://localhost:' + str( self._omnisharp_port )
-
-
-  def _GetOmnisharpPort( self ):
-    return responses.BuildDisplayMessageResponse( self._omnisharp_port )
-
-
-  def _SetOmnisharpPort( self, port ):
-    with self._server_state_lock:
-      if self.ServerIsRunning():
-        self.StopServer()
-
-      self._omnisharp_port = port
-      self._external_omnisharp = True
 
 
   def _GetResponse( self, handler, parameters = {}, timeout = None ):
@@ -626,7 +614,7 @@ class CsharpSolutionCompleter( object ):
 
 def _CompleteIsFromImport( candidate ):
   try:
-    return candidate[ "extra_data" ][ "required_namespace_import" ] != None
+    return candidate[ "extra_data" ][ "required_namespace_import" ] is not None
   except ( KeyError, TypeError ):
     return False
 
@@ -652,13 +640,13 @@ def _BuildChunks( request_data, new_buffer ):
   start_index = 0
   end_index = min_length
   for i in range( 0, min_length - 1 ):
-      if new_buffer[ i ] != old_buffer[ i ]:
-          start_index = i
-          break
+    if new_buffer[ i ] != old_buffer[ i ]:
+      start_index = i
+      break
   for i in range( 1, min_length ):
-      if new_buffer[ new_length - i ] != old_buffer[ old_length - i ]:
-          end_index = i - 1
-          break
+    if new_buffer[ new_length - i ] != old_buffer[ old_length - i ]:
+      end_index = i - 1
+      break
   # To handle duplicates, i.e aba => a
   if ( start_index + end_index > min_length ):
     start_index -= start_index + end_index - min_length
@@ -668,6 +656,9 @@ def _BuildChunks( request_data, new_buffer ):
   ( start_line, start_column ) = _IndexToLineColumn( old_buffer, start_index )
   ( end_line, end_column ) = _IndexToLineColumn( old_buffer,
                                                  old_length - end_index )
+
+  # No need for _BuildLocation, because _IndexToLineColumn already converted
+  # start_column and end_column to byte offsets for us.
   start = responses.Location( start_line, start_column, filepath )
   end = responses.Location( end_line, end_column, filepath )
   return [ responses.FixItChunk( replacement_text,
@@ -688,11 +679,24 @@ def _FixLineEndings( old_buffer, new_buffer ):
 
 # Adapted from http://stackoverflow.com/a/24495900
 def _IndexToLineColumn( text, index ):
-  """Get (line_number, col) of `index` in `string`."""
+  """Get 1-based (line_number, col) of `index` in `string`, where string is a
+  unicode string and col is a byte offset."""
   lines = text.splitlines( True )
   curr_pos = 0
   for linenum, line in enumerate( lines ):
     if curr_pos + len( line ) > index:
-      return linenum + 1, index - curr_pos + 1
+      return ( linenum + 1,
+               CodepointOffsetToByteOffset( line, index - curr_pos + 1 ) )
     curr_pos += len( line )
   assert False
+
+
+def _BuildLocation( request_data, filename, line_num, column_num ):
+  if line_num <= 0 or column_num <= 0:
+    return None
+  contents = utils.SplitLines( GetFileContents( request_data, filename ) )
+  line_value = contents[ line_num - 1 ]
+  return responses.Location(
+      line_num,
+      CodepointOffsetToByteOffset( line_value, column_num ),
+      filename )

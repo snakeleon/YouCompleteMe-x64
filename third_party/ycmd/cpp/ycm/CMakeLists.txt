@@ -30,39 +30,42 @@ if ( USE_CLANG_COMPLETER AND
      NOT PATH_TO_LLVM_ROOT AND
      NOT EXTERNAL_LIBCLANG_PATH )
 
-  set( CLANG_VERSION "3.7.0" )
+  set( CLANG_VERSION "3.9.0" )
 
   if ( APPLE )
     set( CLANG_DIRNAME "clang+llvm-${CLANG_VERSION}-x86_64-apple-darwin" )
     set( CLANG_SHA256
-         "057e56b445ac5dfbf0d5475badab374edebe8db5428001c8829340e40724b50d" )
+         "bd689aaeafa19832016d5a4917405a73b21bc5281846c0cb816e9545cf99e82b" )
     set( CLANG_FILENAME "${CLANG_DIRNAME}.tar.xz" )
   elseif ( WIN32 )
     if( 64_BIT_PLATFORM )
       set( CLANG_DIRNAME "LLVM-${CLANG_VERSION}-win64" )
       set( CLANG_SHA256
-           "04a393cf73bc7416c9903aa08f47f15c77cf475b22a607ac4b7493a658a11a3f" )
+           "3e5b53a79266d3f7f1d5cb4d94283fe2bc61f9689e55f39e3939364f4076b0c9" )
     else()
       set( CLANG_DIRNAME "LLVM-${CLANG_VERSION}-win32" )
       set( CLANG_SHA256
-           "75933480c8f8e3ae3cf9281494bf0057e9e4cfae4315f59c468a4e850a86f544" )
+           "b4eaa1fa9872e2c76268f32fc597148cfa14c57b7d13e1edd9b9b6496cdf7de8" )
     endif()
     set( CLANG_FILENAME "${CLANG_DIRNAME}.exe" )
   else()
+    # Among the prebuilt binaries available upstream, only the Ubuntu 14.04
+    # and openSUSE 13.2 ones are working on Ubuntu 14.04 (and 12.04 which is
+    # required for Travis builds). We choose openSUSE over Ubuntu 14.04 because
+    # it does not have the terminfo library (libtinfo) dependency, which is not
+    # needed for our use case and a source of problems on some distributions
+    # (see YCM issues #778 and #2259), and is available for 32-bit and 64-bit
+    # architectures.
     if ( 64_BIT_PLATFORM )
-      # We MUST support the latest Ubuntu LTS release!
-      # At the time of writing, that's 14.04. Switch to next LTS ~6 months after
-      # it comes out.
-      set( CLANG_DIRNAME "clang+llvm-${CLANG_VERSION}-x86_64-linux-gnu-ubuntu-14.04" )
+      set( CLANG_DIRNAME "clang+llvm-${CLANG_VERSION}-x86_64-opensuse13.2" )
       set( CLANG_SHA256
-           "093a94ff8982ae78461f0d2604c98f6b454c15e2ef768d34c235c6676c336460" )
+           "9153b473dc37d2e21a260231e90e43b97aba1dff5d27f14c947815a90fbdc8d7" )
       set( CLANG_FILENAME "${CLANG_DIRNAME}.tar.xz" )
     else()
-      # Clang 3.3 is the last version with pre-built x86 binaries upstream.
-      # That's too old now.
-      message( FATAL_ERROR "No pre-built Clang ${CLANG_VERSION} binaries for 32 bit linux. "
-        "You'll have to compile Clang ${CLANG_VERSION} from source. "
-        "See the YCM docs for details on how to use a user-compiled libclang." )
+      set( CLANG_DIRNAME "clang+llvm-${CLANG_VERSION}-i586-opensuse13.2" )
+      set( CLANG_SHA256
+           "92309be874810fb5ca3f9037bb400783be89fa6bc96ed141b04297f59e389692" )
+      set( CLANG_FILENAME "${CLANG_DIRNAME}.tar.xz" )
     endif()
   endif()
 
@@ -193,22 +196,17 @@ if ( APPLE )
 endif()
 
 if ( USE_SYSTEM_BOOST )
-  find_package( Boost REQUIRED COMPONENTS python filesystem system regex thread )
+  set( Boost_COMPONENTS filesystem system regex thread )
+  if( USE_PYTHON2 )
+    list( APPEND Boost_COMPONENTS python )
+  else()
+    list( APPEND Boost_COMPONENTS python3 )
+  endif()
+  find_package( Boost REQUIRED COMPONENTS ${Boost_COMPONENTS} )
 else()
   set( Boost_INCLUDE_DIR ${BoostParts_SOURCE_DIR} )
   set( Boost_LIBRARIES BoostParts )
 endif()
-
-# The SYSTEM flag makes sure that -isystem[header path] is passed to the
-# compiler instead of the standard -I[header path]. Headers included with
-# -isystem do not generate warnings (and they shouldn't; e.g. boost warnings are
-# just noise for us since we won't be changing them).
-include_directories(
-  SYSTEM
-  ${Boost_INCLUDE_DIR}
-  ${PYTHON_INCLUDE_DIRS}
-  ${CLANG_INCLUDES_DIR}
-  )
 
 file( GLOB_RECURSE SERVER_SOURCES *.h *.cpp )
 
@@ -233,6 +231,20 @@ else()
     list( REMOVE_ITEM SERVER_SOURCES ${to_remove_clang} )
   endif()
 endif()
+
+# The SYSTEM flag makes sure that -isystem[header path] is passed to the
+# compiler instead of the standard -I[header path]. Headers included with
+# -isystem do not generate warnings (and they shouldn't; e.g. boost warnings are
+# just noise for us since we won't be changing them).
+# Since there is no -isystem flag equivalent on Windows, headers from external
+# projects may conflict with our headers and override them. We prevent that by
+# including these directories after ours.
+include_directories(
+  SYSTEM
+  ${Boost_INCLUDE_DIR}
+  ${PYTHON_INCLUDE_DIRS}
+  ${CLANG_INCLUDES_DIR}
+  )
 
 #############################################################################
 
@@ -273,10 +285,15 @@ if ( EXTERNAL_LIBCLANG_PATH OR USE_SYSTEM_LIBCLANG )
   else()
     # For Macs, we do things differently; look further in this file.
     if ( NOT APPLE )
-      # Setting this to true makes sure that libraries we build will have our rpath
-      # set even without having to do "make install"
+      # Setting this to true makes sure that libraries we build will have our
+      # rpath set even without having to do "make install"
       set( CMAKE_BUILD_WITH_INSTALL_RPATH TRUE )
       set( CMAKE_INSTALL_RPATH "\$ORIGIN" )
+      # Add directories from all libraries outside the build tree to the rpath.
+      # This makes the dynamic linker able to find non system libraries that
+      # our libraries require, in particular the Python one (from pyenv for
+      # instance).
+      set( CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE )
     endif()
   endif()
 
@@ -305,6 +322,12 @@ add_library( ${PROJECT_NAME} SHARED
              ${SERVER_SOURCES}
            )
 
+if ( USE_CLANG_COMPLETER AND NOT LIBCLANG_TARGET )
+     message( FATAL_ERROR "Using Clang completer, but no libclang found. "
+                          "Try setting EXTERNAL_LIBCLANG_PATH or revise "
+                          "your configuration" )
+endif()
+
 target_link_libraries( ${PROJECT_NAME}
                        ${Boost_LIBRARIES}
                        ${PYTHON_LIBRARIES}
@@ -326,6 +349,35 @@ if( LIBCLANG_TARGET )
       POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy "${LIBCLANG_TARGET}" "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
     )
+
+    if( APPLE )
+      # In OS X El Capitan, Apple introduced System Integrity Protection.
+      # Amongst other things, this introduces features to the dynamic loader
+      # (dyld) which cause it to "sanitise" (and complain about) embedded
+      # LC_RPATH entries which contain @executable_path when then are loaded
+      # into "restricted" binaries.  For our purposes, "restricted" here means
+      # "supplied by Apple" and includes the system versions of python.  For
+      # unknown reasons, the libclang.dylib that comes from llvm.org includes an
+      # LC_RPATH entry '@executable_path/../lib' which causes the OS X dynamic
+      # loader to print a cryptic warning to stderr of the form:
+      #
+      #    dyld: warning, LC_RPATH @executable_path/../lib in
+      #    /path/to/ycmd/libclang.dylib being ignored in restricted program
+      #    because of @executable_path
+      #
+      # In order to prevent this harmless and annoying message appearing, we
+      # simply strip the rpath entry from the dylib.  There's no way any
+      # @executable_path that python might have could be in any way useful to
+      # libclang.dylib, so this seems perfectly safe.
+      get_filename_component( LIBCLANG_TAIL ${LIBCLANG_TARGET} NAME )
+      add_custom_command( TARGET ${PROJECT_NAME}
+                          POST_BUILD
+                          COMMAND install_name_tool
+                          "-delete_rpath"
+                          "@executable_path/../lib"
+                          "$<TARGET_FILE_DIR:${PROJECT_NAME}>/${LIBCLANG_TAIL}"
+                        )
+    endif()
   endif()
 endif()
 

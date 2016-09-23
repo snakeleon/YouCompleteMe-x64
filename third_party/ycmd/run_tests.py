@@ -44,9 +44,6 @@ def RunFlake8():
   print( 'Running flake8' )
   subprocess.check_call( [
     'flake8',
-    '--select=F,C9',
-    '--max-complexity=10',
-    '--exclude=testdata',
     p.join( DIR_OF_THIS_SCRIPT, 'ycmd' )
   ] )
 
@@ -98,7 +95,7 @@ def CompleterType( value ):
     aliases_to_completer = dict( ( i, k ) for k, v in COMPLETERS.items()
                                  for i in v[ 'aliases' ] )
     if value in aliases_to_completer:
-      return aliases_to_completer[ value ];
+      return aliases_to_completer[ value ]
     else:
       raise argparse.ArgumentTypeError(
         '{0} is not a valid completer - should be one of {1}'.format(
@@ -123,13 +120,13 @@ def ParseArguments():
   parser.add_argument( '--msvc', type = int, choices = [ 11, 12, 14 ],
                        help = 'Choose the Microsoft Visual '
                        'Studio version. (default: 14).' )
-  parser.add_argument( '--arch', type = int, choices = [ 32, 64 ],
-                       help = 'Force architecture to 32 or 64 bits on '
-                       'Windows (default: python interpreter architecture).' )
   parser.add_argument( '--coverage', action = 'store_true',
                        help = 'Enable coverage report (requires coverage pkg)' )
   parser.add_argument( '--no-flake8', action = 'store_true',
                        help = 'Disable flake8 run.' )
+  parser.add_argument( '--dump-path', action = 'store_true',
+                       help = 'Dump the PYTHONPATH required to run tests '
+                              'manually, then exit.' )
 
   parsed_args, nosetests_args = parser.parse_known_args()
 
@@ -182,9 +179,6 @@ def BuildYcmdLibs( args ):
     if args.msvc:
       build_cmd.extend( [ '--msvc', str( args.msvc ) ] )
 
-    if args.arch:
-      build_cmd.extend( [ '--arch', str( args.arch ) ] )
-
     subprocess.check_call( build_cmd )
 
 
@@ -198,7 +192,9 @@ def NoseTests( parsed_args, extra_nosetests_args ):
       nosetests_args.extend( COMPLETERS[ key ][ 'test' ] )
 
   if parsed_args.coverage:
-    nosetests_args += [ '--with-coverage', '--cover-package=ycmd',
+    nosetests_args += [ '--with-coverage',
+                        '--cover-erase',
+                        '--cover-package=ycmd',
                         '--cover-html' ]
 
   if extra_nosetests_args:
@@ -211,6 +207,9 @@ def NoseTests( parsed_args, extra_nosetests_args ):
 
 def Main():
   parsed_args, nosetests_args = ParseArguments()
+  if parsed_args.dump_path:
+    print( os.environ[ 'PYTHONPATH' ] )
+    sys.exit()
   print( 'Running tests on Python', platform.python_version() )
   if not parsed_args.no_flake8:
     RunFlake8()

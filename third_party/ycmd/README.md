@@ -3,7 +3,7 @@ ycmd: a code-completion & comprehension server
 
 [![Build Status](https://travis-ci.org/Valloric/ycmd.svg?branch=master)](https://travis-ci.org/Valloric/ycmd)
 [![Build status](https://ci.appveyor.com/api/projects/status/6fetp5xwb0kkuv2w/branch/master?svg=true)](https://ci.appveyor.com/project/Valloric/ycmd)
-[![Coverage Status](https://coveralls.io/repos/Valloric/ycmd/badge.svg?branch=master&service=github)](https://coveralls.io/github/Valloric/ycmd?branch=master)
+[![Coverage Status](https://codecov.io/gh/Valloric/ycmd/branch/master/graph/badge.svg)](https://codecov.io/gh/Valloric/ycmd)
 
 ycmd is a server that provides APIs for code-completion and other
 code-comprehension use-cases like semantic GoTo commands (and others). For
@@ -30,10 +30,6 @@ built one.
 
 Building
 --------
-
-[Clients commonly build and set up ycmd for you; you are unlikely to need to
-build ycmd yourself unless you want to build a new client.]
-
 **If you're looking to develop ycmd, see the [instructions for setting up a dev
 environment][dev-setup] and for [running the tests][test-setup].**
 
@@ -157,6 +153,17 @@ keep-alive background thread that periodically pings ycmd (just call the
 You can also turn this off by passing `--idle_suicide_seconds=0`, although that
 isn't recommended.
 
+### Exit codes
+
+During startup, ycmd attempts to load the `ycm_core` library and exits with one
+of the following return codes if unsuccessful:
+
+- 3: unexpected error while loading the library;
+- 4: the `ycm_core` library is missing;
+- 5: the `ycm_core` library is compiled for Python 3 but loaded in Python 2;
+- 6: the `ycm_core` library is compiled for Python 2 but loaded in Python 3;
+- 7: the version of the `ycm_core` library is outdated.
+
 User-level customization
 -----------------------
 
@@ -179,6 +186,66 @@ is supposed to provide to configure certain semantic completers. More
 information on it can also be found in the [corresponding section of YCM's _User
 Guide_][extra-conf-doc].
 
+### `.ycm_extra_conf.py` specification
+
+The `.ycm_extra_conf.py` module must define the following methods:
+
+#### `FlagsForFile( filename, **kwargs )`
+
+Required for c-family language support.
+
+This method is called by the c-family completer to get the
+compiler flags to use when compiling the file with absolute path `filename`.
+The following additional arguments are optionally supplied depending on user
+configuration:
+
+- `client_data`: any additional data supplied by the client application.
+   See the [YouCompleteMe documentation][extra-conf-vim-data-doc] for an
+   example.
+
+The return value must be one of the following:
+
+- `None` meaning no flags are known for this file, or
+
+- a dictionary containing the following items:
+
+  - `flags`: (mandatory) a list of compiler flags.
+
+  - `do_cache`: (optional) a boolean indicating whether or not the result of
+    this call (i.e. the list of flags) should be cached for this file name.
+    Defaults to `True`. If unsure, the default is almost always correct.
+
+  - `flags_ready`: (optional) a boolean indicating that the flags should be
+    used. Defaults to `True`. If unsure, the default is almost always correct.
+
+A minimal example which simply returns a list of flags is:
+
+```python
+def FlagsForFile( filename, **kwargs ):
+  return {
+    'flags': [ '-x', 'c++' ]
+  }
+```
+
+### Global extra conf file specification
+
+The global extra module must expose the same functions as the
+`.ycm_extra_conf.py` module with the following additions:
+
+#### `YcmCorePreLoad()`
+
+Optional.
+
+This method, if defined, is called by the server prior to importing the c++
+python plugin. It is not usually required and its use is for advanced users
+only.
+
+#### `Shutdown()`
+
+Optional.
+
+Called prior to the server exiting cleanly. It is not usually required and its
+use is for advanced users only.
 
 Backwards compatibility
 -----------------------
@@ -239,12 +306,12 @@ This software is licensed under the [GPL v3 license][gpl].
 [example-readme]: https://github.com/Valloric/ycmd/blob/master/examples/README.md
 [trigger-defaults]: https://github.com/Valloric/ycmd/blob/master/ycmd/completers/completer_utils.py#L143
 [subsequence]: http://en.wikipedia.org/wiki/Subsequence
-[ycm-install]: https://github.com/Valloric/YouCompleteMe/blob/master/README.md#mac-os-x-super-quick-installation
+[ycm-install]: https://github.com/Valloric/YouCompleteMe/blob/master/README.md#mac-os-x
 [def-settings]: https://github.com/Valloric/ycmd/blob/master/ycmd/default_settings.json
 [base64]: http://en.wikipedia.org/wiki/Base64
 [mkstemp]: http://man7.org/linux/man-pages/man3/mkstemp.3.html
 [options]: https://github.com/Valloric/YouCompleteMe#options
-[extra-conf-doc]: https://github.com/Valloric/YouCompleteMe#c-family-semantic-completion-engine-usage
+[extra-conf-doc]: https://github.com/Valloric/YouCompleteMe#c-family-semantic-completion
 [emacs-ycmd]: https://github.com/abingham/emacs-ycmd
 [gpl]: http://www.gnu.org/copyleft/gpl.html
 [gocode]: https://github.com/nsf/gocode
@@ -253,4 +320,4 @@ This software is licensed under the [GPL v3 license][gpl].
 [ccoc]: https://github.com/Valloric/ycmd/blob/master/CODE_OF_CONDUCT.md
 [dev-setup]: https://github.com/Valloric/ycmd/blob/master/DEV_SETUP.md
 [test-setup]: https://github.com/Valloric/ycmd/blob/master/TESTS.md
-
+[extra-conf-vim-data-doc]: https://github.com/Valloric/YouCompleteMe#the-gycm_extra_conf_vim_data-option

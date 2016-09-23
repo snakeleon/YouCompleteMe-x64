@@ -19,13 +19,11 @@ use iron_hmac::SecretKey;
 #[derive(Debug)]
 pub enum Error {
     /// Error occurred in underlying http server lib
-    HttpServer(::hyper::Error),
-    // Error occurred in http framework layer
-    // HttpApp(::iron::IronError),
+    HttpServer(::iron::error::HttpError),
 }
 
-impl From<::hyper::Error> for Error {
-    fn from(err: ::hyper::Error) -> Error {
+impl From<::iron::error::HttpError> for Error {
+    fn from(err: ::iron::error::HttpError) -> Error {
         Error::HttpServer(err)
     }
 }
@@ -64,6 +62,7 @@ impl Key for EngineProvider {
 pub fn serve<E: SemanticEngine + 'static>(config: &Config, engine: E) -> Result<Server> {
     use persistent::{Read, Write};
     use logger::Logger;
+    use logger::format::Format;
 
     let mut chain = Chain::new(router!(
         post "/parse_file"       => file::parse,
@@ -72,7 +71,9 @@ pub fn serve<E: SemanticEngine + 'static>(config: &Config, engine: E) -> Result<
         get  "/ping"             => ping::pong));
 
     // Logging middleware
-    let (log_before, log_after) = Logger::new(None);
+    let log_fmt = Format::new("{method} {uri} -> {status} ({response-time})",
+                              Vec::new(), Vec::new());
+    let (log_before, log_after) = Logger::new(log_fmt);
 
     // log_before must be first middleware in before chain
     if config.print_http_logs {
@@ -122,7 +123,7 @@ pub fn serve<E: SemanticEngine + 'static>(config: &Config, engine: E) -> Result<
 /// This type can only be created via the [`serve`](fn.serve.html) function.
 #[derive(Debug)]
 pub struct Server {
-    inner: ::hyper::server::Listening,
+    inner: ::iron::Listening,
 }
 
 impl Server {

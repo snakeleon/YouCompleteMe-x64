@@ -26,7 +26,7 @@ from future import standard_library
 from future.utils import native
 standard_library.install_aliases()
 
-from ycmd.utils import ToBytes, ProcessIsRunning
+from ycmd.utils import ToBytes, ToUnicode, ProcessIsRunning
 from ycmd.completers.completer import Completer
 from ycmd import responses, utils, hmac_utils
 from tempfile import NamedTemporaryFile
@@ -39,7 +39,6 @@ import requests
 import threading
 import sys
 import os
-import base64
 
 
 HMAC_SECRET_LENGTH = 16
@@ -48,9 +47,9 @@ BINARY_NOT_FOUND_MESSAGE = ( 'The specified python interpreter {0} ' +
                              'was not found. Did you specify it correctly?' )
 LOG_FILENAME_FORMAT = os.path.join( utils.PathToCreatedTempDir(),
                                     u'jedihttp_{port}_{std}.log' )
-PATH_TO_JEDIHTTP = os.path.join( os.path.abspath( os.path.dirname( __file__ ) ),
-                                 '..', '..', '..',
-                                 'third_party', 'JediHTTP', 'jedihttp.py' )
+PATH_TO_JEDIHTTP = os.path.abspath(
+  os.path.join( os.path.dirname( __file__ ), '..', '..', '..',
+                'third_party', 'JediHTTP', 'jedihttp.py' ) )
 
 
 class JediCompleter( Completer ):
@@ -78,16 +77,12 @@ class JediCompleter( Completer ):
 
   def _UpdatePythonBinary( self, binary ):
     if binary:
-      if not self._CheckBinaryExists( binary ):
+      resolved_binary = utils.FindExecutable( binary )
+      if not resolved_binary:
         msg = BINARY_NOT_FOUND_MESSAGE.format( binary )
         self._logger.error( msg )
         raise RuntimeError( msg )
-      self._python_binary_path = binary
-
-
-  def _CheckBinaryExists( self, binary ):
-    """This method is here to help testing"""
-    return os.path.isfile( binary )
+      self._python_binary_path = resolved_binary
 
 
   def SupportedFiletypes( self ):
@@ -96,15 +91,14 @@ class JediCompleter( Completer ):
 
 
   def Shutdown( self ):
-    if self.ServerIsRunning():
-      self._StopServer()
+    self._StopServer()
 
 
-  def ServerIsReady( self ):
+  def ServerIsHealthy( self ):
     """
     Check if JediHTTP is alive AND ready to serve requests.
     """
-    if not self.ServerIsRunning():
+    if not self._ServerIsRunning():
       self._logger.debug( 'JediHTTP not running.' )
       return False
     try:
@@ -114,10 +108,10 @@ class JediCompleter( Completer ):
       return False
 
 
-  def ServerIsRunning( self ):
+  def _ServerIsRunning( self ):
     """
     Check if JediHTTP is alive. That doesn't necessarily mean it's ready to
-    serve requests; that's checked by ServerIsReady.
+    serve requests; that's checked by ServerIsHealthy.
     """
     with self._server_lock:
       return ( bool( self._jedihttp_port ) and
@@ -135,15 +129,28 @@ class JediCompleter( Completer ):
 
   def _StopServer( self ):
     with self._server_lock:
-      self._logger.info( 'Stopping JediHTTP' )
-      if self._jedihttp_phandle:
+      if self._ServerIsRunning():
+        self._logger.info( 'Stopping JediHTTP server with PID {0}'.format(
+                               self._jedihttp_phandle.pid ) )
         self._jedihttp_phandle.terminate()
-        self._jedihttp_phandle = None
-        self._jedihttp_port = None
+        try:
+          utils.WaitUntilProcessIsTerminated( self._jedihttp_phandle,
+                                              timeout = 5 )
+          self._logger.info( 'JediHTTP server stopped' )
+        except RuntimeError:
+          self._logger.exception( 'Error while stopping JediHTTP server' )
 
-      if not self._keep_logfiles:
-        utils.RemoveIfExists( self._logfile_stdout )
-        utils.RemoveIfExists( self._logfile_stderr )
+      self._CleanUp()
+
+
+  def _CleanUp( self ):
+    self._jedihttp_phandle = None
+    self._jedihttp_port = None
+    if not self._keep_logfiles:
+      utils.RemoveIfExists( self._logfile_stdout )
+      self._logfile_stdout = None
+      utils.RemoveIfExists( self._logfile_stderr )
+      self._logfile_stderr = None
 
 
   def _StartServer( self ):
@@ -157,11 +164,13 @@ class JediCompleter( Completer ):
 
       # JediHTTP will delete the secret_file after it's done reading it
       with NamedTemporaryFile( delete = False, mode = 'w+' ) as hmac_file:
-        json.dump( { 'hmac_secret': str( self._hmac_secret, 'utf8' ) },
+        json.dump( { 'hmac_secret': ToUnicode(
+                        b64encode( self._hmac_secret ) ) },
                    hmac_file )
         command = [ self._python_binary_path,
                     PATH_TO_JEDIHTTP,
                     '--port', str( self._jedihttp_port ),
+                    '--log', self._GetLoggingLevel(),
                     '--hmac-file-secret', hmac_file.name ]
 
       self._logfile_stdout = LOG_FILENAME_FORMAT.format(
@@ -169,19 +178,22 @@ class JediCompleter( Completer ):
       self._logfile_stderr = LOG_FILENAME_FORMAT.format(
           port = self._jedihttp_port, std = 'stderr' )
 
-      with open( self._logfile_stderr, 'w' ) as logerr:
-        with open( self._logfile_stdout, 'w' ) as logout:
+      with utils.OpenForStdHandle( self._logfile_stderr ) as logerr:
+        with utils.OpenForStdHandle( self._logfile_stdout ) as logout:
           self._jedihttp_phandle = utils.SafePopen( command,
                                                     stdout = logout,
                                                     stderr = logerr )
 
 
   def _GenerateHmacSecret( self ):
-    # TODO: We shouldn't have to base64 encode the secret here, only before we
-    # pass it to JediHTTP. We should be able to use the raw bytes as the HMAC
-    # key, but can't until the following issue is resolved:
-    #   https://github.com/vheon/JediHTTP/issues/11
-    return base64.b64encode( os.urandom( HMAC_SECRET_LENGTH ) )
+    return os.urandom( HMAC_SECRET_LENGTH )
+
+
+  def _GetLoggingLevel( self ):
+    # Tests are run with the NOTSET logging level but JediHTTP only accepts the
+    # predefined levels above (DEBUG, INFO, WARNING, etc.).
+    log_level = max( self._logger.getEffectiveLevel(), logging.DEBUG )
+    return logging.getLevelName( log_level ).lower()
 
 
   def _GetResponse( self, handler, request_data = {} ):
@@ -222,8 +234,9 @@ class JediCompleter( Completer ):
     path = request_data[ 'filepath' ]
     source = request_data[ 'file_data' ][ path ][ 'contents' ]
     line = request_data[ 'line_num' ]
-    # JediHTTP as Jedi itself expects columns to start at 0, not 1
-    col = request_data[ 'column_num' ] - 1
+    # JediHTTP (as Jedi itself) expects columns to start at 0, not 1, and for
+    # them to be unicode codepoint offsets.
+    col = request_data[ 'start_codepoint' ] - 1
 
     return {
       'source': source,
@@ -262,14 +275,6 @@ class JediCompleter( Completer ):
   def _JediCompletions( self, request_data ):
     return self._GetResponse( '/completions',
                               request_data )[ 'completions' ]
-
-
-  def DefinedSubcommands( self ):
-    # We don't want expose this sub-command because is not really needed for
-    # the user but is useful in tests for tearing down the server
-    subcommands = super( JediCompleter, self ).DefinedSubcommands()
-    subcommands.remove( 'StopServer' )
-    return subcommands
 
 
   def GetSubcommandsMap( self ):
@@ -382,21 +387,38 @@ class JediCompleter( Completer ):
 
 
   def DebugInfo( self, request_data ):
-     with self._server_lock:
-       if self.ServerIsRunning():
-         return ( 'JediHTTP running at 127.0.0.1:{0}\n'
-                  '  python binary: {1}\n'
-                  '  stdout log: {2}\n'
-                  '  stderr log: {3}' ).format( self._jedihttp_port,
-                                                self._python_binary_path,
-                                                self._logfile_stdout,
-                                                self._logfile_stderr )
+    with self._server_lock:
+      if self._ServerIsRunning():
+        return ( 'Python completer debug information:\n'
+                 '  JediHTTP running at: http://127.0.0.1:{0}\n'
+                 '  JediHTTP process ID: {1}\n'
+                 '  JediHTTP executable: {2}\n'
+                 '  JediHTTP logfiles:\n'
+                 '    {3}\n'
+                 '    {4}\n'
+                 '  Python interpreter: {5}'.format(
+                   self._jedihttp_port,
+                   self._jedihttp_phandle.pid,
+                   PATH_TO_JEDIHTTP,
+                   self._logfile_stdout,
+                   self._logfile_stderr,
+                   self._python_binary_path ) )
 
-       if self._logfile_stdout and self._logfile_stderr:
-         return ( 'JediHTTP is no longer running\n'
-                  '  stdout log: {1}\n'
-                  '  stderr log: {2}' ).format( self._logfile_stdout,
-                                                self._logfile_stderr )
+      if self._logfile_stdout and self._logfile_stderr:
+        return ( 'Python completer debug information:\n'
+                 '  JediHTTP no longer running\n'
+                 '  JediHTTP executable: {0}\n'
+                 '  JediHTTP logfiles:\n'
+                 '    {1}\n'
+                 '    {2}\n'
+                 '  Python interpreter: {3}'.format(
+                   PATH_TO_JEDIHTTP,
+                   self._logfile_stdout,
+                   self._logfile_stderr,
+                   self._python_binary_path ) )
 
-       return 'JediHTTP is not running'
-
+      return ( 'Python completer debug information:\n'
+               '  JediHTTP is not running\n'
+               '  JediHTTP executable: {0}\n'
+               '  Python interpreter: {1}'.format( PATH_TO_JEDIHTTP,
+                                                   self._python_binary_path ) )

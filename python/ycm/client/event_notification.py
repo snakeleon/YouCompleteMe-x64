@@ -15,8 +15,18 @@
 # You should have received a copy of the GNU General Public License
 # along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *  # noqa
+
+from requests.exceptions import ReadTimeout
+
 from ycm import vimsupport
-from ycmd.responses import UnknownExtraConf
+from ycmd.responses import UnknownExtraConf, ServerError
 from ycm.client.base_request import ( BaseRequest, BuildRequestData,
                                       JsonFromFuture, HandleServerException )
 
@@ -58,7 +68,7 @@ class EventNotification( BaseRequest ):
             _LoadExtraConfFile( e.extra_conf_file )
           else:
             _IgnoreExtraConfFile( e.extra_conf_file )
-    except Exception as e:
+    except ( ServerError, ReadTimeout ) as e:
       HandleServerException( e )
 
     return self._cached_response if self._cached_response else []
@@ -68,9 +78,11 @@ def SendEventNotificationAsync( event_name, extra_data = None ):
   event = EventNotification( event_name, extra_data )
   event.Start()
 
+
 def _LoadExtraConfFile( filepath ):
   BaseRequest.PostDataToHandler( { 'filepath': filepath },
                                  'load_extra_conf_file' )
+
 
 def _IgnoreExtraConfFile( filepath ):
   BaseRequest.PostDataToHandler( { 'filepath': filepath },

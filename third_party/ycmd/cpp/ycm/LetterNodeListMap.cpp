@@ -26,7 +26,12 @@ bool IsUppercase( char letter ) {
 }
 
 
-int IndexForChar( char letter ) {
+bool IsInAsciiRange( int index ) {
+  return 0 <= index && index < NUM_LETTERS;
+}
+
+
+int IndexForLetter( char letter ) {
   if ( IsUppercase( letter ) )
     return letter + ( 'a' - 'A' );
 
@@ -35,45 +40,30 @@ int IndexForChar( char letter ) {
 
 
 LetterNodeListMap::LetterNodeListMap() {
-  std::fill( letters_.begin(),
-             letters_.end(),
-             static_cast< std::list< LetterNode * >* >( NULL ) );
 }
 
 
-LetterNodeListMap::~LetterNodeListMap() {
-  for ( uint i = 0; i < letters_.size(); ++i ) {
-    delete letters_[ i ];
-  }
+LetterNodeListMap::LetterNodeListMap( const LetterNodeListMap &other ) {
+  if ( other.letters_ )
+    letters_.reset( new NearestLetterNodeArray( *other.letters_ ) );
 }
 
 
-bool LetterNodeListMap::HasLetter( char letter ) {
-  int letter_index = IndexForChar( letter );
-  std::list< LetterNode * > *list = letters_[ letter_index ];
-  return list;
+NearestLetterNodeIndices &LetterNodeListMap::operator[] ( char letter ) {
+  if ( !letters_ )
+    letters_.reset( new NearestLetterNodeArray() );
+
+  int letter_index = IndexForLetter( letter );
+
+  return letters_->at( letter_index );
 }
 
 
-std::list< LetterNode * > &LetterNodeListMap::operator[] ( char letter ) {
-  int letter_index = IndexForChar( letter );
-  std::list< LetterNode * > *list = letters_[ letter_index ];
+NearestLetterNodeIndices *LetterNodeListMap::ListPointerAt( char letter ) {
+  if ( !letters_ )
+    return NULL;
 
-  if ( list )
-    return *list;
-
-  letters_[ letter_index ] = new std::list< LetterNode * >();
-  return *letters_[ letter_index ];
-}
-
-
-std::list< LetterNode * > *LetterNodeListMap::ListPointerAt( char letter ) {
-  return letters_[ IndexForChar( letter ) ];
-}
-
-
-bool LetterNodeListMap::HasLetter( char letter ) const {
-  return letters_[ IndexForChar( letter ) ] != NULL;
+  return &letters_->at( IndexForLetter( letter ) );
 }
 
 } // namespace YouCompleteMe

@@ -31,11 +31,12 @@ import os.path
 import textwrap
 from ycmd import responses
 from ycmd import extra_conf_store
-from ycmd.utils import ToCppStringCompatible
+from ycmd.utils import ToCppStringCompatible, ToUnicode
 from ycmd.completers.completer import Completer
 from ycmd.completers.completer_utils import GetIncludeStatementValue
 from ycmd.completers.cpp.flags import Flags, PrepareFlagsForClang
 from ycmd.completers.cpp.ephemeral_values_set import EphemeralValuesSet
+from ycmd.responses import NoExtraConfDetected, UnknownExtraConf
 
 import xml.etree.ElementTree
 
@@ -351,6 +352,9 @@ class ClangCompleter( Completer ):
     closest_diagnostic = None
     distance_to_closest_diagnostic = 999
 
+    # FIXME: all of these calculations are currently working with byte
+    # offsets, which are technically incorrect. We should be working with
+    # codepoint offsets, as we want the nearest character-wise diagnostic
     for diagnostic in diagnostics:
       distance = abs( current_column - diagnostic.location_.column_number_ )
       if distance < distance_to_closest_diagnostic:
@@ -363,13 +367,24 @@ class ClangCompleter( Completer ):
 
   def DebugInfo( self, request_data ):
     filename = request_data[ 'filepath' ]
-    if not filename:
-      return ''
-    flags = self._FlagsForRequest( request_data ) or []
-    source = extra_conf_store.ModuleFileForSourceFile( filename )
-    return 'Flags for {0} loaded from {1}:\n{2}'.format( filename,
-                                                         source,
-                                                         list( flags ) )
+    try:
+      extra_conf = extra_conf_store.ModuleFileForSourceFile( filename )
+      flags = self._FlagsForRequest( request_data ) or []
+    except NoExtraConfDetected:
+      return ( 'C-family completer debug information:\n'
+               '  No configuration file found' )
+    except UnknownExtraConf as error:
+      return ( 'C-family completer debug information:\n'
+               '  Configuration file found but not loaded\n'
+               '  Configuration path: {0}'.format(
+                 error.extra_conf_file ) )
+    if not extra_conf:
+      return ( 'C-family completer debug information:\n'
+               '  No configuration file found' )
+    return ( 'C-family completer debug information:\n'
+             '  Configuration file found and loaded\n'
+             '  Configuration path: {0}\n'
+             '  Flags: {1}'.format( extra_conf, list( flags ) ) )
 
 
   def _FlagsForRequest( self, request_data ):
@@ -459,7 +474,7 @@ def _FormatRawComment( comment ):
   return textwrap.dedent(
     '\n'.join( [ re.sub( STRIP_TRAILING_COMMENT, '',
                  re.sub( STRIP_LEADING_COMMENT, '', line ) )
-                 for line in comment.splitlines() ] ) )
+                 for line in ToUnicode( comment ).splitlines() ] ) )
 
 
 def _BuildGetDocResponse( doc_data ):
@@ -485,11 +500,11 @@ def _BuildGetDocResponse( doc_data ):
 
   return responses.BuildDetailedInfoResponse(
     '{0}\n{1}\nType: {2}\nName: {3}\n---\n{4}'.format(
-      declaration.text if declaration is not None else "",
-      doc_data.brief_comment,
-      doc_data.canonical_type,
-      doc_data.display_name,
-      _FormatRawComment( doc_data.raw_comment ) ) )
+      ToUnicode( declaration.text ) if declaration is not None else "",
+      ToUnicode( doc_data.brief_comment ),
+      ToUnicode( doc_data.canonical_type ),
+      ToUnicode( doc_data.display_name ),
+      ToUnicode( _FormatRawComment( doc_data.raw_comment ) ) ) )
 
 
 def _GetAbsolutePath( include_file_name, include_paths ):

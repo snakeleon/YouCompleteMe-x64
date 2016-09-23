@@ -26,13 +26,18 @@ standard_library.install_aliases()
 from builtins import *  # noqa
 
 import os
+from hamcrest import assert_that, contains_inanyorder
 from nose.tools import eq_
 from ycmd.completers.general.filename_completer import FilenameCompleter
 from ycmd.request_wrap import RequestWrap
 from ycmd import user_options_store
+from ycmd.utils import ToBytes
 
 TEST_DIR = os.path.dirname( os.path.abspath( __file__ ) )
-DATA_DIR = os.path.join( TEST_DIR, "testdata", "filename_completer", "inner_dir" )
+DATA_DIR = os.path.join( TEST_DIR,
+                         "testdata",
+                         "filename_completer",
+                         "inner_dir" )
 PATH_TO_TEST_FILE = os.path.join( DATA_DIR, "test.cpp" )
 
 REQUEST_DATA = {
@@ -42,9 +47,18 @@ REQUEST_DATA = {
 }
 
 
-def _CompletionResultsForLine( filename_completer, contents, extra_data=None ):
+def _CompletionResultsForLine( filename_completer,
+                               contents,
+                               extra_data = None,
+                               column_num = None ):
   request = REQUEST_DATA.copy()
-  request[ 'column_num' ] = len( contents ) + 1
+
+  # Strictly, column numbers are *byte* offsets, not character offsets. If
+  # the contents of the file contain unicode characters, then we should manually
+  # supply the correct byte offset.
+  column_num = len( contents ) + 1 if not column_num else column_num
+
+  request[ 'column_num' ] = column_num
   request[ 'file_data' ][ PATH_TO_TEST_FILE ][ 'contents' ] = contents
   if extra_data:
     request.update( extra_data )
@@ -53,6 +67,26 @@ def _CompletionResultsForLine( filename_completer, contents, extra_data=None ):
   candidates = filename_completer.ComputeCandidatesInner( request )
   return [ ( c[ 'insertion_text' ], c[ 'extra_menu_info' ] )
           for c in candidates ]
+
+
+def _ShouldUseNowForLine( filename_completer,
+                          contents,
+                          extra_data = None,
+                          column_num = None ):
+  request = REQUEST_DATA.copy()
+
+  # Strictly, column numbers are *byte* offsets, not character offsets. If
+  # the contents of the file contain unicode characters, then we should manually
+  # supply the correct byte offset.
+  column_num = len( contents ) + 1 if not column_num else column_num
+
+  request[ 'column_num' ] = column_num
+  request[ 'file_data' ][ PATH_TO_TEST_FILE ][ 'contents' ] = contents
+  if extra_data:
+    request.update( extra_data )
+
+  request = RequestWrap( request )
+  return filename_completer.ShouldUseNow( request )
 
 
 class FilenameCompleter_test( object ):
@@ -68,8 +102,16 @@ class FilenameCompleter_test( object ):
     ]
 
 
-  def _CompletionResultsForLine( self, contents ):
-    return _CompletionResultsForLine( self._filename_completer, contents )
+  def _CompletionResultsForLine( self, contents, column_num=None ):
+    return _CompletionResultsForLine( self._filename_completer,
+                                      contents,
+                                      column_num = column_num )
+
+
+  def _ShouldUseNowForLine( self, contents, column_num=None ):
+    return _ShouldUseNowForLine( self._filename_completer,
+                                 contents,
+                                 column_num = column_num )
 
 
   def QuotedIncludeCompletion_test( self ):
@@ -139,11 +181,12 @@ class FilenameCompleter_test( object ):
   def EnvVar_AtStart_File_Partial_test( self ):
     # The reason all entries in the directory are returned is that the
     # RequestWrapper tells the completer to effectively return results for
-    # $YCM_TEST_DIR/testdata/filename_completer/inner_dir/ and the client filters based
-    # on the additional characters.
+    # $YCM_TEST_DIR/testdata/filename_completer/inner_dir/ and the client
+    # filters based on the additional characters.
     os.environ[ 'YCM_TEST_DIR' ] = TEST_DIR
     data = sorted( self._CompletionResultsForLine(
-                    'set x = $YCM_TEST_DIR/testdata/filename_completer/inner_dir/te' ) )
+                    'set x = $YCM_TEST_DIR/testdata/filename_completer/'
+                      'inner_dir/te' ) )
     os.environ.pop( 'YCM_TEST_DIR' )
 
     eq_( [
@@ -158,26 +201,28 @@ class FilenameCompleter_test( object ):
     os.environ[ 'YCMTESTDIR' ] = TEST_DIR
 
     data = sorted( self._CompletionResultsForLine(
-                            'set x = $YCMTESTDIR/testdata/filename_completer/' ) )
+                      'set x = $YCMTESTDIR/testdata/filename_completer/' ) )
 
     os.environ.pop( 'YCMTESTDIR' )
 
-    eq_( [ ('inner_dir', '[Dir]') ], data )
+    eq_( [ ( 'inner_dir', '[Dir]' ), ( '∂†∫', '[Dir]' ) ], data )
 
 
   def EnvVar_AtStart_Dir_Partial_test( self ):
     os.environ[ 'ycm_test_dir' ] = TEST_DIR
     data = sorted( self._CompletionResultsForLine(
-                            'set x = $ycm_test_dir/testdata/filename_completer/inn' ) )
+                    'set x = $ycm_test_dir/testdata/filename_completer/inn' ) )
 
     os.environ.pop( 'ycm_test_dir' )
-    eq_( [ ('inner_dir', '[Dir]') ], data )
+    eq_( [ ( 'inner_dir', '[Dir]' ), ( '∂†∫', '[Dir]' ) ], data )
 
 
   def EnvVar_InMiddle_File_test( self ):
     os.environ[ 'YCM_TEST_filename_completer' ] = 'inner_dir'
     data = sorted( self._CompletionResultsForLine(
-      'set x = ' + TEST_DIR + '/testdata/filename_completer/$YCM_TEST_filename_completer/' ) )
+      'set x = '
+      + TEST_DIR
+      + '/testdata/filename_completer/$YCM_TEST_filename_completer/' ) )
     os.environ.pop( 'YCM_TEST_filename_completer' )
     eq_( [
           ( u'foo漢字.txt', '[File]' ),
@@ -190,7 +235,9 @@ class FilenameCompleter_test( object ):
   def EnvVar_InMiddle_File_Partial_test( self ):
     os.environ[ 'YCM_TEST_filename_c0mpleter' ] = 'inner_dir'
     data = sorted( self._CompletionResultsForLine(
-      'set x = ' + TEST_DIR + '/testdata/filename_completer/$YCM_TEST_filename_c0mpleter/te' ) )
+      'set x = '
+      + TEST_DIR
+      + '/testdata/filename_completer/$YCM_TEST_filename_c0mpleter/te' ) )
     os.environ.pop( 'YCM_TEST_filename_c0mpleter' )
     eq_( [
           ( u'foo漢字.txt', '[File]' ),
@@ -203,24 +250,24 @@ class FilenameCompleter_test( object ):
   def EnvVar_InMiddle_Dir_test( self ):
     os.environ[ 'YCM_TEST_td' ] = 'testd'
     data = sorted( self._CompletionResultsForLine(
-                    'set x = ' + TEST_DIR + '/${YCM_TEST_td}ata/filename_completer/' ) )
+          'set x = ' + TEST_DIR + '/${YCM_TEST_td}ata/filename_completer/' ) )
 
     os.environ.pop( 'YCM_TEST_td' )
-    eq_( [ ('inner_dir', '[Dir]') ], data )
+    eq_( [ ( 'inner_dir', '[Dir]' ), ( '∂†∫', '[Dir]' ) ], data )
 
 
   def EnvVar_InMiddle_Dir_Partial_test( self ):
     os.environ[ 'YCM_TEST_td' ] = 'tdata'
     data = sorted( self._CompletionResultsForLine(
-                    'set x = ' + TEST_DIR + '/tes${YCM_TEST_td}/filename_completer/' ) )
+          'set x = ' + TEST_DIR + '/tes${YCM_TEST_td}/filename_completer/' ) )
     os.environ.pop( 'YCM_TEST_td' )
 
-    eq_( [ ('inner_dir', '[Dir]') ], data )
+    eq_( [ ( 'inner_dir', '[Dir]' ), ( '∂†∫', '[Dir]' ) ], data )
 
 
   def EnvVar_Undefined_test( self ):
     data = sorted( self._CompletionResultsForLine(
-                    'set x = ' + TEST_DIR + '/testdata/filename_completer${YCM_TEST_td}/' ) )
+      'set x = ' + TEST_DIR + '/testdata/filename_completer${YCM_TEST_td}/' ) )
 
     eq_( [ ], data )
 
@@ -228,10 +275,12 @@ class FilenameCompleter_test( object ):
   def EnvVar_Empty_Matches_test( self ):
     os.environ[ 'YCM_empty_var' ] = ''
     data = sorted( self._CompletionResultsForLine(
-                    'set x = ' + TEST_DIR + '/testdata/filename_completer${YCM_empty_var}/' ) )
+      'set x = '
+      + TEST_DIR
+      + '/testdata/filename_completer${YCM_empty_var}/' ) )
     os.environ.pop( 'YCM_empty_var' )
 
-    eq_( [ ('inner_dir', '[Dir]') ], data )
+    eq_( [ ( 'inner_dir', '[Dir]' ), ( '∂†∫', '[Dir]' ) ], data )
 
 
   def EnvVar_Undefined_Garbage_test( self ):
@@ -259,6 +308,32 @@ class FilenameCompleter_test( object ):
 
     os.environ.pop( 'YCM_TEST_td' )
     eq_( [ ], data )
+
+
+  def Unicode_In_Line_Works_test( self ):
+    eq_( True, self._ShouldUseNowForLine(
+      contents = "var x = /†/testing",
+      # The † character is 3 bytes in UTF-8
+      column_num = 15 ) )
+    eq_( [ ], self._CompletionResultsForLine(
+      contents = "var x = /†/testing",
+      # The † character is 3 bytes in UTF-8
+      column_num = 15 ) )
+
+
+  def Unicode_Paths_test( self ):
+    contents = "test " + DATA_DIR + "/../∂"
+    # The column number is the first byte of the ∂ character (1-based )
+    column_num = ( len( ToBytes( "test" ) ) +
+                   len( ToBytes( DATA_DIR ) ) +
+                   len( ToBytes( '/../' ) ) +
+                   1 + # 0-based offset of ∂
+                   1 ) # Make it 1-based
+    eq_( True, self._ShouldUseNowForLine( contents, column_num = column_num ) )
+    assert_that( self._CompletionResultsForLine( contents,
+                                                 column_num = column_num ),
+                 contains_inanyorder( ( 'inner_dir', '[Dir]' ),
+                                      ( '∂†∫', '[Dir]' )  ) )
 
 
 def WorkingDir_Use_File_Path_test():

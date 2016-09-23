@@ -26,19 +26,6 @@ if %arch% == 32 (
 
 set PATH=%python_path%;%python_path%\Scripts;%PATH%
 python --version
-:: Manually setting PYTHONHOME for python 2.7.11 fix the following error when
-:: running core tests: "ImportError: No module named site"
-:: TODO: check if this is still needed when python 2.7.12 is released.
-if %python% == 27 (
-  set PYTHONHOME=%python_path%
-)
-
-:: When using Python 3 on AppVeyor, CMake will always pick the 64 bits
-:: libraries. We specifically tell CMake the right path to the libraries
-:: according to the architecture.
-if %python% == 35 (
-  set EXTRA_CMAKE_ARGS="-DPYTHON_LIBRARY=%python_path%\libs\python%python%.lib"
-)
 
 appveyor DownloadFile https://bootstrap.pypa.io/get-pip.py
 python get-pip.py
@@ -58,13 +45,9 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 :: Rust configuration
 ::
 
-:: The gnu rust compiler is used since, on windows 10, there is a workaround
-:: needed for the msvc versions. However, the workaround sets Omnisharp build
-:: config to 64-bit release mode which results in a failed build.
-appveyor DownloadFile https://static.rust-lang.org/dist/rust-1.5.0-i686-pc-windows-gnu.exe
-rust-1.5.0-i686-pc-windows-gnu.exe /VERYSILENT /NORESTART /DIR="C:\Program Files (x86)\Rust"
-:: TODO: MinGW can be removed once the msvc rust compiler is used.
-set PATH=C:\Program Files (x86)\Rust\bin;C:\MinGW\bin;%PATH%
+appveyor DownloadFile https://static.rust-lang.org/dist/rust-1.8.0-x86_64-pc-windows-msvc.exe
+rust-1.8.0-x86_64-pc-windows-msvc.exe /VERYSILENT /NORESTART /DIR="C:\Program Files\Rust"
+set PATH=C:\Program Files\Rust\bin;%PATH%
 
 rustc -Vv
 cargo -V

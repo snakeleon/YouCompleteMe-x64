@@ -3,7 +3,12 @@ class Foo {
   // Unicode string: 说话
   methodA() {}
   methodB() {}
-  methodC() {}
+  methodC(
+    a: {
+      foo: string;
+      bar: number;
+    }
+  ) {}
 }
 
 var foo = new Foo();
@@ -27,5 +32,6 @@ class Bar {
 
 var bar = new Bar();
 bar.testMethod();
+bar.nonExistingMethod();
 
 Bar.apply()

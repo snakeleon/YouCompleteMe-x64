@@ -18,26 +18,8 @@
 #sys.path.append(os.path.abspath('some/directory'))
 
 import sys, os
-
-# Add and use Pylons theme
-if 'sphinx-build' in ' '.join(sys.argv): # protect against dumb importers
-    from subprocess import call, Popen, PIPE
-
-    p = Popen('which git', shell=True, stdout=PIPE)
-    git = p.stdout.read().strip()
-    cwd = os.getcwd()
-    _themes = os.path.join(cwd, '_themes')
-
-    if not os.path.isdir(_themes):
-        call([git, 'clone', 'git://github.com/Pylons/pylons_sphinx_theme.git',
-                '_themes'])
-    else:
-        os.chdir(_themes)
-        call([git, 'checkout', 'master'])
-        call([git, 'pull'])
-        os.chdir(cwd)
-
-    sys.path.append(os.path.abspath('_themes'))
+import pkg_resources
+import pylons_sphinx_themes
 
 # General configuration
 # ---------------------
@@ -65,7 +47,7 @@ copyright = '2012, Agendaless Consulting <chrism@plope.com>'
 # other places throughout the built documents.
 #
 # The short X.Y version.
-version = '0.8.8'
+version = pkg_resources.get_distribution('waitress').version
 # The full version, including alpha/beta/rc tags.
 release = version
 
@@ -108,8 +90,8 @@ pygments_style = 'sphinx'
 
 # Add and use Pylons theme
 sys.path.append(os.path.abspath('_themes'))
-html_theme_path = ['_themes']
 html_theme = 'pylons'
+html_theme_path = pylons_sphinx_themes.get_html_themes_path()
 html_theme_options = dict(github_url='http://github.com/Pylons/waitress')
 
 # The style sheet to use for HTML and HTML Help pages. A file of that name

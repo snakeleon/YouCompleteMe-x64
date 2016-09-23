@@ -24,10 +24,13 @@ standard_library.install_aliases()
 from builtins import *  # noqa
 
 import time
-import os
 import copy
-from ycmd import utils
+import logging
 from threading import Thread, Lock
+from ycmd.handlers import ServerShutdown
+
+_logger = logging.getLogger( __name__ )
+
 
 # This class implements the Bottle plugin API:
 # http://bottlepy.org/docs/dev/plugindev.html
@@ -46,7 +49,7 @@ class WatchdogPlugin( object ):
 
   def __init__( self,
                 idle_suicide_seconds,
-                check_interval_seconds = 60 * 10 ):
+                check_interval_seconds ):
     self._check_interval_seconds = check_interval_seconds
     self._idle_suicide_seconds = idle_suicide_seconds
 
@@ -94,7 +97,8 @@ class WatchdogPlugin( object ):
       # wait interval to contact us before we die.
       if (self._TimeSinceLastRequest() > self._idle_suicide_seconds and
           self._TimeSinceLastWakeup() < 2 * self._check_interval_seconds):
-        utils.TerminateProcess( os.getpid() )
+        _logger.info( 'Shutting down server due to inactivity' )
+        ServerShutdown()
 
       self._UpdateLastWakeupTime()
 
@@ -104,4 +108,3 @@ class WatchdogPlugin( object ):
       self._SetLastRequestTime( time.time() )
       return callback( *args, **kwargs )
     return wrapper
-

@@ -15,10 +15,22 @@
 # You should have received a copy of the GNU General Public License
 # along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *  # noqa
+
 from mock import MagicMock
 from hamcrest import assert_that, equal_to
 import re
 import sys
+import nose
+import functools
+
+from ycmd.utils import ToUnicode
 
 
 BUFNR_REGEX = re.compile( r"^bufnr\('(.+)', ([0-9]+)\)$" )
@@ -53,7 +65,7 @@ def MockGetBufferWindowNumber( buffer_number ):
 def MockVimEval( value ):
   if value == "g:ycm_min_num_of_chars_for_completion":
     return 0
-  if value == "g:ycm_path_to_python_interpreter":
+  if value == "g:ycm_server_python_interpreter":
     return ''
   if value == "tempname()":
     return '_TEMP_FILE_'
@@ -118,7 +130,60 @@ def MockVimModule():
 
 
 class ExtendedMock( MagicMock ):
+  """An extension to the MagicMock class which adds the ability to check that a
+  callable is called with a precise set of calls in a precise order.
+
+  Example Usage:
+    from ycm.test_utils import ExtendedMock
+    @patch( 'test.testing', new_callable = ExtendedMock, ... )
+    def my_test( test_testing ):
+      ...
+  """
 
   def assert_has_exact_calls( self, calls, any_order = False ):
     self.assert_has_calls( calls, any_order )
     assert_that( self.call_count, equal_to( len( calls ) ) )
+
+
+def ExpectedFailure( reason, *exception_matchers ):
+  """Defines a decorator to be attached to tests. This decorator
+  marks the test as being known to fail, e.g. where documenting or exercising
+  known incorrect behaviour.
+
+  The parameters are:
+    - |reason| a textual description of the reason for the known issue. This
+               is used for the skip reason
+    - |exception_matchers| additional arguments are hamcrest matchers to apply
+                 to the exception thrown. If the matchers don't match, then the
+                 test is marked as error, with the original exception.
+
+  If the test fails (for the correct reason), then it is marked as skipped.
+  If it fails for any other reason, it is marked as failed.
+  If the test passes, then it is also marked as failed."""
+  def decorator( test ):
+    @functools.wraps( test )
+    def Wrapper( *args, **kwargs ):
+      try:
+        test( *args, **kwargs )
+      except Exception as test_exception:
+        # Ensure that we failed for the right reason
+        test_exception_message = ToUnicode( test_exception )
+        try:
+          for matcher in exception_matchers:
+            assert_that( test_exception_message, matcher )
+        except AssertionError:
+          # Failed for the wrong reason!
+          import traceback
+          print( 'Test failed for the wrong reason: ' + traceback.format_exc() )
+          # Real failure reason is the *original* exception, we're only trapping
+          # and ignoring the exception that is expected.
+          raise test_exception
+
+        # Failed for the right reason
+        raise nose.SkipTest( reason )
+      else:
+        raise AssertionError( 'Test was expected to fail: {0}'.format(
+          reason ) )
+    return Wrapper
+
+  return decorator

@@ -13,6 +13,7 @@
 ##############################################################################
 import asyncore
 import socket
+import threading
 import time
 import traceback
 
@@ -22,8 +23,6 @@ from waitress.buffers import (
 )
 
 from waitress.parser import HTTPRequestParser
-
-from waitress.compat import thread
 
 from waitress.task import (
     ErrorTask,
@@ -73,9 +72,9 @@ class HTTPChannel(logging_dispatcher, object):
         self.creation_time = self.last_activity = time.time()
 
         # task_lock used to push/pop requests
-        self.task_lock = thread.allocate_lock()
+        self.task_lock = threading.Lock()
         # outbuf_lock used to access any outbuf
-        self.outbuf_lock = thread.allocate_lock()
+        self.outbuf_lock = threading.Lock()
 
         asyncore.dispatcher.__init__(self, sock, map=map)
 
@@ -221,7 +220,7 @@ class HTTPChannel(logging_dispatcher, object):
     def _flush_some_if_lockable(self):
         # Since our task may be appending to the outbuf, we try to acquire
         # the lock, but we don't block if we can't.
-        locked = self.outbuf_lock.acquire(0)
+        locked = self.outbuf_lock.acquire(False)
         if locked:
             try:
                 self._flush_some()
@@ -244,7 +243,7 @@ class HTTPChannel(logging_dispatcher, object):
                 if len(self.outbufs) > 1:
                     toclose = self.outbufs.pop(0)
                     try:
-                        toclose._close()
+                        toclose.close()
                     except:
                         self.logger.exception(
                             'Unexpected error when closing an outbuf')
@@ -275,7 +274,7 @@ class HTTPChannel(logging_dispatcher, object):
     def handle_close(self):
         for outbuf in self.outbufs:
             try:
-                outbuf._close()
+                outbuf.close()
             except:
                 self.logger.exception(
                     'Unknown exception while trying to close outbuf')
@@ -365,11 +364,11 @@ class HTTPChannel(logging_dispatcher, object):
                 if task.close_on_finish:
                     self.close_when_flushed = True
                     for request in self.requests:
-                        request._close()
+                        request.close()
                     self.requests = []
                 else:
                     request = self.requests.pop(0)
-                    request._close()
+                    request.close()
 
         self.force_flush = True
         self.server.pull_trigger()

@@ -1,5 +1,52 @@
-Unreleased
-----------
+0.8.10 (2015-08-02)
+-------------------
+
+- Add support for Python 3.4, 3.5b2, and PyPy3.
+
+- Use a nonglobal asyncore socket map by default, trying to prevent conflicts
+  with apps and libs that use the asyncore global socket map ala
+  https://github.com/Pylons/waitress/issues/63.  You can get the old
+  use-global-socket-map behavior back by passing ``asyncore.socket_map`` to the
+  ``create_server`` function as the ``map`` argument.
+
+- Waitress violated PEP 3333 with respect to reraising an exception when
+  ``start_response`` was called with an ``exc_info`` argument.  It would
+  reraise the exception even if no data had been sent to the client.  It now
+  only reraises the exception if data has actually been sent to the client.
+  See https://github.com/Pylons/waitress/pull/52 and
+  https://github.com/Pylons/waitress/issues/51
+
+- Add a ``docs`` section to tox.ini that, when run, ensures docs can be built.
+
+- If an ``application`` value of ``None`` is supplied to the ``create_server``
+  constructor function, a ValueError is now raised eagerly instead of an error
+  occuring during runtime.  See https://github.com/Pylons/waitress/pull/60
+
+- Fix parsing of multi-line (folded) headers.
+  See https://github.com/Pylons/waitress/issues/53 and
+  https://github.com/Pylons/waitress/pull/90
+
+- Switch from the low level Python thread/_thread module to the threading
+  module.
+
+- Improved exception information should module import go awry.
+
+0.8.9 (2014-05-16)
+------------------
+
+- Fix tests under Windows.  NB: to run tests under Windows, you cannot run
+  "setup.py test" or "setup.py nosetests".  Instead you must run ``python.exe
+  -c "import nose; nose.main()"``.  If you try to run the tests using the
+  normal method under Windows, each subprocess created by the test suite will
+  attempt to run the test suite again.  See
+  https://github.com/nose-devs/nose/issues/407 for more information.
+
+- Give the WSGI app_iter generated when ``wsgi.file_wrapper`` is used
+  (ReadOnlyFileBasedBuffer) a ``close`` method.  Do not call ``close`` on an
+  instance of such a class when it's used as a WSGI app_iter, however.  This is
+  part of a fix which prevents a leakage of file descriptors; the other part of
+  the fix was in WebOb
+  (https://github.com/Pylons/webob/commit/951a41ce57bd853947f842028bccb500bd5237da).
 
 - Allow trusted proxies to override ``wsgi.url_scheme`` via a request header,
   ``X_FORWARDED_PROTO``.  Allows proxies which serve mixed HTTP / HTTPS

@@ -201,15 +201,15 @@ foo: bar"""
         self.parser.parse_header(data)
         self.assertEqual(self.parser.connection_close, True)
 
-    def test__close_with_body_rcv(self):
+    def test_close_with_body_rcv(self):
         body_rcv = DummyBodyStream()
         self.parser.body_rcv = body_rcv
-        self.parser._close()
+        self.parser.close()
         self.assertTrue(body_rcv.closed)
 
-    def test__close_with_no_body_rcv(self):
+    def test_close_with_no_body_rcv(self):
         self.parser.body_rcv = None
-        self.parser._close() # doesn't raise
+        self.parser.close() # doesn't raise
 
 class Test_split_uri(unittest.TestCase):
 
@@ -259,9 +259,21 @@ class Test_get_header_lines(unittest.TestCase):
         result = self._callFUT(b'slam\nslim')
         self.assertEqual(result, [b'slam', b'slim'])
 
+    def test_get_header_lines_folded(self):
+        # From RFC2616:
+        # HTTP/1.1 header field values can be folded onto multiple lines if the
+        # continuation line begins with a space or horizontal tab. All linear
+        # white space, including folding, has the same semantics as SP. A
+        # recipient MAY replace any linear white space with a single SP before
+        # interpreting the field value or forwarding the message downstream.
+
+        # We are just preserving the whitespace that indicates folding.
+        result = self._callFUT(b'slim\n slam')
+        self.assertEqual(result, [b'slim slam'])
+
     def test_get_header_lines_tabbed(self):
         result = self._callFUT(b'slam\n\tslim')
-        self.assertEqual(result, [b'slamslim'])
+        self.assertEqual(result, [b'slam\tslim'])
 
     def test_get_header_lines_malformed(self):
         # http://corte.si/posts/code/pathod/pythonservers/index.html
@@ -407,5 +419,5 @@ class DummyBodyStream(object):
     def getbuf(self):
         return self
 
-    def _close(self):
+    def close(self):
         self.closed = True

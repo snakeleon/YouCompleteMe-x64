@@ -20,7 +20,8 @@
 
 #include "DLLDefines.h"
 
-#include <list>
+#include <vector>
+#include <boost/move/unique_ptr.hpp>
 #include <boost/utility.hpp>
 #include <boost/array.hpp>
 
@@ -30,24 +31,51 @@ namespace YouCompleteMe {
 
 class LetterNode;
 
-YCM_DLL_EXPORT int IndexForChar( char letter );
 YCM_DLL_EXPORT bool IsUppercase( char letter );
+bool IsInAsciiRange( int index );
+YCM_DLL_EXPORT int IndexForLetter( char letter );
 
-class LetterNodeListMap : boost::noncopyable {
+/*
+ * This struct is used as part of the LetterNodeListMap structure.
+ * Every LetterNode represents 1 position in a string, and contains
+ * one LetterNodeListMap. The LetterNodeListMap records the first
+ * occurrence of all ascii characters after the current LetterNode
+ * in the original string. For each character, the
+ * LetterNodeListMap contains one instance of NearestLetterNodeIndices
+ *
+ * The struct records the position in the original string of the character
+ * after the current LetterNode, both the first occurrence overall and the
+ * first uppercase occurrence. If the letter (or uppercase version)
+ * doesn't occur, it records -1, indicating it isn't present.
+ *
+ * The indices can be used to retrieve the corresponding LetterNode from
+ * the root LetterNode, as it contains a vector of LetterNodes, one per 
+ * position in the original string.
+ */
+struct NearestLetterNodeIndices {
+  NearestLetterNodeIndices()
+    : indexOfFirstOccurrence( -1 ),
+      indexOfFirstUppercaseOccurrence( -1 )
+  {}
+
+  short indexOfFirstOccurrence;
+  short indexOfFirstUppercaseOccurrence;
+};
+
+class LetterNodeListMap {
 public:
   LetterNodeListMap();
-  YCM_DLL_EXPORT ~LetterNodeListMap();
+  LetterNodeListMap( const LetterNodeListMap &other );
 
-  bool HasLetter( char letter );
+  NearestLetterNodeIndices &operator[] ( char letter );
 
-  std::list< LetterNode * > &operator[] ( char letter );
-
-  std::list< LetterNode * > *ListPointerAt( char letter );
-
-  bool HasLetter( char letter ) const;
+  YCM_DLL_EXPORT NearestLetterNodeIndices *ListPointerAt( char letter );
 
 private:
-  boost::array< std::list< LetterNode * >*, NUM_LETTERS > letters_;
+  typedef boost::array<NearestLetterNodeIndices , NUM_LETTERS>
+    NearestLetterNodeArray;
+
+  boost::movelib::unique_ptr< NearestLetterNodeArray > letters_;
 };
 
 } // namespace YouCompleteMe

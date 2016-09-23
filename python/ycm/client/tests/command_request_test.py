@@ -15,7 +15,15 @@
 # You should have received a copy of the GNU General Public License
 # along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
 
-from ycm.test_utils import MockVimModule
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *  # noqa
+
+from ycm.test_utils import ExtendedMock, MockVimModule
 MockVimModule()
 
 import json
@@ -24,7 +32,7 @@ from nose.tools import ok_
 from ycm.client.command_request import CommandRequest
 
 
-class GoToResponse_QuickFix_test:
+class GoToResponse_QuickFix_test( object ):
   """This class tests the generation of QuickFix lists for GoTo responses which
   return multiple locations, such as the Python completer and JavaScript
   completer. It mostly proves that we use 1-based indexing for the column
@@ -80,19 +88,33 @@ class GoToResponse_QuickFix_test:
     } ] )
 
 
-  @patch( 'vim.eval' )
-  def _CheckGoToList( self, completer_response, expected_qf_list, vim_eval ):
+  @patch( 'ycm.vimsupport.VariableExists', return_value = True )
+  @patch( 'ycm.vimsupport.SetFittingHeightForCurrentWindow' )
+  @patch( 'vim.command', new_callable = ExtendedMock )
+  @patch( 'vim.eval', new_callable = ExtendedMock )
+  def _CheckGoToList( self,
+                      completer_response,
+                      expected_qf_list,
+                      vim_eval,
+                      vim_command,
+                      set_fitting_height,
+                      variable_exists ):
     self._request._response = completer_response
 
     self._request.RunPostCommandActionsIfNeeded()
 
-    vim_eval.assert_has_calls( [
-      call( 'setqflist( {0} )'.format( json.dumps( expected_qf_list ) ) ),
-      call( 'youcompleteme#OpenGoToList()' ),
+    vim_eval.assert_has_exact_calls( [
+      call( 'setqflist( {0} )'.format( json.dumps( expected_qf_list ) ) )
     ] )
+    vim_command.assert_has_exact_calls( [
+      call( 'botright copen' ),
+      call( 'au WinLeave <buffer> q' ),
+      call( 'doautocmd User YcmQuickFixOpened' )
+    ] )
+    set_fitting_height.assert_called_once_with()
 
 
-class Response_Detection_test:
+class Response_Detection_test( object ):
 
   def BasicResponse_test( self ):
     def _BasicResponseTest( command, response ):
@@ -100,7 +122,7 @@ class Response_Detection_test:
         request = CommandRequest( [ command ] )
         request._response = response
         request.RunPostCommandActionsIfNeeded()
-        vim_command.assert_called_with( "echom '{0}'".format( response ) )
+        vim_command.assert_called_with( "echo '{0}'".format( response ) )
 
     tests = [
       [ 'AnythingYouLike',        True ],
@@ -118,14 +140,15 @@ class Response_Detection_test:
     # are no fixits available
     def EmptyFixItTest( command ):
       with patch( 'ycm.vimsupport.ReplaceChunks' ) as replace_chunks:
-        with patch( 'ycm.vimsupport.EchoText' ) as echo_text:
+        with patch( 'ycm.vimsupport.PostVimMessage' ) as post_vim_message:
           request = CommandRequest( [ command ] )
           request._response = {
             'fixits': []
           }
           request.RunPostCommandActionsIfNeeded()
 
-          echo_text.assert_called_with( 'No fixits found for current line' )
+          post_vim_message.assert_called_with(
+            'No fixits found for current line', warning = False )
           replace_chunks.assert_not_called()
 
     for test in [ 'FixIt', 'Refactor', 'GoToHell', 'any_old_garbade!!!21' ]:
@@ -134,15 +157,17 @@ class Response_Detection_test:
 
   def FixIt_Response_test( self ):
     # Ensures we recognise and handle fixit responses with some dummy chunk data
-    def FixItTest( command, response, chunks ):
+    def FixItTest( command, response, chunks, selection ):
       with patch( 'ycm.vimsupport.ReplaceChunks' ) as replace_chunks:
-        with patch( 'ycm.vimsupport.EchoText' ) as echo_text:
-          request = CommandRequest( [ command ] )
-          request._response = response
-          request.RunPostCommandActionsIfNeeded()
+        with patch( 'ycm.vimsupport.PostVimMessage' ) as post_vim_message:
+          with patch( 'ycm.vimsupport.SelectFromList',
+                      return_value = selection ):
+            request = CommandRequest( [ command ] )
+            request._response = response
+            request.RunPostCommandActionsIfNeeded()
 
-          replace_chunks.assert_called_with( chunks )
-          echo_text.assert_not_called()
+            replace_chunks.assert_called_with( chunks )
+            post_vim_message.assert_not_called()
 
     basic_fixit = {
       'fixits': [ {
@@ -155,25 +180,31 @@ class Response_Detection_test:
 
     multi_fixit = {
       'fixits': [ {
+        'text': 'first',
         'chunks': [ {
           'dummy chunk contents': True
         } ]
       }, {
-        'additional fixits are ignored currently': True
+        'text': 'second',
+        'chunks': [ {
+          'dummy chunk contents': False
+        }]
       } ]
     }
     multi_fixit_first_chunks = multi_fixit[ 'fixits' ][ 0 ][ 'chunks' ]
+    multi_fixit_second_chunks = multi_fixit[ 'fixits' ][ 1 ][ 'chunks' ]
 
     tests = [
-      [ 'AnythingYouLike',        basic_fixit, basic_fixit_chunks ],
-      [ 'GoToEvenWorks',          basic_fixit, basic_fixit_chunks ],
-      [ 'FixItWorks',             basic_fixit, basic_fixit_chunks ],
-      [ 'and8434fd andy garbag!', basic_fixit, basic_fixit_chunks ],
-      [ 'additional fixits ignored', multi_fixit, multi_fixit_first_chunks ],
+      [ 'AnythingYouLike',        basic_fixit, basic_fixit_chunks, 0 ],
+      [ 'GoToEvenWorks',          basic_fixit, basic_fixit_chunks, 0 ],
+      [ 'FixItWorks',             basic_fixit, basic_fixit_chunks, 0 ],
+      [ 'and8434fd andy garbag!', basic_fixit, basic_fixit_chunks, 0 ],
+      [ 'select from multiple 1',   multi_fixit, multi_fixit_first_chunks, 0 ],
+      [ 'select from multiple 2',   multi_fixit, multi_fixit_second_chunks, 1 ],
     ]
 
     for test in tests:
-      yield FixItTest, test[ 0 ], test[ 1 ], test[ 2 ]
+      yield FixItTest, test[ 0 ], test[ 1 ], test[ 2 ], test[ 3 ]
 
 
   def Message_Response_test( self ):
@@ -181,11 +212,11 @@ class Response_Detection_test:
     # to the user
 
     def MessageTest( command, message ):
-      with patch( 'ycm.vimsupport.EchoText' ) as echo_text:
+      with patch( 'ycm.vimsupport.PostVimMessage' ) as post_vim_message:
         request = CommandRequest( [ command ] )
         request._response = { 'message': message }
         request.RunPostCommandActionsIfNeeded()
-        echo_text.assert_called_with( message )
+        post_vim_message.assert_called_with( message, warning = False )
 
     tests = [
       [ '___________', 'This is a message' ],
@@ -236,12 +267,10 @@ class Response_Detection_test:
       # GoToResponse_QuickFix_test, so here we just check that the right call is
       # made
       with patch( 'ycm.vimsupport.SetQuickFixList' ) as set_qf_list:
-        with patch( 'vim.eval' ) as vim_eval:
-          request = CommandRequest( [ command ] )
-          request._response = response
-          request.RunPostCommandActionsIfNeeded()
-          ok_( set_qf_list.called )
-          ok_( vim_eval.called )
+        request = CommandRequest( [ command ] )
+        request._response = response
+        request.RunPostCommandActionsIfNeeded()
+        ok_( set_qf_list.called )
 
     basic_goto = {
       'filepath': 'test',

@@ -1,3 +1,5 @@
+# encoding: utf-8
+#
 # Copyright (C) 2016  ycmd contributors.
 #
 # This file is part of ycmd.
@@ -25,13 +27,17 @@ from builtins import *  # noqa
 
 import os
 import subprocess
+import tempfile
 from shutil import rmtree
 import ycm_core
 from future.utils import native
 from mock import patch, call
 from nose.tools import eq_, ok_
 from ycmd import utils
-from ycmd.tests.test_utils import PathToTestFile, Py2Only, Py3Only, WindowsOnly
+from ycmd.tests.test_utils import ( Py2Only, Py3Only, WindowsOnly, UnixOnly,
+                                    CurrentWorkingDirectory,
+                                    TemporaryExecutable )
+from ycmd.tests import PathToTestFile
 
 # NOTE: isinstance() vs type() is carefully used in this test file. Before
 # changing things here, read the comments in utils.ToBytes.
@@ -278,24 +284,24 @@ def PathToFirstExistingExecutable_Failure_test():
   ok_( not utils.PathToFirstExistingExecutable( [ 'ycmd-foobar' ] ) )
 
 
-@patch( 'os.environ', { 'TRAVIS': 1 } )
-def OnTravis_IsOnTravis_test():
-  ok_( utils.OnTravis() )
-
-
-@patch( 'os.environ', {} )
-def OnTravis_IsNotOnTravis_test():
-  ok_( not utils.OnTravis() )
-
-
-@patch( 'ycmd.utils.OnWindows', return_value = False )
+@UnixOnly
 @patch( 'subprocess.Popen' )
-def SafePopen_RemovesStdinWindows_test( *args ):
-  utils.SafePopen( [ 'foo' ], stdin_windows = subprocess.PIPE )
+def SafePopen_RemoveStdinWindows_test( *args ):
+  utils.SafePopen( [ 'foo' ], stdin_windows = 'bar' )
   eq_( subprocess.Popen.call_args, call( [ 'foo' ] ) )
 
 
-@patch( 'ycmd.utils.OnWindows', return_value = True )
+@WindowsOnly
+@patch( 'subprocess.Popen' )
+def SafePopen_ReplaceStdinWindowsPIPEOnWindows_test( *args ):
+  utils.SafePopen( [ 'foo' ], stdin_windows = subprocess.PIPE )
+  eq_( subprocess.Popen.call_args,
+       call( [ 'foo' ],
+             stdin = subprocess.PIPE,
+             creationflags = utils.CREATE_NO_WINDOW ) )
+
+
+@WindowsOnly
 @patch( 'ycmd.utils.GetShortPathName', side_effect = lambda x: x )
 @patch( 'subprocess.Popen' )
 def SafePopen_WindowsPath_test( *args ):
@@ -312,21 +318,21 @@ def SafePopen_WindowsPath_test( *args ):
     os.remove( tempfile )
 
 
-@patch( 'ycmd.utils.OnWindows', return_value = False )
+@UnixOnly
 def ConvertArgsToShortPath_PassthroughOnUnix_test( *args ):
   eq_( 'foo', utils.ConvertArgsToShortPath( 'foo' ) )
   eq_( [ 'foo' ], utils.ConvertArgsToShortPath( [ 'foo' ] ) )
 
 
-@patch( 'ycmd.utils.OnWindows', return_value = False )
-def SetEnviron_UnicodeNotOnWindows_test( *args ):
+@UnixOnly
+def SetEnviron_UnicodeOnUnix_test( *args ):
   env = {}
   utils.SetEnviron( env, u'key', u'value' )
   eq_( env, { u'key': u'value' } )
 
 
 @Py2Only
-@patch( 'ycmd.utils.OnWindows', return_value = True )
+@WindowsOnly
 def SetEnviron_UnicodeOnWindows_test( *args ):
   env = {}
   utils.SetEnviron( env, u'key', u'value' )
@@ -374,3 +380,139 @@ def OpenForStdHandle_PrintDoesntThrowException_test():
       print( 'foo', file = f )
   finally:
     os.remove( temp )
+
+
+def CodepointOffsetToByteOffset_test():
+  # Tuples of ( ( unicode_line_value, codepoint_offset ), expected_result ).
+  tests = [
+    # Simple ascii strings.
+    ( ( 'test', 1 ), 1 ),
+    ( ( 'test', 4 ), 4 ),
+    ( ( 'test', 5 ), 5 ),
+
+    # Unicode char at beginning.
+    ( ( '†est', 1 ), 1 ),
+    ( ( '†est', 2 ), 4 ),
+    ( ( '†est', 4 ), 6 ),
+    ( ( '†est', 5 ), 7 ),
+
+    # Unicode char at end.
+    ( ( 'tes†', 1 ), 1 ),
+    ( ( 'tes†', 2 ), 2 ),
+    ( ( 'tes†', 4 ), 4 ),
+    ( ( 'tes†', 5 ), 7 ),
+
+    # Unicode char in middle.
+    ( ( 'tes†ing', 1 ), 1 ),
+    ( ( 'tes†ing', 2 ), 2 ),
+    ( ( 'tes†ing', 4 ), 4 ),
+    ( ( 'tes†ing', 5 ), 7 ),
+    ( ( 'tes†ing', 7 ), 9 ),
+    ( ( 'tes†ing', 8 ), 10 ),
+
+    # Converts bytes to Unicode.
+    ( ( utils.ToBytes( '†est' ), 2 ), 4 )
+  ]
+
+  for test in tests:
+    yield lambda: eq_( utils.CodepointOffsetToByteOffset( *test[ 0 ] ),
+                       test[ 1 ] )
+
+
+def ByteOffsetToCodepointOffset_test():
+  # Tuples of ( ( unicode_line_value, byte_offset ), expected_result ).
+  tests = [
+    # Simple ascii strings.
+    ( ( 'test', 1 ), 1 ),
+    ( ( 'test', 4 ), 4 ),
+    ( ( 'test', 5 ), 5 ),
+
+    # Unicode char at beginning.
+    ( ( '†est', 1 ), 1 ),
+    ( ( '†est', 4 ), 2 ),
+    ( ( '†est', 6 ), 4 ),
+    ( ( '†est', 7 ), 5 ),
+
+    # Unicode char at end.
+    ( ( 'tes†', 1 ), 1 ),
+    ( ( 'tes†', 2 ), 2 ),
+    ( ( 'tes†', 4 ), 4 ),
+    ( ( 'tes†', 7 ), 5 ),
+
+    # Unicode char in middle.
+    ( ( 'tes†ing', 1 ), 1 ),
+    ( ( 'tes†ing', 2 ), 2 ),
+    ( ( 'tes†ing', 4 ), 4 ),
+    ( ( 'tes†ing', 7 ), 5 ),
+    ( ( 'tes†ing', 9 ), 7 ),
+    ( ( 'tes†ing', 10 ), 8 ),
+  ]
+
+  for test in tests:
+    yield lambda: eq_( utils.ByteOffsetToCodepointOffset( *test[ 0 ] ),
+                       test[ 1 ] )
+
+
+def SplitLines_test():
+  # Tuples of ( input, expected_output ) for utils.SplitLines.
+  tests = [
+    ( '', [ '' ] ),
+    ( ' ', [ ' ' ] ),
+    ( '\n', [ '', '' ] ),
+    ( ' \n', [ ' ', '' ] ),
+    ( ' \n ', [ ' ', ' ' ] ),
+    ( 'test\n', [ 'test', '' ] ),
+    ( '\r', [ '', '' ] ),
+    ( '\r ', [ '', ' ' ] ),
+    ( 'test\r', [ 'test', '' ] ),
+    ( '\n\r', [ '', '', '' ] ),
+    ( '\r\n', [ '', '' ] ),
+    ( '\r\n\n', [ '', '', '' ] ),
+    # Other behaviors are just the behavior of splitlines, so just a couple of
+    # tests to prove that we don't mangle it.
+    ( 'test\ntesting', [ 'test', 'testing' ] ),
+    ( '\ntesting', [ '', 'testing' ] ),
+  ]
+
+  for test in tests:
+    yield lambda: eq_( utils.SplitLines( test[ 0 ] ), test[ 1 ] )
+
+
+def FindExecutable_AbsolutePath_test():
+  with TemporaryExecutable() as executable:
+    eq_( executable, utils.FindExecutable( executable ) )
+
+
+def FindExecutable_RelativePath_test():
+  with TemporaryExecutable() as executable:
+    dirname, exename = os.path.split( executable )
+    relative_executable = os.path.join( '.', exename )
+    with CurrentWorkingDirectory( dirname ):
+      eq_( relative_executable, utils.FindExecutable( relative_executable ) )
+
+
+@patch.dict( 'os.environ', { 'PATH': tempfile.gettempdir() } )
+def FindExecutable_ExecutableNameInPath_test():
+  with TemporaryExecutable() as executable:
+    dirname, exename = os.path.split( executable )
+    eq_( executable, utils.FindExecutable( exename ) )
+
+
+def FindExecutable_ReturnNoneIfFileIsNotExecutable_test():
+  with tempfile.NamedTemporaryFile() as non_executable:
+    eq_( None, utils.FindExecutable( non_executable.name ) )
+
+
+@WindowsOnly
+def FindExecutable_CurrentDirectory_test():
+  with TemporaryExecutable() as executable:
+    dirname, exename = os.path.split( executable )
+    with CurrentWorkingDirectory( dirname ):
+      eq_( executable, utils.FindExecutable( exename ) )
+
+
+@WindowsOnly
+@patch.dict( 'os.environ', { 'PATHEXT': '.xyz' } )
+def FindExecutable_AdditionalPathExt_test():
+  with TemporaryExecutable( extension = '.xyz' ) as executable:
+    eq_( executable, utils.FindExecutable( executable ) )

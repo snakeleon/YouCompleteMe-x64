@@ -38,7 +38,10 @@ class FixtureTcpWSGIServer(server.TcpWSGIServer):
         # Coverage doesn't see this as it's ran in a separate process.
         kw['port'] = 0 # Bind to any available port.
         super(FixtureTcpWSGIServer, self).__init__(application, **kw)
-        queue.put(self.socket.getsockname())
+        host, port = self.socket.getsockname()
+        if os.name == 'nt':
+            host = '127.0.0.1'
+        queue.put((host, port))
 
 class SubprocessTests(object):
 
@@ -51,23 +54,25 @@ class SubprocessTests(object):
 
     def start_subprocess(self, target, **kw):
         # Spawn a server process.
-        queue = multiprocessing.Queue()
+        self.queue = multiprocessing.Queue()
         self.proc = multiprocessing.Process(
             target=start_server,
-            args=(target, self.server, queue),
+            args=(target, self.server, self.queue),
             kwargs=kw,
         )
         self.proc.start()
         if self.proc.exitcode is not None: # pragma: no cover
             raise RuntimeError("%s didn't start" % str(target))
         # Get the socket the server is listening on.
-        self.bound_to = queue.get(timeout=5)
+        self.bound_to = self.queue.get(timeout=5)
         self.sock = self.create_socket()
 
     def stop_subprocess(self):
         if self.proc.exitcode is None:
             self.proc.terminate()
         self.sock.close()
+        # This give us one FD back ...
+        self.queue.close()
 
     def assertline(self, line, status, reason, version):
         v, s, r = (x.strip() for x in line.split(None, 2))
@@ -1473,7 +1478,9 @@ def read_http(fp): # pragma: no cover
     try:
         response_line = fp.readline()
     except socket.error as exc:
-        if get_errno(exc) in (10053, 10054, 104):
+        fp.close()
+        # errno 104 is ENOTRECOVERABLE, In WinSock 10054 is ECONNRESET
+        if get_errno(exc) in (errno.ECONNABORTED, errno.ECONNRESET, 104, 10054):
             raise ConnectionClosed
         raise
     if not response_line:

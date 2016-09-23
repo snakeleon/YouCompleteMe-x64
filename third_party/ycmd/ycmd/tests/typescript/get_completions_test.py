@@ -23,63 +23,150 @@ from future import standard_library
 standard_library.install_aliases()
 from builtins import *  # noqa
 
-from hamcrest import assert_that, contains_inanyorder, has_entries
-from .typescript_handlers_test import Typescript_Handlers_test
-from ycmd.utils import ReadFile
+from hamcrest import ( all_of, any_of, assert_that, calling,
+                       contains_inanyorder, has_entries, has_item, is_not,
+                       raises )
 from mock import patch
+from webtest import AppError
+
+from ycmd.tests.typescript import IsolatedYcmd, PathToTestFile, SharedYcmd
+from ycmd.tests.test_utils import ( BuildRequest, CompletionEntryMatcher,
+                                    StopCompleterServer )
+from ycmd.utils import ReadFile
 
 
-class TypeScript_GetCompletions_test( Typescript_Handlers_test ):
+def RunTest( app, test ):
+  filepath = PathToTestFile( 'test.ts' )
+  contents = ReadFile( filepath )
 
-  def _RunTest( self, test ):
-    filepath = self._PathToTestFile( 'test.ts' )
-    contents = ReadFile( filepath )
+  event_data = BuildRequest( filepath = filepath,
+                             filetype = 'typescript',
+                             contents = contents,
+                             event_name = 'BufferVisit' )
 
-    event_data = self._BuildRequest( filepath = filepath,
-                                     filetype = 'typescript',
-                                     contents = contents,
-                                     event_name = 'BufferVisit' )
+  app.post_json( '/event_notification', event_data )
 
-    self._app.post_json( '/event_notification', event_data )
+  completion_data = BuildRequest( filepath = filepath,
+                                  filetype = 'typescript',
+                                  contents = contents,
+                                  force_semantic = True,
+                                  line_num = 17,
+                                  column_num = 6 )
 
-    completion_data = self._BuildRequest( filepath = filepath,
-                                          filetype = 'typescript',
-                                          contents = contents,
-                                          force_semantic = True,
-                                          line_num = 12,
-                                          column_num = 6 )
+  response = app.post_json( '/completions', completion_data )
 
-    response = self._app.post_json( '/completions', completion_data )
-    assert_that( response.json, test[ 'expect' ][ 'data' ] )
-
-
-  def Basic_test( self ):
-    self._RunTest( {
-      'expect': {
-        'data': has_entries( {
-          'completions': contains_inanyorder(
-            self.CompletionEntryMatcher( 'methodA',
-                                         'methodA (method) Foo.methodA(): void' ),
-            self.CompletionEntryMatcher( 'methodB',
-                                         'methodB (method) Foo.methodB(): void' ),
-            self.CompletionEntryMatcher( 'methodC',
-                                         'methodC (method) Foo.methodC(): void' ),
-          )
-        } )
-      }
-    } )
+  assert_that( response.json, test[ 'expect' ][ 'data' ] )
 
 
-  @patch( 'ycmd.completers.typescript.typescript_completer.MAX_DETAILED_COMPLETIONS', 2 )
-  def MaxDetailedCompletion_test( self ):
-    self._RunTest( {
-      'expect': {
-        'data': has_entries( {
-          'completions': contains_inanyorder(
-            self.CompletionEntryMatcher( 'methodA' ),
-            self.CompletionEntryMatcher( 'methodB' ),
-            self.CompletionEntryMatcher( 'methodC' )
-          )
-        } )
-      }
-    } )
+@SharedYcmd
+def GetCompletions_Basic_test( app ):
+  RunTest( app, {
+    'expect': {
+      'data': has_entries( {
+        'completions': contains_inanyorder(
+          CompletionEntryMatcher( 'methodA', extra_params = {
+            'menu_text': 'methodA (method) Foo.methodA(): void' } ),
+          CompletionEntryMatcher( 'methodB', extra_params = {
+            'menu_text': 'methodB (method) Foo.methodB(): void' } ),
+          CompletionEntryMatcher( 'methodC', extra_params = {
+            'menu_text': ( 'methodC (method) Foo.methodC(a: '
+                           '{ foo: string; bar: number; }): void' ) } ),
+        )
+      } )
+    }
+  } )
+
+
+@SharedYcmd
+@patch( 'ycmd.completers.typescript.'
+          'typescript_completer.MAX_DETAILED_COMPLETIONS',
+        2 )
+def GetCompletions_MaxDetailedCompletion_test( app ):
+  RunTest( app, {
+    'expect': {
+      'data': has_entries( {
+        'completions': all_of(
+          contains_inanyorder(
+            CompletionEntryMatcher( 'methodA' ),
+            CompletionEntryMatcher( 'methodB' ),
+            CompletionEntryMatcher( 'methodC' ),
+          ),
+          is_not( any_of(
+            has_item(
+              CompletionEntryMatcher( 'methodA', extra_params = {
+                'menu_text': 'methodA (method) Foo.methodA(): void' } ) ),
+            has_item(
+              CompletionEntryMatcher( 'methodB', extra_params = {
+                'menu_text': 'methodB (method) Foo.methodB(): void' } ) ),
+            has_item(
+              CompletionEntryMatcher( 'methodC', extra_params = {
+                'menu_text': ( 'methodC (method) Foo.methodC(a: '
+                               '{ foo: string; bar: number; }): void' ) } ) )
+          ) )
+        )
+      } )
+    }
+  } )
+
+
+@SharedYcmd
+def GetCompletions_AfterRestart_test( app ):
+  filepath = PathToTestFile( 'test.ts' )
+
+  app.post_json( '/run_completer_command',
+                BuildRequest( completer_target = 'filetype_default',
+                              command_arguments = [ 'RestartServer' ],
+                              filetype = 'typescript',
+                              filepath = filepath ) )
+
+  completion_data = BuildRequest( filepath = filepath,
+                                  filetype = 'typescript',
+                                  contents = ReadFile( filepath ),
+                                  force_semantic = True,
+                                  line_num = 17,
+                                  column_num = 6 )
+
+  response = app.post_json( '/completions', completion_data )
+  assert_that( response.json, has_entries( {
+        'completions': contains_inanyorder(
+          CompletionEntryMatcher( 'methodA', extra_params = {
+            'menu_text': 'methodA (method) Foo.methodA(): void' } ),
+          CompletionEntryMatcher( 'methodB', extra_params = {
+            'menu_text': 'methodB (method) Foo.methodB(): void' } ),
+          CompletionEntryMatcher( 'methodC', extra_params = {
+            'menu_text': ( 'methodC (method) Foo.methodC(a: '
+                           '{ foo: string; bar: number; }): void' ) } ),
+        )
+      } ) )
+
+
+@IsolatedYcmd
+def GetCompletions_ServerIsNotRunning_test( app ):
+  StopCompleterServer( app, filetype = 'typescript' )
+
+  filepath = PathToTestFile( 'test.ts' )
+  contents = ReadFile( filepath )
+
+  # Check that sending a request to TSServer (the response is ignored) raises
+  # the proper exception.
+  event_data = BuildRequest( filepath = filepath,
+                             filetype = 'typescript',
+                             contents = contents,
+                             event_name = 'BufferVisit' )
+
+  assert_that(
+    calling( app.post_json ).with_args( '/event_notification', event_data ),
+    raises( AppError, 'TSServer is not running.' ) )
+
+  # Check that sending a command to TSServer (the response is processed) raises
+  # the proper exception.
+  completion_data = BuildRequest( filepath = filepath,
+                                  filetype = 'typescript',
+                                  contents = contents,
+                                  force_semantic = True,
+                                  line_num = 17,
+                                  column_num = 6 )
+
+  assert_that(
+    calling( app.post_json ).with_args( '/completions', completion_data ),
+    raises( AppError, 'TSServer is not running.' ) )

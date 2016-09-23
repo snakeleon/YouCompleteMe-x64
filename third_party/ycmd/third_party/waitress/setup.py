@@ -25,6 +25,7 @@ except IOError:
 docs_extras = [
     'Sphinx',
     'docutils',
+    'pylons-sphinx-themes >= 0.3',
 ]
 
 testing_extras = [
@@ -37,7 +38,7 @@ if sys.version_info[:2] == (2, 6):
 
 setup(
     name='waitress',
-    version='0.8.8',
+    version='0.8.10',
     author='Zope Foundation and Contributors',
     author_email='zope-dev@zope.org',
     maintainer="Chris McDonough",
@@ -58,6 +59,8 @@ setup(
         'Programming Language :: Python :: 3',
         'Programming Language :: Python :: 3.2',
         'Programming Language :: Python :: 3.3',
+        'Programming Language :: Python :: 3.4',
+        'Programming Language :: Python :: 3.5',
         "Programming Language :: Python :: Implementation :: CPython",
         "Programming Language :: Python :: Implementation :: PyPy",
         'Natural Language :: English',
@@ -66,9 +69,6 @@ setup(
     ],
     url='https://github.com/Pylons/waitress',
     packages=find_packages(),
-    install_requires=[
-        'setuptools',
-    ],
     extras_require={
         'testing': testing_extras,
         'docs': docs_extras,

@@ -1,3 +1,5 @@
+# encoding: utf-8
+#
 # Copyright (C) 2015 ycmd contributors
 #
 # This file is part of ycmd.
@@ -23,23 +25,56 @@ from future import standard_library
 standard_library.install_aliases()
 from builtins import *  # noqa
 
-from hamcrest import assert_that, has_item
-from .go_handlers_test import Go_Handlers_test
+from hamcrest import assert_that, has_item, has_items
+
+from ycmd.tests.go import PathToTestFile, SharedYcmd
+from ycmd.tests.test_utils import BuildRequest, CompletionEntryMatcher
 from ycmd.utils import ReadFile
 
 
-class Go_GetCompletions_test( Go_Handlers_test ):
+@SharedYcmd
+def GetCompletions_Basic_test( app ):
+  filepath = PathToTestFile( 'test.go' )
+  completion_data = BuildRequest( filepath = filepath,
+                                  filetype = 'go',
+                                  contents = ReadFile( filepath ),
+                                  force_semantic = True,
+                                  line_num = 9,
+                                  column_num = 11 )
 
-  def Basic_test( self ):
-    filepath = self._PathToTestFile( 'test.go' )
-    completion_data = self._BuildRequest( filepath = filepath,
-                                          filetype = 'go',
-                                          contents = ReadFile( filepath ),
-                                          force_semantic = True,
-                                          line_num = 9,
-                                          column_num = 11 )
+  results = app.post_json( '/completions',
+                           completion_data ).json[ 'completions' ]
+  assert_that( results,
+               has_item( CompletionEntryMatcher( u'Logger' ) ) )
 
-    results = self._app.post_json( '/completions',
-                                   completion_data ).json[ 'completions' ]
-    assert_that( results,
-                 has_item( self._CompletionEntryMatcher( u'Logger' ) ) )
+
+@SharedYcmd
+def GetCompletions_Unicode_InLine_test( app ):
+  filepath = PathToTestFile( 'unicode.go' )
+  completion_data = BuildRequest( filepath = filepath,
+                                  filetype = 'go',
+                                  contents = ReadFile( filepath ),
+                                  line_num = 7,
+                                  column_num = 37 )
+
+  results = app.post_json( '/completions',
+                           completion_data ).json[ 'completions' ]
+  assert_that( results,
+               has_items( CompletionEntryMatcher( u'Printf' ),
+                          CompletionEntryMatcher( u'Fprintf' ),
+                          CompletionEntryMatcher( u'Sprintf' ) ) )
+
+
+@SharedYcmd
+def GetCompletions_Unicode_Identifier_test( app ):
+  filepath = PathToTestFile( 'unicode.go' )
+  completion_data = BuildRequest( filepath = filepath,
+                                  filetype = 'go',
+                                  contents = ReadFile( filepath ),
+                                  line_num = 13,
+                                  column_num = 13 )
+
+  results = app.post_json( '/completions',
+                           completion_data ).json[ 'completions' ]
+  assert_that( results,
+               has_items( CompletionEntryMatcher( u'Unicøde' ) ) )

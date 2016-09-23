@@ -39,32 +39,26 @@ INCLUDE_FLAGS = [ '-isystem', '-I', '-iquote', '-isysroot', '--sysroot',
 
 # We need to remove --fcolor-diagnostics because it will cause shell escape
 # sequences to show up in editors, which is bad. See Valloric/YouCompleteMe#1421
-STATE_FLAGS_TO_SKIP = set(['-c', '-MP', '--fcolor-diagnostics'])
+STATE_FLAGS_TO_SKIP = set( [ '-c',
+                             '-MP',
+                             '-MD',
+                             '-MMD',
+                             '--fcolor-diagnostics' ] )
 
 # The -M* flags spec:
 #   https://gcc.gnu.org/onlinedocs/gcc-4.9.0/gcc/Preprocessor-Options.html
-FILE_FLAGS_TO_SKIP = set(['-MD', '-MMD', '-MF', '-MT', '-MQ', '-o'])
-
-# These are the standard header search paths that clang will use on Mac BUT
-# libclang won't, for unknown reasons. We add these paths when the user is on a
-# Mac because if we don't, libclang would fail to find <vector> etc.
-# This should be fixed upstream in libclang, but until it does, we need to help
-# users out.
-# See Valloric/YouCompleteMe#303 for details.
-MAC_INCLUDE_PATHS = [
- '/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include/c++/v1',
- '/usr/local/include',
- '/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/include',
- '/usr/include',
- '/System/Library/Frameworks',
- '/Library/Frameworks',
-]
+FILE_FLAGS_TO_SKIP = set( [ '-MF',
+                            '-MT',
+                            '-MQ',
+                            '-o',
+                            '--serialize-diagnostics' ] )
 
 # Use a regex to correctly detect c++/c language for both versioned and
 # non-versioned compiler executable names suffixes
 # (e.g., c++, g++, clang++, g++-4.9, clang++-3.7, c++-10.2 etc).
 # See Valloric/ycmd#266
 CPP_COMPILER_REGEX = re.compile( r'\+\+(-\d+(\.\d+){0,2})?$' )
+
 
 class Flags( object ):
   """Keeps track of the flags necessary to compile a file.
@@ -105,9 +99,12 @@ class Flags( object ):
 
       if add_extra_clang_flags:
         flags += self.extra_clang_flags
-      sanitized_flags = PrepareFlagsForClang( flags, filename )
 
-      if results[ 'do_cache' ]:
+      sanitized_flags = PrepareFlagsForClang( flags,
+                                              filename,
+                                              add_extra_clang_flags )
+
+      if results.get( 'do_cache', True ):
         self.flags_for_file[ filename ] = sanitized_flags
       return sanitized_flags
 
@@ -178,10 +175,12 @@ def _CallExtraConfFlagsForFile( module, filename, client_data ):
     return module.FlagsForFile( filename )
 
 
-def PrepareFlagsForClang( flags, filename ):
+def PrepareFlagsForClang( flags, filename, add_extra_clang_flags = True ):
   flags = _CompilerToLanguageFlag( flags )
   flags = _RemoveXclangFlags( flags )
   flags = _RemoveUnusedFlags( flags, filename )
+  if add_extra_clang_flags:
+    flags = _EnableTypoCorrection( flags )
   flags = _SanitizeFlags( flags )
   return flags
 
@@ -280,9 +279,11 @@ def _RemoveUnusedFlags( flags, filename ):
   previous_flag_is_include = False
   previous_flag_starts_with_dash = False
   current_flag_starts_with_dash = False
+
   for flag in flags:
     previous_flag_starts_with_dash = current_flag_starts_with_dash
     current_flag_starts_with_dash = flag.startswith( '-' )
+
     if skip_next:
       skip_next = False
       continue
@@ -291,7 +292,7 @@ def _RemoveUnusedFlags( flags, filename ):
       continue
 
     if flag in FILE_FLAGS_TO_SKIP:
-      skip_next = True;
+      skip_next = True
       continue
 
     if flag == filename or os.path.realpath( flag ) == filename:
@@ -313,16 +314,90 @@ def _RemoveUnusedFlags( flags, filename ):
   return new_flags
 
 
+# There are 2 ways to get a development enviornment (as standard) on OS X:
+#  - install XCode.app, or
+#  - install the command-line tools (xcode-select --install)
+#
+# Most users have xcode installed, but in order to be as compatible as
+# possible we consider both possible installation locations
+MAC_CLANG_TOOLCHAIN_DIRS = [
+  '/Applications/Xcode.app/Contents/Developer/Toolchains/'
+    'XcodeDefault.xctoolchain',
+  '/Library/Developer/CommandLineTools'
+]
+
+
+# Returns a list containing the supplied path as a suffix of each of the known
+# Mac toolchains
+def _PathsForAllMacToolchains( path ):
+  return [ os.path.join( x, path ) for x in MAC_CLANG_TOOLCHAIN_DIRS ]
+
+
+# Ultimately, this method exists only for testability
+def _GetMacClangVersionList( candidates_dir ):
+  try:
+    return os.listdir( candidates_dir )
+  except OSError:
+    # Path might not exist, so just ignore
+    return []
+
+
+# Ultimately, this method exists only for testability
+def _MacClangIncludeDirExists( candidate_include ):
+  return os.path.exists( candidate_include )
+
+
+# Add in any clang headers found in the installed toolchains. These are
+# required for the same reasons as described below, but unfortuantely, these
+# are in versioned directories and there is no easy way to find the "correct"
+# version. We simply pick the highest version in the first toolchain that we
+# find, as this is the most likely to be correct.
+def _LatestMacClangIncludes():
+  for path in MAC_CLANG_TOOLCHAIN_DIRS:
+    # we use the first toolchain which actually contains any versions, rather
+    # than trying all of the toolchains and picking the highest. We
+    # favour Xcode over CommandLineTools as using Xcode is more common.
+    # It might be possible to extrace this information from xcode-select, though
+    # xcode-select -p does not point at the toolchain directly
+    candidates_dir = os.path.join( path, 'usr', 'lib', 'clang' )
+    versions = _GetMacClangVersionList( candidates_dir )
+
+    for version in reversed( sorted( versions ) ):
+      candidate_include = os.path.join( candidates_dir, version, 'include' )
+      if _MacClangIncludeDirExists( candidate_include ):
+        return [ candidate_include ]
+
+  return []
+
+MAC_INCLUDE_PATHS = []
+
+if OnMac():
+  # These are the standard header search paths that clang will use on Mac BUT
+  # libclang won't, for unknown reasons. We add these paths when the user is on
+  # a Mac because if we don't, libclang would fail to find <vector> etc.  This
+  # should be fixed upstream in libclang, but until it does, we need to help
+  # users out.
+  # See Valloric/YouCompleteMe#303 for details.
+  MAC_INCLUDE_PATHS = (
+    _PathsForAllMacToolchains( 'usr/include/c++/v1' ) +
+    [ '/usr/local/include' ] +
+    _PathsForAllMacToolchains( 'usr/include' ) +
+    [ '/usr/include', '/System/Library/Frameworks', '/Library/Frameworks' ] +
+    _LatestMacClangIncludes()
+  )
+
+
 def _ExtraClangFlags():
   flags = _SpecialClangIncludes()
   if OnMac():
     for path in MAC_INCLUDE_PATHS:
       flags.extend( [ '-isystem', path ] )
-  # On Windows, parsing of templates is delayed until instantation time.
-  # This makes GetType and GetParent commands not returning the expected
-  # result when the cursor is in templates.
+  # On Windows, parsing of templates is delayed until instantiation time.
+  # This makes GetType and GetParent commands fail to return the expected
+  # result when the cursor is in a template.
   # Using the -fno-delayed-template-parsing flag disables this behavior.
-  # See http://clang.llvm.org/extra/PassByValueTransform.html#note-about-delayed-template-parsing
+  # See
+  # http://clang.llvm.org/extra/PassByValueTransform.html#note-about-delayed-template-parsing # noqa
   # for an explanation of the flag and
   # https://code.google.com/p/include-what-you-use/source/detail?r=566
   # for a similar issue.
@@ -331,9 +406,25 @@ def _ExtraClangFlags():
   return flags
 
 
+def _EnableTypoCorrection( flags ):
+  """Adds the -fspell-checking flag if the -fno-spell-checking flag is not
+  present"""
+
+  # "Typo correction" (aka spell checking) in clang allows it to produce
+  # hints (in the form of fix-its) in the case of certain diagnostics. A common
+  # example is "no type named 'strng' in namespace 'std'; Did you mean
+  # 'string'? (FixIt)". This is enabled by default in the clang driver (i.e. the
+  # 'clang' binary), but is not when using libclang (as we do). It's a useful
+  # enough feature that we just always turn it on unless the user explicitly
+  # turned it off in their flags (with -fno-spell-checking).
+  if '-fno-spell-checking' in flags:
+    return flags
+
+  flags.append( '-fspell-checking' )
+  return flags
+
+
 def _SpecialClangIncludes():
   libclang_dir = os.path.dirname( ycm_core.__file__ )
   path_to_includes = os.path.join( libclang_dir, 'clang_includes' )
   return [ '-resource-dir=' + path_to_includes ]
-
-

@@ -53,3 +53,21 @@ namespace dtor_fixit {
 namespace test_fixit_multiple {
   class foo { ~bar() { } }; class bar { ~bar(); }; ~bar::bar() { }
 }
+
+void z() {
+  bool x;
+  if ( x
+       =
+       true
+  ) {
+
+  }
+}
+
+namespace Typo {
+    struct SpellingIsNotMyStrongPoint;
+}
+
+void typo() {
+  Typo::SpellingIsNotMyStringPiont *p;
+}

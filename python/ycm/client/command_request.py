@@ -15,8 +15,19 @@
 # You should have received a copy of the GNU General Public License
 # along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
 
-import vim
-from ycm.client.base_request import BaseRequest, BuildRequestData, ServerError
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *  # noqa
+
+from requests.exceptions import ReadTimeout
+
+from ycmd.responses import ServerError
+from ycm.client.base_request import ( BaseRequest, BuildRequestData,
+                                      HandleServerException )
 from ycm import vimsupport
 from ycmd.utils import ToUnicode
 
@@ -45,8 +56,8 @@ class CommandRequest( BaseRequest ):
     try:
       self._response = self.PostDataToHandler( request_data,
                                                'run_completer_command' )
-    except ServerError as e:
-      vimsupport.PostMultiLineNotice( e )
+    except ( ServerError, ReadTimeout ) as e:
+      HandleServerException( e )
 
 
   def Response( self ):
@@ -81,8 +92,9 @@ class CommandRequest( BaseRequest ):
   def _HandleGotoResponse( self ):
     if isinstance( self._response, list ):
       vimsupport.SetQuickFixList(
-              [ _BuildQfListItem( x ) for x in self._response ] )
-      vim.eval( 'youcompleteme#OpenGoToList()' )
+        [ _BuildQfListItem( x ) for x in self._response ],
+        focus = True,
+        autoclose = True )
     else:
       vimsupport.JumpToLocation( self._response[ 'filepath' ],
                                  self._response[ 'line_num' ],
@@ -91,21 +103,32 @@ class CommandRequest( BaseRequest ):
 
   def _HandleFixitResponse( self ):
     if not len( self._response[ 'fixits' ] ):
-      vimsupport.EchoText( "No fixits found for current line" )
+      vimsupport.PostVimMessage( 'No fixits found for current line',
+                                 warning = False )
     else:
-      chunks = self._response[ 'fixits' ][ 0 ][ 'chunks' ]
       try:
-        vimsupport.ReplaceChunks( chunks )
+        fixit_index = 0
+
+        # When there are multiple fixit suggestions, present them as a list to
+        # the user hand have her choose which one to apply.
+        if len( self._response[ 'fixits' ] ) > 1:
+          fixit_index = vimsupport.SelectFromList(
+            "Multiple FixIt suggestions are available at this location. "
+            "Which one would you like to apply?",
+            [ fixit[ 'text' ] for fixit in self._response[ 'fixits' ] ] )
+
+        vimsupport.ReplaceChunks(
+          self._response[ 'fixits' ][ fixit_index ][ 'chunks' ] )
       except RuntimeError as e:
-        vimsupport.PostMultiLineNotice( e.message )
+        vimsupport.PostVimMessage( str( e ) )
 
 
   def _HandleBasicResponse( self ):
-    vimsupport.EchoText( self._response )
+    vimsupport.PostVimMessage( self._response, warning = False )
 
 
   def _HandleMessageResponse( self ):
-    vimsupport.EchoText( self._response[ 'message' ] )
+    vimsupport.PostVimMessage( self._response[ 'message' ], warning = False )
 
 
   def _HandleDetailedInfoResponse( self ):

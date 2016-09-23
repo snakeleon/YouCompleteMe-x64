@@ -15,16 +15,17 @@ source ci/travis/travis_install.${TRAVIS_OS_NAME}.sh
 # pyenv setup
 #############
 
-# DON'T exit if error
-set +e
-git clone https://github.com/yyuu/pyenv.git ~/.pyenv
+export PYENV_ROOT="${HOME}/.pyenv"
+
+if [ ! -d "${PYENV_ROOT}/.git" ]; then
+  git clone https://github.com/yyuu/pyenv.git ${PYENV_ROOT}
+fi
+pushd ${PYENV_ROOT}
 git fetch --tags
 git checkout v20160202
-# Exit if error
-set -e
+popd
 
-export PYENV_ROOT="$HOME/.pyenv"
-export PATH="$PYENV_ROOT/bin:$PATH"
+export PATH="${PYENV_ROOT}/bin:${PATH}"
 
 eval "$(pyenv init -)"
 
@@ -56,11 +57,10 @@ pip install -U pip wheel setuptools
 pip install -r test_requirements.txt
 npm install -g typescript
 
-# We run coverage tests only on a single build, where COVERAGE=true
-if [ x"${COVERAGE}" = x"true" ]; then
-  pip install coveralls
-fi
-
+# Enable coverage for Python subprocesses. See:
+# http://coverage.readthedocs.org/en/coverage-4.0.3/subprocess.html
+echo -e "import coverage\ncoverage.process_startup()" > \
+  ${PYENV_ROOT}/versions/${PYENV_VERSION}/lib/python${YCMD_PYTHON_VERSION}/site-packages/sitecustomize.py
 
 ############
 # rust setup

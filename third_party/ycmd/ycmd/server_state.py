@@ -26,6 +26,7 @@ from builtins import *  # noqa
 import os
 import threading
 import logging
+from future.utils import listvalues
 from ycmd.utils import ForceSemanticCompletion, LoadPythonSource
 from ycmd.completers.general.general_completer_store import (
     GeneralCompleterStore )
@@ -89,6 +90,11 @@ class ServerState( object ):
         current_filetypes ) )
 
 
+  def GetLoadedFiletypeCompleters( self ):
+    with self._filetype_completers_lock:
+      return set( listvalues( self._filetype_completers ) )
+
+
   def FiletypeCompletionAvailable( self, filetypes ):
     try:
       self.GetFiletypeCompleter( filetypes )
@@ -111,7 +117,6 @@ class ServerState( object ):
      - should_use_completer_now: if True, the semantic engine should be used
      - was_semantic_completion_forced: if True, the user requested "forced"
                                        semantic completion
-
     was_semantic_completion_forced is always False if should_use_completer_now
     is False
     """
@@ -122,8 +127,10 @@ class ServerState( object ):
         return ( True, True )
       else:
         # was not forced. check the conditions for triggering
-        return ( self.GetFiletypeCompleter( filetypes ).ShouldUseNow(
-                   request_data ), False )
+        return (
+          self.GetFiletypeCompleter( filetypes ).ShouldUseNow( request_data ),
+          False
+        )
 
     # don't use semantic, ignore whether or not the user requested forced
     # completion

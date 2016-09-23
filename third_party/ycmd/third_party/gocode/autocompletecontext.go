@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -206,6 +207,12 @@ func (c *auto_complete_context) get_candidates_from_decl(cc cursor_context, clas
 		if cc.decl.class == decl_package && !ast.IsExported(decl.name) {
 			continue
 		}
+		if cc.struct_field {
+			// if we're autocompleting struct field init, skip all methods
+			if _, ok := decl.typ.(*ast.FuncType); ok {
+				continue
+			}
+		}
 		b.append_decl(cc.partial, decl.name, decl, class)
 	}
 	// propose all children of an underlying struct/interface type
@@ -219,6 +226,46 @@ func (c *auto_complete_context) get_candidates_from_decl(cc cursor_context, clas
 	}
 	// propose all children of its embedded types
 	b.append_embedded(cc.partial, cc.decl, class)
+}
+
+func (c *auto_complete_context) get_import_candidates(partial string, b *out_buffers) {
+	pkgdirs := g_daemon.context.pkg_dirs()
+	for _, pkgdir := range pkgdirs {
+		// convert srcpath to pkgpath and get candidates
+		get_import_candidates_dir(pkgdir, filepath.FromSlash(partial), b)
+	}
+}
+
+func get_import_candidates_dir(root, partial string, b *out_buffers) {
+	var fpath string
+	var match bool
+	if strings.HasSuffix(partial, "/") {
+		fpath = filepath.Join(root, partial)
+	} else {
+		fpath = filepath.Join(root, filepath.Dir(partial))
+		match = true
+	}
+	fi := readdir(fpath)
+	for i := range fi {
+		name := fi[i].Name()
+		rel, err := filepath.Rel(root, filepath.Join(fpath, name))
+		if err != nil {
+			panic(err)
+		}
+		if match && !has_prefix(rel, partial, b.ignorecase) {
+			continue
+		} else if fi[i].IsDir() {
+			get_import_candidates_dir(root, rel+string(filepath.Separator), b)
+		} else {
+			ext := filepath.Ext(name)
+			if ext != ".a" {
+				continue
+			} else {
+				rel = rel[0 : len(rel)-2]
+			}
+			b.candidates = append(b.candidates, candidate{Name: filepath.ToSlash(rel), Class: decl_import})
+		}
+	}
 }
 
 // returns three slices of the same length containing:
@@ -275,7 +322,14 @@ func (c *auto_complete_context) apropos(file []byte, filename string, cursor int
 		class = decl_package
 	}
 
-	if cc.decl == nil {
+	if cc.decl_import {
+		c.get_import_candidates(cc.partial, b)
+		if cc.partial != "" && len(b.candidates) == 0 {
+			// as a fallback, try case insensitive approach
+			b.ignorecase = true
+			c.get_import_candidates(cc.partial, b)
+		}
+	} else if cc.decl == nil {
 		// In case if no declaraion is a subject of completion, propose all:
 		set := c.make_decl_set(c.current.scope)
 		c.get_candidates_from_set(set, cc.partial, class, b)
@@ -300,21 +354,6 @@ func (c *auto_complete_context) apropos(file []byte, filename string, cursor int
 
 	sort.Sort(b)
 	return b.candidates, partial
-}
-
-func (c *auto_complete_context) cursor_type_pkg(file []byte, filename string, cursor int) (string, string) {
-	c.current.cursor = cursor
-	c.current.name = filename
-	c.current.process_data(file)
-	c.update_caches()
-	typ, pkg, ok := c.deduce_cursor_type_pkg(file, cursor)
-	if !ok || typ == nil {
-		return "", ""
-	}
-
-	var tmp bytes.Buffer
-	pretty_print_type_expr(&tmp, typ)
-	return tmp.String(), pkg
 }
 
 func update_packages(ps map[string]*package_file_cache) {
@@ -414,7 +453,7 @@ func find_other_package_files(filename, package_name string) []string {
 	}
 
 	dir, file := filepath.Split(filename)
-	files_in_dir, err := readdir(dir)
+	files_in_dir, err := readdir_lstat(dir)
 	if err != nil {
 		panic(err)
 	}

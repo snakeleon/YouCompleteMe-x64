@@ -1,3 +1,5 @@
+# encoding: utf-8
+#
 # Copyright (C) 2011, 2012 Google Inc.
 #
 # This file is part of ycmd.
@@ -24,28 +26,29 @@ standard_library.install_aliases()
 from builtins import *  # noqa
 from future.utils import PY2, native
 
-import tempfile
 import os
-import sys
-import signal
 import socket
 import stat
 import subprocess
+import sys
+import tempfile
+import time
 
 
 # Creation flag to disable creating a console window on Windows. See
 # https://msdn.microsoft.com/en-us/library/windows/desktop/ms684863.aspx
 CREATE_NO_WINDOW = 0x08000000
-# Executable extensions used on Windows
-WIN_EXECUTABLE_EXTS = [ '.exe', '.bat', '.cmd' ]
 
-# Don't use this! Call PathToCreatedTempDir() instead. This exists for the sake of
-# tests.
+# Don't use this! Call PathToCreatedTempDir() instead. This exists for the sake
+# of tests.
 RAW_PATH_TO_TEMP_DIR = os.path.join( tempfile.gettempdir(), 'ycm_temp' )
 
 # Readable, writable and executable by everyone.
 ACCESSIBLE_TO_ALL_MASK = ( stat.S_IROTH | stat.S_IWOTH | stat.S_IXOTH |
                            stat.S_IRGRP | stat.S_IWGRP | stat.S_IXGRP )
+
+EXECUTABLE_FILE_MASK = os.F_OK | os.X_OK
+
 
 # Python 3 complains on the common open(path).read() idiom because the file
 # doesn't get closed. So, a helper func.
@@ -62,7 +65,12 @@ def OpenForStdHandle( filepath ):
   # (we're replacing sys.stdout!) with an `str` object on py2 will cause
   # tracebacks because text mode insists on unicode objects. (Don't forget,
   # `open` is actually `io.open` because of future builtins.)
-  return open( filepath, 'wb' if PY2 else 'w' )
+  # Since this function is used for logging purposes, we don't want the output
+  # to be delayed. This means no buffering for binary mode and line buffering
+  # for text mode. See https://docs.python.org/2/library/io.html#io.open
+  if PY2:
+    return open( filepath, mode = 'wb', buffering = 0 )
+  return open( filepath, mode = 'w', buffering = 1 )
 
 
 # Given an object, returns a str object that's utf-8 encoded. This is meant to
@@ -128,6 +136,36 @@ def ToBytes( value ):
   return ToBytes( str( value ) )
 
 
+def ByteOffsetToCodepointOffset( line_value, byte_offset ):
+  """The API calls for byte offsets into the UTF-8 encoded version of the
+  buffer. However, ycmd internally uses unicode strings. This means that
+  when we need to walk 'characters' within the buffer, such as when checking
+  for semantic triggers and similar, we must use codepoint offets, rather than
+  byte offsets.
+
+  This method converts the |byte_offset|, which is a utf-8 byte offset, into
+  a codepoint offset in the unicode string |line_value|."""
+
+  byte_line_value = ToBytes( line_value )
+  return len( ToUnicode( byte_line_value[ : byte_offset - 1 ] ) ) + 1
+
+
+def CodepointOffsetToByteOffset( unicode_line_value, codepoint_offset ):
+  """The API calls for byte offsets into the UTF-8 encoded version of the
+  buffer. However, ycmd internally uses unicode strings. This means that
+  when we need to walk 'characters' within the buffer, such as when checking
+  for semantic triggers and similar, we must use codepoint offets, rather than
+  byte offsets.
+
+  This method converts the |codepoint_offset| which is a unicode codepoint
+  offset into an byte offset into the utf-8 encoded bytes version of
+  |unicode_line_value|."""
+
+  # Should be a no-op, but in case someone passes a bytes instance.
+  unicode_line_value = ToUnicode( unicode_line_value )
+  return len( ToBytes( unicode_line_value[ : codepoint_offset - 1 ] ) ) + 1
+
+
 def PathToCreatedTempDir( tempdir = RAW_PATH_TO_TEMP_DIR ):
   try:
     os.makedirs( tempdir )
@@ -170,28 +208,61 @@ def PathToFirstExistingExecutable( executable_name_list ):
   return None
 
 
-# On Windows, distutils.spawn.find_executable only works for .exe files
-# but .bat and .cmd files are also executables, so we use our own
-# implementation.
-def FindExecutable( executable ):
-  paths = os.environ[ 'PATH' ].split( os.pathsep )
-  base, extension = os.path.splitext( executable )
-
-  if OnWindows() and extension.lower() not in WIN_EXECUTABLE_EXTS:
-    extensions = WIN_EXECUTABLE_EXTS
-  else:
-    extensions = ['']
-
-  for extension in extensions:
-    executable_name = executable + extension
-    if not os.path.isfile( executable_name ):
-      for path in paths:
-        executable_path = os.path.join(path, executable_name )
-        if os.path.isfile( executable_path ):
-          return executable_path
+def _GetWindowsExecutable( filename ):
+  def _GetPossibleWindowsExecutable( filename ):
+    pathext = [ ext.lower() for ext in
+                os.environ.get( 'PATHEXT', '' ).split( os.pathsep ) ]
+    base, extension = os.path.splitext( filename )
+    if extension.lower() in pathext:
+      return [ filename ]
     else:
-      return executable_name
+      return [ base + ext for ext in pathext ]
+
+  for exe in _GetPossibleWindowsExecutable( filename ):
+    if os.path.isfile( exe ):
+      return exe
   return None
+
+
+# Check that a given file can be accessed as an executable file, so controlling
+# the access mask on Unix and if has a valid extension on Windows. It returns
+# the path to the executable or None if no executable was found.
+def GetExecutable( filename ):
+  if OnWindows():
+    return _GetWindowsExecutable( filename )
+
+  if ( os.path.isfile( filename )
+       and os.access( filename, EXECUTABLE_FILE_MASK ) ):
+    return filename
+  return None
+
+
+# Adapted from https://hg.python.org/cpython/file/3.5/Lib/shutil.py#l1081
+# to be backward compatible with Python2 and more consistent to our codebase.
+def FindExecutable( executable ):
+  # If we're given a path with a directory part, look it up directly rather
+  # than referring to PATH directories. This includes checking relative to the
+  # current directory, e.g. ./script
+  if os.path.dirname( executable ):
+    return GetExecutable( executable )
+
+  paths = os.environ[ 'PATH' ].split( os.pathsep )
+
+  if OnWindows():
+    # The current directory takes precedence on Windows.
+    curdir = os.path.abspath( os.curdir )
+    if curdir not in paths:
+      paths.insert( 0, curdir )
+
+  for path in paths:
+    exe = GetExecutable( os.path.join( path, executable ) )
+    if exe:
+      return exe
+  return None
+
+
+def ExecutableName( executable ):
+  return executable + ( '.exe' if OnWindows() else '' )
 
 
 def OnWindows():
@@ -206,26 +277,19 @@ def OnMac():
   return sys.platform == 'darwin'
 
 
-def OnTravis():
-  return 'TRAVIS' in os.environ
-
-
 def ProcessIsRunning( handle ):
   return handle is not None and handle.poll() is None
 
 
-# From here: http://stackoverflow.com/a/8536476/1672783
-def TerminateProcess( pid ):
-  if OnWindows():
-    import ctypes
-    PROCESS_TERMINATE = 1
-    handle = ctypes.windll.kernel32.OpenProcess( PROCESS_TERMINATE,
-                                                 False,
-                                                 pid )
-    ctypes.windll.kernel32.TerminateProcess( handle, -1 )
-    ctypes.windll.kernel32.CloseHandle( handle )
-  else:
-    os.kill( pid, signal.SIGTERM )
+def WaitUntilProcessIsTerminated( handle, timeout = 5 ):
+  expiration = time.time() + timeout
+  while True:
+    if time.time() > expiration:
+      raise RuntimeError( 'Waited process to terminate for {0} seconds, '
+                          'aborting.'.format( timeout ) )
+    if not ProcessIsRunning( handle ):
+      return
+    time.sleep( 0.1 )
 
 
 def PathsToAllParentFolders( path ):
@@ -322,3 +386,46 @@ def LoadPythonSource( name, pathname ):
   else:
     import importlib
     return importlib.machinery.SourceFileLoader( name, pathname ).load_module()
+
+
+def SplitLines( contents ):
+  """Return a list of each of the lines in the unicode string |contents|.
+  Behaviour is equivalent to str.splitlines with the following exceptions:
+    - empty strings are returned as [ '' ]
+    - a trailing newline is not ignored (i.e. SplitLines( '\n' )
+      returns [ '', '' ], not [ '' ]"""
+
+  # We often want to get a list representation of a buffer such that we can
+  # index all of the 'lines' within it. Python provides str.splitlines for this
+  # purpose, but its documented behaviors for empty strings and strings ending
+  # with a newline character are not compatible with this. As a result, we write
+  # our own wrapper to provide a splitlines implementation which returns the
+  # actual list of indexable lines in a buffer, where a line may have 0
+  # characters.
+  #
+  # NOTE: str.split( '\n' ) actually gives this behaviour, except it does not
+  # work when running on a unix-like system and reading a file with Windows line
+  # endings.
+
+  # ''.splitlines() returns [], but we want [ '' ]
+  if contents == '':
+    return [ '' ]
+
+  lines = contents.splitlines()
+
+  # '\n'.splitlines() returns [ '' ]. We want [ '', '' ].
+  # '\n\n\n'.splitlines() returns [ '', '', '' ]. We want [ '', '', '', '' ].
+  #
+  # So we re-instate the empty entry at the end if the original string ends
+  # with a newline. Universal newlines recognise the following as
+  # line-terminators:
+  #   - '\n'
+  #   - '\r\n'
+  #   - '\r'
+  #
+  # Importantly, notice that \r\n also ends with \n
+  #
+  if contents.endswith( '\r' ) or contents.endswith( '\n' ):
+    lines.append( '' )
+
+  return lines

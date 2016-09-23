@@ -17,6 +17,14 @@
 # You should have received a copy of the GNU General Public License
 # along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
 
+from __future__ import unicode_literals
+from __future__ import print_function
+from __future__ import division
+from __future__ import absolute_import
+from future import standard_library
+standard_library.install_aliases()
+from builtins import *  # noqa
+
 import contextlib
 from nose.tools import eq_, ok_
 from mock import patch
@@ -99,8 +107,7 @@ def AdjustCandidateInsertionText_MultipleStrings_test():
     eq_( [ { 'abbr': 'foobar', 'word': 'foo' },
            { 'abbr': 'zobar', 'word': 'zo' },
            { 'abbr': 'qbar', 'word': 'q' },
-           { 'abbr': 'bar', 'word': '' },
-         ],
+           { 'abbr': 'bar', 'word': '' }, ],
          base.AdjustCandidateInsertionText( [ 'foobar',
                                               'zobar',
                                               'qbar',
@@ -261,4 +268,3 @@ def CurrentIdentifierFinished_WhitespaceOnly_test():
 
     with MockCurrentColumnAndLineContents( 3, '\t\t\t\t' ):
       ok_( base.CurrentIdentifierFinished() )
-

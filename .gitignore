@@ -4,7 +4,7 @@
 *.o
 
 # Compiled Dynamic libraries
-# *.dll
+*.dll
 *.so
 *.dylib
 
@@ -21,7 +21,7 @@ cmake_install.cmake
 install_manifest.txt
 
 # Python
-*.py[co]
+*.py[cod]
 
 # Installer logs
 pip-log.txt

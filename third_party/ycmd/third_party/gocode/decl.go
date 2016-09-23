@@ -20,6 +20,7 @@ const (
 	// these are in a sorted order
 	decl_const
 	decl_func
+	decl_import
 	decl_package
 	decl_type
 	decl_var
@@ -37,6 +38,8 @@ func (this decl_class) String() string {
 		return "const"
 	case decl_func:
 		return "func"
+	case decl_import:
+		return "import"
 	case decl_package:
 		return "package"
 	case decl_type:
@@ -324,7 +327,13 @@ func method_of(d ast.Decl) string {
 		if t.Recv != nil {
 			switch t := t.Recv.List[0].Type.(type) {
 			case *ast.StarExpr:
-				return t.X.(*ast.Ident).Name
+				if se, ok := t.X.(*ast.SelectorExpr); ok {
+					return se.Sel.Name
+				}
+				if ident, ok := t.X.(*ast.Ident); ok {
+					return ident.Name
+				}
+				return ""
 			case *ast.Ident:
 				return t.Name
 			default:
@@ -1269,6 +1278,9 @@ func (f *decl_pack) value_index(i int) (v ast.Expr, vi int) {
 		if len(f.values) > 1 {
 			// in case if there are multiple values, it's a usual
 			// multiassignment
+			if i >= len(f.values) {
+				i = len(f.values) - 1
+			}
 			v = f.values[i]
 		} else {
 			// in case if there is one value, but many names, it's

@@ -2,6 +2,7 @@
 
 extern crate libracerd;
 extern crate rustc_serialize;
+extern crate env_logger;
 
 #[macro_use]
 extern crate hyper;
@@ -14,6 +15,12 @@ mod util;
 /// that the required environment variable is defined.
 const _RUST_SRC_PATH: &'static str = env!("RUST_SRC_PATH");
 
+macro_rules! init_logging {
+    () => {
+        let _ = ::env_logger::init();
+    }
+}
+
 #[test]
 #[should_panic]
 #[cfg(not(windows))]
@@ -21,6 +28,8 @@ fn panics_when_invalid_secret_given() {
     use ::libracerd::engine::{Racer, SemanticEngine};
     use ::libracerd::http::serve;
     use ::libracerd::Config;
+
+    init_logging!();
 
     let config = Config {
         secret_file: Some("a.file.that.does.not.exist".to_owned()),
@@ -51,6 +60,7 @@ mod http {
     /// Checks that /find_definition works within a single buffer
     #[test]
     fn find_definition() {
+        init_logging!();
         http::with_server(|server| {
             // Build request args
             let url = server.url("/find_definition");
@@ -74,7 +84,7 @@ mod http {
                 "line": 1,
                 "column": 3,
                 "file_path": "src.rs",
-                "context": "fn foo() {}",
+                "context": "fn foo()",
                 "kind": "Function"
             })).unwrap();
 
@@ -87,6 +97,7 @@ mod http {
     /// not been written to disk.
     #[test]
     fn find_definition_multiple_dirty_buffers() {
+        init_logging!();
         // Build request args
         let request_obj = stringify!({
             "buffers": [{
@@ -118,7 +129,7 @@ mod http {
                 "line": 2,
                 "column": 7,
                 "file_path": "src2.rs",
-                "context": "pub fn myfn()",
+                "context": "pub fn myfn() pub fn foo()",
                 "kind": "Function"
             })).unwrap();
 
@@ -137,11 +148,12 @@ mod http {
 
     #[test]
     fn find_definition_in_std_library() {
+        init_logging!();
         // Build request args
         let request_obj = stringify!({
             "buffers": [{
                 "file_path": "src.rs",
-                "contents": "use std::path::Path;\nfn main() {\nlet p = &Path::new(\"arst\")\n}\n"
+                "contents": "use std::path::Path;\nfn main() {\nlet p = &Path::new(\"arst\");\n}\n"
             }],
             "file_path": "src.rs",
             "line": 3,
@@ -172,6 +184,7 @@ mod http {
     #[test]
     fn list_path_completions_std_library() {
         use rustc_serialize::json;
+        init_logging!();
 
         // Build request args
         let request_obj = stringify!({
@@ -201,6 +214,7 @@ mod http {
 
     #[test]
     fn ping_pong() {
+        init_logging!();
         http::with_server(|server| {
             let url = server.url("/ping");
             let res = request_str(Method::Get, &url[..], None).unwrap().unwrap();
@@ -216,6 +230,7 @@ mod http {
 
     #[test]
     fn ping_pong_hmac_with_correct_secret() {
+        init_logging!();
         let secret = "hello hmac ping pong";
 
         http::with_hmac_server(secret, |server| {
@@ -246,6 +261,7 @@ mod http {
 
     #[test]
     fn ping_pong_hmac_wrong_secret() {
+        init_logging!();
         let secret = "hello hmac ping pong";
 
         http::with_hmac_server(secret, |server| {

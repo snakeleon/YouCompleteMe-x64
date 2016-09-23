@@ -24,40 +24,79 @@ from future import standard_library
 standard_library.install_aliases()
 from builtins import *  # noqa
 
-from nose.tools import ok_
-from .handlers_test import Handlers_test
-from ycmd.tests.test_utils import DummyCompleter
-from hamcrest import assert_that, contains
+from hamcrest import assert_that, contains, empty, equal_to, has_entries
+import requests
+
+from ycmd.tests import PathToTestFile, SharedYcmd
+from ycmd.tests.test_utils import BuildRequest, DummyCompleter, PatchCompleter
 
 
-class MiscHandlers_test( Handlers_test ):
-
-  def SemanticCompletionAvailable_test( self ):
-    with self.PatchCompleter( DummyCompleter, filetype = 'dummy_filetype' ):
-      request_data = self._BuildRequest( filetype = 'dummy_filetype' )
-      ok_( self._app.post_json( '/semantic_completion_available',
-                                request_data ).json )
-
-
-  def EventNotification_AlwaysJsonResponse_test( self ):
-    event_data = self._BuildRequest( contents = 'foo foogoo ba',
-                                     event_name = 'FileReadyToParse' )
-
-    self._app.post_json( '/event_notification', event_data ).json
+@SharedYcmd
+def MiscHandlers_SemanticCompletionAvailable_test( app ):
+  with PatchCompleter( DummyCompleter, filetype = 'dummy_filetype' ):
+    request_data = BuildRequest( filetype = 'dummy_filetype' )
+    assert_that( app.post_json( '/semantic_completion_available',
+                                request_data ).json,
+                 equal_to( True ) )
 
 
-  def FilterAndSortCandidates_Basic_test( self ):
-    candidate1 = { 'prop1': 'aoo', 'prop2': 'bar' }
-    candidate2 = { 'prop1': 'bfo', 'prop2': 'zoo' }
-    candidate3 = { 'prop1': 'cfo', 'prop2': 'moo' }
+@SharedYcmd
+def MiscHandlers_EventNotification_AlwaysJsonResponse_test( app ):
+  event_data = BuildRequest( contents = 'foo foogoo ba',
+                             event_name = 'FileReadyToParse' )
 
-    data = {
-      'candidates': [ candidate3, candidate1, candidate2 ],
-      'sort_property': 'prop1',
-      'query': 'fo'
-    }
+  assert_that( app.post_json( '/event_notification', event_data ).json,
+               empty() )
 
-    response_data = self._app.post_json(
-      '/filter_and_sort_candidates', data ).json
 
-    assert_that( response_data, contains( candidate2, candidate3 ) )
+@SharedYcmd
+def MiscHandlers_EventNotification_ReturnJsonOnBigFileError_test( app ):
+  # We generate a content greater than Bottle.MEMFILE_MAX, which is set to 10MB.
+  contents = "foo " * 5000000
+  event_data = BuildRequest( contents = contents,
+                             event_name = 'FileReadyToParse' )
+
+  response = app.post_json( '/event_notification',
+                            event_data,
+                            expect_errors = True )
+  assert_that( response.status_code,
+               equal_to( requests.codes.request_entity_too_large ) )
+  assert_that( response.json,
+               has_entries( { 'traceback': None,
+                              'message': 'None',
+                              'exception': None } ) )
+
+
+@SharedYcmd
+def MiscHandlers_FilterAndSortCandidates_Basic_test( app ):
+  candidate1 = { 'prop1': 'aoo', 'prop2': 'bar' }
+  candidate2 = { 'prop1': 'bfo', 'prop2': 'zoo' }
+  candidate3 = { 'prop1': 'cfo', 'prop2': 'moo' }
+
+  data = {
+    'candidates': [ candidate3, candidate1, candidate2 ],
+    'sort_property': 'prop1',
+    'query': 'fo'
+  }
+
+  response_data = app.post_json( '/filter_and_sort_candidates', data ).json
+
+  assert_that( response_data, contains( candidate2, candidate3 ) )
+
+
+@SharedYcmd
+def MiscHandlers_LoadExtraConfFile_AlwaysJsonResponse_test( app ):
+  filepath = PathToTestFile( '.ycm_extra_conf.py' )
+  extra_conf_data = BuildRequest( filepath = filepath )
+
+  assert_that( app.post_json( '/load_extra_conf_file', extra_conf_data ).json,
+               equal_to( True ) )
+
+
+@SharedYcmd
+def MiscHandlers_IgnoreExtraConfFile_AlwaysJsonResponse_test( app ):
+  filepath = PathToTestFile( '.ycm_extra_conf.py' )
+  extra_conf_data = BuildRequest( filepath = filepath )
+
+  assert_that( app.post_json( '/ignore_extra_conf_file', extra_conf_data ).json,
+               equal_to( True ) )

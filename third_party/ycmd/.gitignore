@@ -4,7 +4,7 @@
 *.o
 
 # Compiled Dynamic libraries
-# *.dll
+*.dll
 *.so*
 *.dylib
 
@@ -24,13 +24,14 @@ cmake_install.cmake
 install_manifest.txt
 
 # Python
-*.py[co]
+*.py[cod]
 
 # Installer logs
 pip-log.txt
 
 # Unit test / coverage reports
 .coverage
+.coverage.*
 cover/
 .tox
 nosetests.xml
@@ -38,12 +39,12 @@ nosetests.xml
 
 # custom
 ycm_core_tests
+PYTHON_USED_DURING_BUILDING
 
 # When we use the bcp tool to copy over the parts of boost we care about, it
 # also copies some cruft files we don't need; this ignores them
 cpp/BoostParts/libs/*/build
 cpp/BoostParts/libs/*/test
-cpp/build
 
 # Exclude auto generated vim doc tags.
 doc/tags

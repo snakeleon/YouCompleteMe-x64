@@ -1,12 +1,20 @@
 language: rust
 sudo: false
 
+cache: cargo
+
 before_install:
   - export RUST_SRC_PATH=$(scripts/download_rust_source.sh)
 
 rust:
   - stable
   - beta
+  - nightly
+
+matrix:
+  allow_failures:
+    - rust: nightly
+    - rust: beta
 
 script:
   - cargo test
