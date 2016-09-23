@@ -2934,10 +2934,10 @@ This software is licensed under the [GPL v3 license][gpl].
     endif
 
 > NOTE: 默认的全局脚本指定索引当前目录下的头文件，为了不想影响其它项目可以针对不同项目单独设置脚本文件;
-将该个项目的 .ycm_extra_conf.py 文件放在该项目目录下，注意其中项目语言 如果是C项目请将 -x 项后的 c++ 改为 c ,
-其中编译特性使用了c++11 (-std=c++11), 使用请根据具体情况调整。
+将该个项目的 `.ycm_extra_conf.py` 文件放在该项目目录下，注意其中项目语言 如果是C项目请将 -x 项后的 c++ 改为 c ,
+其中编译特性使用了c++11 (-std=c++11), 使用请根据您的项目具体情况进行调整。
 
-- 3. 如果你使用的VIM for Windows版本太低或支持的特性不满足自己的需求，自己编译又麻烦；那么特别推荐一个大神编译好的[Vim builds for Windows][Vim builds for Windows]此版本更新维护较频繁，官方出新补丁时都会跟上，如果大家喜欢可以在页面下方有编译者的E-Mail可以联系，或者赞助其服务器的租金。
+- 3. 如果你使用的 VIM for Windows 版本太低或支持的特性不满足自己的需求，自己编译又麻烦；那么特别推荐一个大神编译好的 [Vim builds for Windows][Vim builds for Windows] 此版本更新维护较频繁，官方更新补丁时都会及时跟上。如果大家喜欢或者有任何疑问，可以在页面下方有编译者的E-Mail可以联系，或者赞助其服务器的租金。
 
 
 ###Visual C Runtime问题
@@ -2953,8 +2953,8 @@ This software is licensed under the [GPL v3 license][gpl].
     Please contact the application's support team for more
     information.
 
-引起这个头痛问题的是因为msvcr90.dll版本兼容性，首先确保已经更新了官方最新的Visual C 运行库，默认Win7 SP1 已经带有此运行库，
-再排查你的系统环境变量 PATH 中，有没有其它的 msvcr90.dll 文件存在；如果有，请将其删除或者备份改名，大可放心，你的相关程序
+引起这个头痛问题的是因为 `msvcr90.dll` 版本兼容性，首先确保已经更新了官方最新的 Visual C 运行库，默认 Win7 SP1 已经带有此运行库，
+再排查你的系统环境变量 PATH 中，有没有其它的 `msvcr90.dll` 文件存在；如果有，请将其删除或者备份改名，大可放心，你的相关程序
 都依然能够很好的工作(前提是你的系统已经更新了最新的相关运行库文件)。
 
 [ycmd]: https://github.com/Valloric/ycmd
