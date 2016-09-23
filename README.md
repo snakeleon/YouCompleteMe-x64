@@ -43,7 +43,7 @@ YouCompleteMe: a code-completion engine for Vim
 	- [关于版本](#关于版本)
 	- [脚本配置](#脚本配置)
 	- [使用技巧](#使用技巧)
-    - [Visual C Runtime问题](#Visual C Runtime问题)
+    - [Visual C Runtime 问题](#Visual-C-Runtime-问题)
 
 
 Intro
@@ -2940,7 +2940,7 @@ This software is licensed under the [GPL v3 license][gpl].
 - 3. 如果你使用的 VIM for Windows 版本太低或支持的特性不满足自己的需求，自己编译又麻烦；那么特别推荐一个大神编译好的 [Vim builds for Windows][Vim builds for Windows] 此版本更新维护较频繁，官方更新补丁时都会及时跟上。如果大家喜欢或者有任何疑问，可以在页面下方有编译者的E-Mail可以联系，或者赞助其服务器的租金。
 
 
-###Visual C Runtime问题
+###Visual C Runtime 问题
 
 如果各位在启动遇到如下错误提示:
 
