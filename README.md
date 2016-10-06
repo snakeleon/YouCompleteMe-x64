@@ -45,7 +45,6 @@ YouCompleteMe: a code-completion engine for Vim
 	- [使用技巧](#使用技巧)
     - [Visual C Runtime 问题](#Visual-C-Runtime-问题)
 
-
 Intro
 -----
 
@@ -216,10 +215,10 @@ that are conservatively turned off by default that you may want to turn on.
 Please refer to the full Installation Guide below; the following commands are
 provided on a best-effort basis and may not work for you.
 
-Make sure you have Vim 7.3.598 with python2 or python3 support. Ubuntu 14.04 and
-later have a Vim that's recent enough. You can see the version of Vim installed
-by running `vim --version`. If the version is too old, you may need to [compile
-Vim from source][vim-build] (don't worry, it's easy).
+Make sure you have Vim 7.4.143 with Python 2 or Python 3 support. Ubuntu 14.10
+and later have a Vim that's recent enough. You can see the version of Vim
+installed by running `vim --version`. If the version is too old, you may need to
+[compile Vim from source][vim-build] (don't worry, it's easy).
 
 Install YouCompleteMe with [Vundle][].
 
@@ -278,7 +277,7 @@ that are conservatively turned off by default that you may want to turn on.
 Please refer to the full Installation Guide below; the following commands are
 provided on a best-effort basis and may not work for you.
 
-Make sure you have Vim 7.3.598 with Python 2 or Python 3 support. Fedora 21 and
+Make sure you have Vim 7.4.143 with Python 2 or Python 3 support. Fedora 21 and
 later have a Vim that's recent enough. You can see the version of Vim installed
 by running `vim --version`. If the version is too old, you may need to [compile
 Vim from source][vim-build] (don't worry, it's easy).
@@ -343,7 +342,7 @@ provided on a best-effort basis and may not work for you.
 **Important:** we assume that you are using the `cmd.exe` command prompt and
 that you know how to add an executable to the PATH environment variable.
 
-Make sure you have at least Vim 7.3.598 with Python 2 or Python 3 support. You
+Make sure you have at least Vim 7.4.143 with Python 2 or Python 3 support. You
 can check the version and which Python is supported by typing `:version` inside
 Vim. Look at the features included: `+python/dyn` for Python 2 and
 `+python3/dyn` for Python 3. Take note of the Vim architecture, i.e. 32 or
@@ -420,7 +419,7 @@ Please refer to the full Installation Guide below; the following commands are
 provided on a best-effort basis and may not work for you. OpenBSD / FreeBSD are
 not officially supported platforms by YCM.
 
-Make sure you have Vim 7.3.598 with Python 2 or Python 3 support.
+Make sure you have Vim 7.4.143 with Python 2 or Python 3 support.
 
 OpenBSD 5.5 and later have a Vim that's recent enough. You can see the version of
 Vim installed by running `vim --version`.
@@ -497,19 +496,19 @@ process.
 
 **Please follow the instructions carefully. Read EVERY WORD.**
 
-1.  **Ensure that your version of Vim is _at least_ 7.3.598 _and_ that it has
+1.  **Ensure that your version of Vim is _at least_ 7.4.143 _and_ that it has
     support for Python 2 or Python 3 scripting**.
 
     Inside Vim, type `:version`. Look at the first two to three lines of output;
     it should say `Vi IMproved X.Y`, where X.Y is the major version of vim. If
-    your version is greater than 7.3, then you're all set. If your version is
-    7.3 then look below that where it says, `Included patches: 1-Z`, where Z
-    will be some number. That number needs to be 598 or higher.
+    your version is greater than 7.4, then you're all set. If your version is
+    7.4 then look below that where it says, `Included patches: 1-Z`, where Z
+    will be some number. That number needs to be 143 or higher.
 
     If your version of Vim is not recent enough, you may need to [compile Vim
     from source][vim-build] (don't worry, it's easy).
 
-    After you have made sure that you have Vim 7.3.598+, type the following in
+    After you have made sure that you have Vim 7.4.143+, type the following in
     Vim: `:echo has('python') || has('python3')`. The output should be 1. If
     it's 0, then get a version of Vim with Python support.
 
@@ -1313,6 +1312,19 @@ NOTE: Causes re-parsing of the current translation unit.
 
 Supported in filetypes: `c, cpp, objc, objcpp, javascript, typescript`
 
+#### The `GetTypeImprecise` subcommand
+
+WARNING: This command trades correctness for speed!
+
+Same as the `GetType` command except that it doesn't recompile the file with
+libclang before looking up nodes in the AST. This can be very useful when you're
+editing files that take long to compile but you know that you haven't made any
+changes since the last parse that would lead to incorrect type. When you're
+just browsing around your codebase, this command can spare you quite a bit of
+latency.
+
+Supported in filetypes: `c, cpp, objc, objcpp`
+
 #### The `GetParent` subcommand
 
 Echos the semantic parent of the point under the cursor.
@@ -1356,6 +1368,19 @@ under the cursor. Depending on the file type, this includes things like:
 
 Supported in filetypes: `c, cpp, objc, objcpp, cs, python, typescript,
 javascript`
+
+#### The `GetDocImprecise` subcommand
+
+WARNING: This command trades correctness for speed!
+
+Same as the `GetDoc` command except that it doesn't recompile the file with
+libclang before looking up nodes in the AST. This can be very useful when you're
+editing files that take long to compile but you know that you haven't made any
+changes since the last parse that would lead to incorrect docs. When you're
+just browsing around your codebase, this command can spare you quite a bit of
+latency.
+
+Supported in filetypes: `c, cpp, objc, objcpp`
 
 ### Refactoring and FixIt Commands
 
@@ -2499,11 +2524,6 @@ fixes that should make YCM work with such a configuration. Also rebuild Macvim
 then. If you still get problems with this, see [issue #18][issue18] for
 suggestions.
 
-### Vim segfaults when I use the semantic completer in Ruby files
-
-This was caused by a Vim bug. Update your version of Vim (Vim 7.3.874 is known
-to work, earlier versions may also fix this issue).
-
 ### I get `LONG_BIT definition appears wrong for platform` when compiling
 
 Look at the output of your CMake call. There should be a line in it like the
@@ -2671,7 +2691,9 @@ Those needed to be fixed upstream (and were). A few months after those bugs were
 fixed, Vim trunk landed the `pyeval()` function which improved YCM performance
 even more since less time was spent serializing and deserializing data between
 Vim and the embedded Python interpreter. A few critical bugfixes for `pyeval()`
-landed in Vim 7.3.584 (and a few commits before that).
+landed in Vim 7.3.584 (and a few commits before that), and given the current
+availability of Vim 7.4.143, which features improved events for text change
+detection, it has been chosen.
 
 ### I get annoying messages in Vim's status area when I type
 
@@ -2860,7 +2882,6 @@ License
 This software is licensed under the [GPL v3 license][gpl].
 © 2015-2016 YouCompleteMe contributors
 
-
 中文入门指引
 ------------
 
@@ -2872,7 +2893,7 @@ This software is licensed under the [GPL v3 license][gpl].
 
 ###关于版本
 
-- ycmd  核心版本: 24 (9 September 2016) 静态编译
+- ycmd  核心版本: 25 (3 October 2016) 静态编译
 - libclang  版本: 3.9.0 (2 September 2016) [Clang][Clang]
 - Python    支持: 3.5.2 (27 June 2016) [Python][python-win-download]
 

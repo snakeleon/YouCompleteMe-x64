@@ -43,6 +43,25 @@ from ycmd.utils import ReadFile
 
 
 @SharedYcmd
+def Subcommands_DefinedSubcommands_test( app ):
+  subcommands_data = BuildRequest( completer_target = 'cpp' )
+  eq_( sorted( [ 'ClearCompilationFlagCache',
+                 'FixIt',
+                 'GetDoc',
+                 'GetDocImprecise',
+                 'GetParent',
+                 'GetType',
+                 'GetTypeImprecise',
+                 'GoTo',
+                 'GoToDeclaration',
+                 'GoToDefinition',
+                 'GoToImprecise',
+                 'GoToInclude' ] ),
+       app.post_json( '/defined_subcommands',
+                      subcommands_data ).json )
+
+
+@SharedYcmd
 def Subcommands_GoTo_ZeroBasedLineAndColumn_test( app ):
   contents = ReadFile( PathToTestFile(
     'GoTo_Clang_ZeroBasedLineAndColumn_test.cc' ) )
@@ -384,6 +403,14 @@ def Subcommands_GetType_test():
             'GetType_Clang_test.cc',
             test,
             [ 'GetType' ] )
+
+  # For every practical scenario, GetTypeImprecise is the same as GetType (it
+  # just skips the reparse)
+  for test in tests:
+    yield ( RunGetSemanticTest,
+            'GetType_Clang_test.cc',
+            test,
+            [ 'GetTypeImprecise' ] )
 
 
 def Subcommands_GetParent_test():
@@ -933,7 +960,7 @@ def Subcommands_GetDoc_NoCursor_test( app ):
 
 # Following tests repeat the tests above, but without re-parsing the file
 @SharedYcmd
-def Subcommands_GetDocQuick_Variable_test( app ):
+def Subcommands_GetDocImprecise_Variable_test( app ):
   filepath = PathToTestFile( 'GetDoc_Clang.cc' )
   contents = ReadFile( filepath )
 
@@ -950,7 +977,7 @@ def Subcommands_GetDocQuick_Variable_test( app ):
                              line_num = 70,
                              column_num = 24,
                              contents = contents,
-                             command_arguments = [ 'GetDocQuick' ],
+                             command_arguments = [ 'GetDocImprecise' ],
                              completer_target = 'filetype_default' )
 
   response = app.post_json( '/run_completer_command', event_data ).json
@@ -970,7 +997,7 @@ The first line of comment is the brief.""" } )
 
 
 @SharedYcmd
-def Subcommands_GetDocQuick_Method_test( app ):
+def Subcommands_GetDocImprecise_Method_test( app ):
   filepath = PathToTestFile( 'GetDoc_Clang.cc' )
   contents = ReadFile( filepath )
 
@@ -989,7 +1016,7 @@ def Subcommands_GetDocQuick_Method_test( app ):
                              line_num = 22,
                              column_num = 13,
                              contents = contents,
-                             command_arguments = [ 'GetDocQuick' ],
+                             command_arguments = [ 'GetDocImprecise' ],
                              completer_target = 'filetype_default' )
 
   response = app.post_json( '/run_completer_command', event_data ).json
@@ -1013,7 +1040,7 @@ This is more information
 
 
 @SharedYcmd
-def Subcommands_GetDocQuick_Namespace_test( app ):
+def Subcommands_GetDocImprecise_Namespace_test( app ):
   filepath = PathToTestFile( 'GetDoc_Clang.cc' )
   contents = ReadFile( filepath )
 
@@ -1032,7 +1059,7 @@ def Subcommands_GetDocQuick_Namespace_test( app ):
                              line_num = 65,
                              column_num = 14,
                              contents = contents,
-                             command_arguments = [ 'GetDocQuick' ],
+                             command_arguments = [ 'GetDocImprecise' ],
                              completer_target = 'filetype_default' )
 
   response = app.post_json( '/run_completer_command', event_data ).json
@@ -1050,7 +1077,7 @@ This is a test namespace""" } ) # noqa
 
 
 @SharedYcmd
-def Subcommands_GetDocQuick_Undocumented_test( app ):
+def Subcommands_GetDocImprecise_Undocumented_test( app ):
   filepath = PathToTestFile( 'GetDoc_Clang.cc' )
   contents = ReadFile( filepath )
 
@@ -1069,7 +1096,7 @@ def Subcommands_GetDocQuick_Undocumented_test( app ):
                              line_num = 81,
                              column_num = 17,
                              contents = contents,
-                             command_arguments = [ 'GetDocQuick' ],
+                             command_arguments = [ 'GetDocImprecise' ],
                              completer_target = 'filetype_default' )
 
   response = app.post_json( '/run_completer_command',
@@ -1083,7 +1110,7 @@ def Subcommands_GetDocQuick_Undocumented_test( app ):
 
 
 @SharedYcmd
-def Subcommands_GetDocQuick_NoCursor_test( app ):
+def Subcommands_GetDocImprecise_NoCursor_test( app ):
   filepath = PathToTestFile( 'GetDoc_Clang.cc' )
   contents = ReadFile( filepath )
 
@@ -1102,7 +1129,7 @@ def Subcommands_GetDocQuick_NoCursor_test( app ):
                              line_num = 1,
                              column_num = 1,
                              contents = contents,
-                             command_arguments = [ 'GetDocQuick' ],
+                             command_arguments = [ 'GetDocImprecise' ],
                              completer_target = 'filetype_default' )
 
   response = app.post_json( '/run_completer_command',
@@ -1116,7 +1143,7 @@ def Subcommands_GetDocQuick_NoCursor_test( app ):
 
 
 @SharedYcmd
-def Subcommands_GetDocQuick_NoReadyToParse_test( app ):
+def Subcommands_GetDocImprecise_NoReadyToParse_test( app ):
   filepath = PathToTestFile( 'GetDoc_Clang.cc' )
   contents = ReadFile( filepath )
 
@@ -1126,7 +1153,7 @@ def Subcommands_GetDocQuick_NoReadyToParse_test( app ):
                              line_num = 11,
                              column_num = 18,
                              contents = contents,
-                             command_arguments = [ 'GetDocQuick' ],
+                             command_arguments = [ 'GetDocImprecise' ],
                              completer_target = 'filetype_default' )
 
   response = app.post_json( '/run_completer_command', event_data ).json
