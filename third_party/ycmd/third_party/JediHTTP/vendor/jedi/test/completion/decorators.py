@@ -78,6 +78,9 @@ exe[4]['d']
 # -----------------
 # Decorator is a class
 # -----------------
+def same_func(func):
+    return func
+
 class Decorator(object):
     def __init__(self, func):
         self.func = func
@@ -94,9 +97,14 @@ nothing("")[0]
 #? str()
 nothing("")[1]
 
+
+@same_func
 @Decorator
 def nothing(a,b,c):
     return a,b,c
+
+#? int()
+nothing("")[0]
 
 class MethodDecoratorAsClass():
     class_var = 3
@@ -160,12 +168,12 @@ class JustAClass:
     def a(self):
         return 1
 
-#? ['__closure__']
-JustAClass().a.__closure__
+#? ['__call__']
+JustAClass().a.__call__
 #? int()
 JustAClass().a()
-#? ['__closure__']
-JustAClass.a.__closure__
+#? ['__call__']
+JustAClass.a.__call__
 #? int()
 JustAClass.a()
 

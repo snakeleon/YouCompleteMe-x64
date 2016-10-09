@@ -472,7 +472,10 @@ class Class(use_metaclass(CachedMetaClass, Wrapper)):
 
     @property
     def params(self):
-        return self.get_subscope_by_name('__init__').params
+        try:
+            return self.get_subscope_by_name('__init__').params
+        except KeyError:
+            return []  # object.__init__
 
     def names_dicts(self, search_global, is_instance=False):
         if search_global:
@@ -491,7 +494,7 @@ class Class(use_metaclass(CachedMetaClass, Wrapper)):
         for s in self.py__mro__():
             for sub in reversed(s.subscopes):
                 if sub.name.value == name:
-                        return sub
+                    return sub
         raise KeyError("Couldn't find subscope.")
 
     def __getattr__(self, name):
@@ -538,7 +541,6 @@ class Function(use_metaclass(CachedMetaClass, Wrapper)):
                 if trailer:
                     # Create a trailer and evaluate it.
                     trailer = tree.Node('trailer', trailer)
-                    # TODO WTF WHY IS THIS CHANGING PARENTS
                     trailer.parent = dec
                     dec_results = self._evaluator.eval_trailer(dec_results, trailer)
 
@@ -553,8 +555,10 @@ class Function(use_metaclass(CachedMetaClass, Wrapper)):
                 # Create param array.
                 if isinstance(f, Function):
                     old_func = f  # TODO this is just hacky. change.
-                else:
+                elif f.type == 'funcdef':
                     old_func = Function(self._evaluator, f, is_decorated=True)
+                else:
+                    old_func = f
 
                 wrappers = self._evaluator.execute_evaluated(decorator, old_func)
                 if not len(wrappers):
@@ -575,7 +579,7 @@ class Function(use_metaclass(CachedMetaClass, Wrapper)):
         if search_global:
             yield self.names_dict
         else:
-            scope = compiled.get_special_object(self._evaluator, 'FUNCTION_CLASS')
+            scope = self.py__class__()
             for names_dict in scope.names_dicts(False):
                 yield names_dict
 
@@ -601,7 +605,13 @@ class Function(use_metaclass(CachedMetaClass, Wrapper)):
         return dct
 
     def py__class__(self):
-        return compiled.get_special_object(self._evaluator, 'FUNCTION_CLASS')
+        # This differentiation is only necessary for Python2. Python3 does not
+        # use a different method class.
+        if isinstance(self.base.get_parent_scope(), tree.Class):
+            name = 'METHOD_CLASS'
+        else:
+            name = 'FUNCTION_CLASS'
+        return compiled.get_special_object(self._evaluator, name)
 
     def __getattr__(self, name):
         return getattr(self.base_func, name)
@@ -677,13 +687,26 @@ class FunctionExecution(Executed):
             if check is flow_analysis.UNREACHABLE:
                 debug.dbg('Return unreachable: %s', r)
             else:
-                types |= self._evaluator.eval_element(r.children[1])
+                if check_yields:
+                    types |= iterable.unite(self._eval_yield(r))
+                else:
+                    types |= self._evaluator.eval_element(r.children[1])
             if check is flow_analysis.REACHABLE:
                 debug.dbg('Return reachable: %s', r)
                 break
         return types
 
-    # TODO add execution_recursion_decorator?!
+    def _eval_yield(self, yield_expr):
+        element = yield_expr.children[1]
+        if element.type == 'yield_arg':
+            # It must be a yield from.
+            yield_from_types = self._evaluator.eval_element(element.children[1])
+            for result in iterable.py__iter__(self._evaluator, yield_from_types, element):
+                yield result
+        else:
+            yield self._evaluator.eval_element(element)
+
+    @recursion.execution_recursion_decorator
     def get_yield_types(self):
         yields = self.yields
         stopAt = tree.ForStmt, tree.WhileStmt, FunctionExecution, tree.IfStmt
@@ -716,7 +739,8 @@ class FunctionExecution(Executed):
             if for_stmt is None:
                 # No for_stmt, just normal yields.
                 for yield_ in yields:
-                    yield evaluator.eval_element(yield_.children[1])
+                    for result in self._eval_yield(yield_):
+                        yield result
             else:
                 input_node = for_stmt.get_input_node()
                 for_types = evaluator.eval_element(input_node)
@@ -725,7 +749,8 @@ class FunctionExecution(Executed):
                     dct = {str(for_stmt.children[1]): index_types}
                     evaluator.predefined_if_name_dict_dict[for_stmt] = dct
                     for yield_in_same_for_stmt in yields:
-                        yield evaluator.eval_element(yield_in_same_for_stmt.children[1])
+                        for result in self._eval_yield(yield_in_same_for_stmt):
+                            yield result
                     del evaluator.predefined_if_name_dict_dict[for_stmt]
 
     def names_dicts(self, search_global):
@@ -787,9 +812,10 @@ class GlobalName(helpers.FakeName):
 
 
 class ModuleWrapper(use_metaclass(CachedMetaClass, tree.Module, Wrapper)):
-    def __init__(self, evaluator, module):
+    def __init__(self, evaluator, module, parent_module=None):
         self._evaluator = evaluator
         self.base = self._module = module
+        self._parent_module = parent_module
 
     def names_dicts(self, search_global):
         yield self.base.names_dict
@@ -835,9 +861,14 @@ class ModuleWrapper(use_metaclass(CachedMetaClass, tree.Module, Wrapper)):
         return helpers.FakeName(unicode(self.base.name), self, (1, 0))
 
     def _get_init_directory(self):
+        """
+        :return: The path to the directory of a package. None in case it's not
+                 a package.
+        """
         for suffix, _, _ in imp.get_suffixes():
             ending = '__init__' + suffix
-            if self.py__file__().endswith(ending):
+            py__file__ = self.py__file__()
+            if py__file__ is not None and py__file__.endswith(ending):
                 # Remove the ending, including the separator.
                 return self.py__file__()[:-len(ending) - 1]
         return None
@@ -864,6 +895,30 @@ class ModuleWrapper(use_metaclass(CachedMetaClass, tree.Module, Wrapper)):
         else:
             return self.py__name__()
 
+    def _py__path__(self):
+        if self._parent_module is None:
+            search_path = self._evaluator.sys_path
+        else:
+            search_path = self._parent_module.py__path__()
+        init_path = self.py__file__()
+        if os.path.basename(init_path) == '__init__.py':
+            with open(init_path, 'rb') as f:
+                content = common.source_to_unicode(f.read())
+                # these are strings that need to be used for namespace packages,
+                # the first one is ``pkgutil``, the second ``pkg_resources``.
+                options = ('declare_namespace(__name__)', 'extend_path(__path__')
+                if options[0] in content or options[1] in content:
+                    # It is a namespace, now try to find the rest of the
+                    # modules on sys_path or whatever the search_path is.
+                    paths = set()
+                    for s in search_path:
+                        other = os.path.join(s, unicode(self.name))
+                        if os.path.isdir(other):
+                            paths.add(other)
+                    return list(paths)
+        # Default to this.
+        return [self._get_init_directory()]
+
     @property
     def py__path__(self):
         """
@@ -876,33 +931,12 @@ class ModuleWrapper(use_metaclass(CachedMetaClass, tree.Module, Wrapper)):
         is a list of paths (strings).
         Raises an AttributeError if the module is not a package.
         """
-        def return_value(search_path):
-            init_path = self.py__file__()
-            if os.path.basename(init_path) == '__init__.py':
-
-                with open(init_path, 'rb') as f:
-                    content = common.source_to_unicode(f.read())
-                    # these are strings that need to be used for namespace packages,
-                    # the first one is ``pkgutil``, the second ``pkg_resources``.
-                    options = ('declare_namespace(__name__)', 'extend_path(__path__')
-                    if options[0] in content or options[1] in content:
-                        # It is a namespace, now try to find the rest of the
-                        # modules on sys_path or whatever the search_path is.
-                        paths = set()
-                        for s in search_path:
-                            other = os.path.join(s, unicode(self.name))
-                            if os.path.isdir(other):
-                                paths.add(other)
-                        return list(paths)
-            # Default to this.
-            return [path]
-
         path = self._get_init_directory()
 
         if path is None:
             raise AttributeError('Only packages have __path__ attributes.')
         else:
-            return return_value
+            return self._py__path__
 
     @memoize_default()
     def _sub_modules_dict(self):

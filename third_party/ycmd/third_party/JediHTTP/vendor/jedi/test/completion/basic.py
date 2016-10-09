@@ -165,6 +165,17 @@ def global_define():
 #? int()
 global_var_in_func
 
+
+def funct1():
+    # From issue #610
+    global global_dict_var
+    global_dict_var = dict()
+def funct2():
+    global global_dict_var
+    #? dict()
+    global_dict_var
+
+
 # -----------------
 # within docstrs
 # -----------------
@@ -178,6 +189,16 @@ def a():
 
 #?
 # str literals in comment """ upper
+
+def completion_in_comment():
+    #? ['Exception']
+    # might fail because the comment is not a leaf: Exception
+    pass
+
+some_word
+#? ['Exception']
+# Very simple comment completion: Exception
+# Commment after it
 
 # -----------------
 # magic methods
@@ -214,6 +235,9 @@ xyz = 'smörbröd.py'
 if 1:
     #? str()
     xyz
+
+#?
+¹.
 
 # -----------------
 # exceptions

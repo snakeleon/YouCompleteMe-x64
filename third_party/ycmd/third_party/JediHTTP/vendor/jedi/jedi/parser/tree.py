@@ -147,10 +147,12 @@ class Base(object):
         return scope
 
     def get_definition(self):
+        if self.type in ('newline', 'dedent', 'indent', 'endmarker'):
+            raise ValueError('Cannot get the indentation of whitespace or indentation.')
         scope = self
         while scope.parent is not None:
             parent = scope.parent
-            if scope.isinstance(Node, Name) and parent.type != 'simple_stmt':
+            if scope.isinstance(Node, Leaf) and parent.type != 'simple_stmt':
                 if scope.type == 'testlist_comp':
                     try:
                         if isinstance(scope.children[1], CompFor):
@@ -292,7 +294,11 @@ class Leaf(Base):
 
     def get_start_pos_of_prefix(self):
         try:
-            return self.get_previous_leaf().end_pos
+            previous_leaf = self
+            while True:
+                previous_leaf = previous_leaf.get_previous_leaf()
+                if previous_leaf.type not in ('indent', 'dedent'):
+                    return previous_leaf.end_pos
         except IndexError:
             return 1, 0  # It's the first leaf.
 
@@ -348,10 +354,15 @@ class LeafWithNewLines(Leaf):
         return "<%s: %r>" % (type(self).__name__, self.value)
 
 
-class Whitespace(LeafWithNewLines):
+class EndMarker(Leaf):
+    __slots__ = ()
+    type = 'endmarker'
+
+
+class Newline(LeafWithNewLines):
     """Contains NEWLINE and ENDMARKER tokens."""
     __slots__ = ()
-    type = 'whitespace'
+    type = 'newline'
 
     @utf8_repr
     def __repr__(self):
@@ -377,6 +388,10 @@ class Name(Leaf):
                                    self.start_pos[0], self.start_pos[1])
 
     def is_definition(self):
+        if self.parent.type in ('power', 'atom_expr'):
+            # In `self.x = 3` self is not a definition, but x is.
+            return False
+
         stmt = self.get_definition()
         if stmt.type in ('funcdef', 'classdef', 'file_input', 'param'):
             return self == stmt.name
@@ -417,7 +432,7 @@ class Indent(Leaf):
 
 
 class Dedent(Leaf):
-    type = 'indent'
+    type = 'dedent'
     __slots__ = ()
 
 
@@ -535,6 +550,10 @@ class BaseNode(Base):
                 try:
                     return c.get_leaf_for_position(position, include_prefixes)
                 except AttributeError:
+                    while c.type in ('indent', 'dedent'):
+                        # We'd rather not have indents and dedents as a leaf,
+                        # because they don't contain indentation information.
+                        c = c.get_next_leaf()
                     return c
 
         return None
@@ -659,6 +678,9 @@ class ErrorNode(BaseNode):
     """
     __slots__ = ()
     type = 'error_node'
+
+    def nodes_to_execute(self, last_added=False):
+        return []
 
 
 class ErrorLeaf(LeafWithNewLines):
@@ -952,23 +974,28 @@ def _create_params(parent, argslist_list):
 
     if first.type in ('name', 'tfpdef'):
         if check_python2_nested_param(first):
-            return []
+            return [first]
         else:
             return [Param([first], parent)]
+    elif first == '*':
+        return [first]
     else:  # argslist is a `typedargslist` or a `varargslist`.
         children = first.children
-        params = []
+        new_children = []
         start = 0
         # Start with offset 1, because the end is higher.
         for end, child in enumerate(children + [None], 1):
             if child is None or child == ',':
-                new_children = children[start:end]
-                if new_children:  # Could as well be comma and then end.
-                    if check_python2_nested_param(new_children[0]):
-                        continue
-                    params.append(Param(new_children, parent))
+                param_children = children[start:end]
+                if param_children:  # Could as well be comma and then end.
+                    if check_python2_nested_param(param_children[0]):
+                        new_children += param_children
+                    elif param_children[0] == '*' and param_children[1] == ',':
+                        new_children += param_children
+                    else:
+                        new_children.append(Param(param_children, parent))
                     start = end
-        return params
+        return new_children
 
 
 class Function(ClassOrFunc):
@@ -995,8 +1022,7 @@ class Function(ClassOrFunc):
 
     @property
     def params(self):
-        # Contents of parameter lit minus the leading <Operator: (> and the trailing <Operator: )>.
-        return self.children[2].children[1:-1]
+        return [p for p in self.children[2].children if p.type == 'param']
 
     @property
     def name(self):
@@ -1479,7 +1505,7 @@ def _defined_names(current):
     if is_node(current, 'testlist_star_expr', 'testlist_comp', 'exprlist'):
         for child in current.children[::2]:
             names += _defined_names(child)
-    elif is_node(current, 'atom'):
+    elif is_node(current, 'atom', 'star_expr'):
         names += _defined_names(current.children[1])
     elif is_node(current, 'power', 'atom_expr'):
         if current.children[-2] != '**':  # Just if there's no operation

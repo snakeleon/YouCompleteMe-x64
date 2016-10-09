@@ -177,3 +177,59 @@ d = ''
 """ bsdf """
 #? str()
 d.upper()
+
+# -----------------
+# class docstrings
+# -----------------
+
+class InInit():
+    def __init__(self, foo):
+        """
+        :type foo: str
+        """
+        #? str()
+        foo
+
+
+class InClass():
+    """
+    :type foo: str
+    """
+    def __init__(self, foo):
+        #? str()
+        foo
+
+
+class InBoth():
+    """
+    :type foo: str
+    """
+    def __init__(self, foo):
+        """
+        :type foo: int
+        """
+        #? str() int()
+        foo
+
+
+def __init__(foo):
+    """
+    :type foo: str
+    """
+    #? str()
+    foo
+
+
+# -----------------
+# Renamed imports (#507)
+# -----------------
+
+import datetime
+from datetime import datetime as datetime_imported
+
+def import_issues(foo):
+    """
+    @type foo: datetime_imported
+    """
+    #? datetime.datetime()
+    foo

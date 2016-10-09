@@ -39,6 +39,9 @@ b[8:]
 #? list()
 b[int():]
 
+#? list()
+b[:]
+
 
 class _StrangeSlice():
     def __getitem__(self, sliced):
@@ -308,6 +311,17 @@ for i in 0, 2:
     #? int() str()
     GetItemWithList()[i]
 
+
+# With super
+class SuperYeah(list):
+    def __getitem__(self, index):
+        return super()[index]
+
+#?
+SuperYeah([1])[0]
+#?
+SuperYeah()[0]
+
 # -----------------
 # conversions
 # -----------------
@@ -366,23 +380,51 @@ for i in set(a for a in [1]):
 
 
 # -----------------
-# Recursions
-# -----------------
-
-def to_list(iterable):
-    return list(set(iterable))
-
-
-def recursion1(foo):
-    return to_list(to_list(foo)) + recursion1(foo)
-
-#? int()
-recursion1([1,2])[0]
-
-# -----------------
 # Merged Arrays
 # -----------------
 
 for x in [1] + ['']:
     #? int() str()
     x
+
+# -----------------
+# For loops with attribute assignment.
+# -----------------
+def test_func():
+    x = 'asdf'
+    for x.something in [6,7,8]:
+        pass
+    #? str()
+    x
+
+    for x.something, b in [[6, 6.0]]:
+        pass
+    #? str()
+    x
+
+
+# -----------------
+# PEP 3132 Extended Iterable Unpacking (star unpacking)
+# -----------------
+
+a, *b, c = [1, 'b', list, dict]
+#? int()
+a
+#? str()
+b
+#? list
+c
+
+# Not valid syntax
+a, *b, *c = [1, 'd', list]
+#? int()
+a
+#? str()
+b
+#? list
+c
+
+lc = [x for a, *x in [(1, '', 1.0)]]
+
+#?
+lc[0][0]

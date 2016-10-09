@@ -30,6 +30,12 @@ b = math
 #! ['b = math']
 b
 
+#! 18 ['foo = 10']
+foo = 10;print(foo)
+
+# -----------------
+# classes
+# -----------------
 class C(object):
     def b(self):
         #! ['b = math']
@@ -95,6 +101,13 @@ ClassVar().x = ''
 def f(t=None):
     #! 9 ['t=None']
     t = t or 1
+
+
+class X():
+    pass
+
+#! 3 []
+X(foo=x)
 
 # -----------------
 # imports

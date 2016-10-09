@@ -66,13 +66,15 @@ Gedit:
 
 - gedi_
 
-.. _other-software:
+Eric IDE:
 
-Other Software Using Jedi
--------------------------
+- `Eric IDE`_ (Available as a plugin)
 
-- wdb_ - Web Debugger
+Web Debugger:
 
+- wdb_
+
+and many more!
 
 .. _repl-completion:
 
@@ -109,3 +111,4 @@ Using a custom ``$HOME/.pythonrc.py``
 .. _SourceLair: https://www.sourcelair.com
 .. _GNOME Builder: https://wiki.gnome.org/Apps/Builder/
 .. _gedi: https://github.com/isamert/gedi
+.. _Eric IDE: http://eric-ide.python-projects.org

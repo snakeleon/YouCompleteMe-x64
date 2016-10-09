@@ -1,11 +1,11 @@
 # -*- coding: utf-8 -*-
 import sys
+from textwrap import dedent
 
 import jedi
 from jedi._compatibility import u, is_py3
 from jedi.parser import ParserWithRecovery, load_grammar
 from jedi.parser import tree as pt
-from textwrap import dedent
 
 
 def test_user_statement_on_import():
@@ -213,3 +213,26 @@ def test_backslash_dos_style():
     grammar = load_grammar()
     m = ParserWithRecovery(grammar, u('\\\r\n')).module
     assert m
+
+
+def test_started_lambda_stmt():
+    p = ParserWithRecovery(load_grammar(), u'lambda a, b: a i')
+    assert p.get_parsed_node().children[0].type == 'error_node'
+
+
+def test_python2_octal():
+    parser = ParserWithRecovery(load_grammar(), u'0660')
+    first = parser.get_parsed_node().children[0]
+    if is_py3:
+        assert first.type == 'error_node'
+    else:
+        assert first.children[0].type == 'number'
+
+
+def test_python3_octal():
+    parser = ParserWithRecovery(load_grammar(), u'0o660')
+    module = parser.get_parsed_node()
+    if is_py3:
+        assert module.children[0].children[0].type == 'number'
+    else:
+        assert module.children[0].type == 'error_node'

@@ -100,9 +100,11 @@ class Script(object):
             encoding = source_encoding
 
         self._orig_path = path
-        self.path = None if path is None else os.path.abspath(path)
+        # An empty path (also empty string) should always result in no path.
+        self.path = os.path.abspath(path) if path else None
 
         if source is None:
+            # TODO add a better warning than the traceback!
             with open(path) as f:
                 source = f.read()
 
@@ -131,8 +133,8 @@ class Script(object):
 
     def _get_module(self):
         cache.invalidate_star_import_cache(self._path)
-        parser = FastParser(self._grammar, self._source, self._path)
-        save_parser(self._path, parser, pickling=False)
+        parser = FastParser(self._grammar, self._source, self.path)
+        save_parser(self.path, parser, pickling=False)
 
         module = self._evaluator.wrap(parser.module)
         imports.add_module(self._evaluator, unicode(module.name), module)
@@ -194,18 +196,31 @@ class Script(object):
         # the API.
         return helpers.sorted_definitions(set(defs))
 
-    def goto_assignments(self):
+    def goto_assignments(self, follow_imports=False):
         """
-        Return the first definition found. Imports and statements aren't
-        followed. Multiple objects may be returned, because Python itself is a
+        Return the first definition found, while optionally following imports.
+        Multiple objects may be returned, because Python itself is a
         dynamic language, which means depending on an option you can have two
         different versions of a function.
 
         :rtype: list of :class:`classes.Definition`
         """
-        results = self._goto()
-        d = [classes.Definition(self._evaluator, d) for d in set(results)]
-        return helpers.sorted_definitions(d)
+        def filter_follow_imports(names):
+            for name in names:
+                definition = name.get_definition()
+                if definition.type in ('import_name', 'import_from'):
+                    imp = imports.ImportWrapper(self._evaluator, name)
+                    for name in filter_follow_imports(imp.follow(is_goto=True)):
+                        yield name
+                else:
+                    yield name
+
+        names = self._goto()
+        if follow_imports:
+            names = filter_follow_imports(names)
+
+        defs = [classes.Definition(self._evaluator, d) for d in set(names)]
+        return helpers.sorted_definitions(defs)
 
     def _goto(self):
         """

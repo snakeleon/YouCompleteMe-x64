@@ -52,7 +52,10 @@ name = r'\w+'
 
 hex_number = r'0[xX][0-9a-fA-F]+'
 bin_number = r'0[bB][01]+'
-oct_number = r'0[oO][0-7]+'
+if is_py3:
+    oct_number = r'0[oO][0-7]+'
+else:
+    oct_number = '0[0-7]+'
 dec_number = r'(?:0+|[1-9][0-9]*)'
 int_number = group(hex_number, bin_number, oct_number, dec_number)
 exponent = r'[eE][-+]?[0-9]+'
@@ -303,8 +306,14 @@ def generate_tokens(readline, use_exact_op_types=False):
                 elif token in ')]}':
                     paren_level -= 1
 
+                try:
+                    # This check is needed in any case to check if it's a valid
+                    # operator or just some random unicode character.
+                    exact_type = opmap[token]
+                except KeyError:
+                    exact_type = typ = ERRORTOKEN
                 if use_exact_op_types:
-                    typ = opmap[token]
+                    typ = exact_type
                 else:
                     typ = OP
                 yield TokenInfo(typ, token, spos, prefix)

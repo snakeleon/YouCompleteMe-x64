@@ -113,6 +113,7 @@ class Parser(object):
             source += '\n'
             self._added_newline = True
 
+        self.source = source
         self._start_symbol = start_symbol
         self._grammar = grammar
 
@@ -214,12 +215,14 @@ class Parser(object):
             return pt.String(self.position_modifier, value, start_pos, prefix)
         elif type == NUMBER:
             return pt.Number(self.position_modifier, value, start_pos, prefix)
-        elif type in (NEWLINE, ENDMARKER):
-            return pt.Whitespace(self.position_modifier, value, start_pos, prefix)
+        elif type == NEWLINE:
+            return pt.Newline(self.position_modifier, value, start_pos, prefix)
         elif type == INDENT:
             return pt.Indent(self.position_modifier, value, start_pos, prefix)
         elif type == DEDENT:
             return pt.Dedent(self.position_modifier, value, start_pos, prefix)
+        elif type == ENDMARKER:
+            return pt.EndMarker(self.position_modifier, value, start_pos, prefix)
         else:
             return pt.Operator(self.position_modifier, value, start_pos, prefix)
 
@@ -232,10 +235,19 @@ class Parser(object):
         endmarker = self._parsed.children[-1]
         # The newline is either in the endmarker as a prefix or the previous
         # leaf as a newline token.
-        if endmarker.prefix.endswith('\n'):
-            endmarker.prefix = endmarker.prefix[:-1]
-            last_line = re.sub('.*\n', '', endmarker.prefix)
-            endmarker._start_pos = endmarker._start_pos[0] - 1, len(last_line)
+        prefix = endmarker.prefix
+        if prefix.endswith('\n'):
+            endmarker.prefix = prefix = prefix[:-1]
+            last_end = 0
+            if '\n' not in prefix:
+                # Basically if the last line doesn't end with a newline. we
+                # have to add the previous line's end_position.
+                try:
+                    last_end = endmarker.get_previous_leaf().end_pos[1]
+                except IndexError:
+                    pass
+            last_line = re.sub('.*\n', '', prefix)
+            endmarker._start_pos = endmarker._start_pos[0] - 1, last_end + len(last_line)
         else:
             try:
                 newline = endmarker.get_previous_leaf()
@@ -251,6 +263,7 @@ class Parser(object):
                         # will be no previous leaf. So just ignore it.
                         break
                 elif newline.value != '\n':
+                    # TODO REMOVE, error recovery was simplified.
                     # This may happen if error correction strikes and removes
                     # a whole statement including '\n'.
                     break
@@ -277,7 +290,8 @@ class ParserWithRecovery(Parser):
     :param module_path: The path of the module in the file system, may be None.
     :type module_path: str
     """
-    def __init__(self, grammar, source, module_path=None, tokenizer=None):
+    def __init__(self, grammar, source, module_path=None, tokenizer=None,
+                 start_parsing=True):
         self.syntax_errors = []
 
         self._omit_dedent_list = []
@@ -292,12 +306,16 @@ class ParserWithRecovery(Parser):
         # if self.options["print_function"]:
         #     python_grammar = pygram.python_grammar_no_print_statement
         # else:
-        super(ParserWithRecovery, self).__init__(grammar, source, tokenizer=tokenizer)
-
-        self.module = self._parsed
-        self.module.used_names = self._used_names
-        self.module.path = module_path
-        self.module.global_names = self._global_names
+        super(ParserWithRecovery, self).__init__(
+            grammar, source,
+            tokenizer=tokenizer,
+            start_parsing=start_parsing
+        )
+        if start_parsing:
+            self.module = self._parsed
+            self.module.used_names = self._used_names
+            self.module.path = module_path
+            self.module.global_names = self._global_names
 
     def parse(self, tokenizer):
         return super(ParserWithRecovery, self).parse(self._tokenize(self._tokenize(tokenizer)))
@@ -350,21 +368,6 @@ class ParserWithRecovery(Parser):
                 stack[-1][2][1].append(error_leaf)
 
     def _stack_removal(self, grammar, stack, arcs, start_index, value, start_pos):
-        def clear_names(children):
-            for c in children:
-                try:
-                    clear_names(c.children)
-                except AttributeError:
-                    if isinstance(c, pt.Name):
-                        try:
-                            self._scope_names_stack[-1][c.value].remove(c)
-                            self._used_names[c.value].remove(c)
-                        except ValueError:
-                            pass  # This may happen with CompFor.
-
-        for dfa, state, node in stack[start_index:]:
-            clear_names(children=node[1])
-
         failed_stack = []
         found = False
         all_nodes = []

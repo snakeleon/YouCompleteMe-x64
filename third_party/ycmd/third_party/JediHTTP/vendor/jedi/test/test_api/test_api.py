@@ -83,9 +83,8 @@ def test_completion_on_hex_literals():
     _check_number('0x1.', 'int')  # hexdecimal
     # Completing binary literals doesn't work if they are not actually binary
     # (invalid statements).
-    assert api.Script('0b2.').completions() == []
+    assert api.Script('0b2.b').completions() == []
     _check_number('0b1.', 'int')  # binary
-    _check_number('0o7.', 'int')  # octal
 
     _check_number('0x2e.', 'int')
     _check_number('0xE7.', 'int')
@@ -99,8 +98,10 @@ def test_completion_on_complex_literals():
     _check_number('1j.', 'complex')
     _check_number('44.j.', 'complex')
     _check_number('4.0j.', 'complex')
-    # No dot no completion
-    assert api.Script('4j').completions() == []
+    # No dot no completion - I thought, but 4j is actually a literall after
+    # which a keyword like or is allowed. Good times, haha!
+    assert (set([c.name for c in api.Script('4j').completions()]) ==
+            set(['if', 'and', 'in', 'is', 'not', 'or']))
 
 
 def test_goto_assignments_on_non_name():
@@ -144,3 +145,35 @@ def test_goto_definition_not_multiple():
 def test_usage_description():
     descs = [u.description for u in api.Script("foo = ''; foo").usages()]
     assert set(descs) == set(["foo = ''", 'foo'])
+
+
+def test_get_line_code():
+    def get_line_code(source, line=None, **kwargs):
+        return api.Script(source, line=line).completions()[0].get_line_code(**kwargs)
+
+    # On builtin
+    assert get_line_code('') == ''
+
+    # On custom code
+    line = '    foo'
+    assert get_line_code('def foo():\n%s' % line) == line
+
+    # With before/after
+    line = '    foo'
+    source = 'def foo():\n%s\nother_line' % line
+    assert get_line_code(source, line=2) == line
+    assert get_line_code(source, line=2, after=1) == line + '\nother_line'
+    assert get_line_code(source, line=2, after=1, before=1) == source
+
+
+def test_goto_assignments_follow_imports():
+    code = dedent("""
+    import inspect
+    inspect.isfunction""")
+    definition, = api.Script(code, column=0).goto_assignments(follow_imports=True)
+    assert 'inspect.py' in definition.module_path
+    assert definition.start_pos == (1, 0)
+
+    definition, = api.Script(code).goto_assignments(follow_imports=True)
+    assert 'inspect.py' in definition.module_path
+    assert definition.start_pos > (1, 0)
