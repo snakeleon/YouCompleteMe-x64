@@ -3,6 +3,7 @@ YouCompleteMe: a code-completion engine for Vim
 
 [![Build Status](https://travis-ci.org/Valloric/YouCompleteMe.svg?branch=master)](https://travis-ci.org/Valloric/YouCompleteMe)
 [![Build status](https://ci.appveyor.com/api/projects/status/ag9uqwi8s6btwjd8/branch/master?svg=true)](https://ci.appveyor.com/project/Valloric/YouCompleteMe)
+[![Coverage Status](https://codecov.io/gh/Valloric/YouCompleteMe/branch/master/graph/badge.svg)](https://codecov.io/gh/Valloric/YouCompleteMe)
 
 - [Intro](#intro)
 - [Installation](#installation)
@@ -1807,6 +1808,39 @@ Default: `1`
 let g:ycm_echo_current_diagnostic = 1
 ```
 
+### The `g:ycm_filter_diagnostics` option
+
+This option controls which diagnostics will be rendered by YCM. This option
+holds a dictionary of key-values, where the keys are Vim's filetype strings
+delimited by commas and values are dictionaries describing the filter.
+
+A filter is a dictionary of key-values, where the keys are the type of filter,
+and the value is a list of arguments to that filter. In the case of just a
+single item in the list, you may omit the brackets and just provide the argument
+directly. If any filter matches a diagnostic, it will be dropped and YCM will
+not render it.
+
+The following filter types are supported:
+
+- "regex": Accepts a string [regular expression][python-re]. This type matches
+when the regex (treated as case-insensitive) is found in the diagnostic text.
+- "level": Accepts a string level, either "warning" or "error." This type
+matches when the diagnostic has the same level.
+
+NOTE: The regex syntax is **NOT** Vim's, it's [Python's][python-re].
+
+Default: `{}`
+
+```viml
+let g:ycm_filter_diagnostics = {
+  \ "java": {
+  \      "regex": [ ".*taco.*", ... ],
+  \      "level": "error",
+  \      ...
+  \    }
+  \ }
+```
+
 ### The `g:ycm_always_populate_location_list` option
 
 When this option is set, YCM will populate the location list automatically every
@@ -2882,6 +2916,7 @@ License
 This software is licensed under the [GPL v3 license][gpl].
 © 2015-2016 YouCompleteMe contributors
 
+
 中文入门指引
 ------------
 
@@ -2893,7 +2928,7 @@ This software is licensed under the [GPL v3 license][gpl].
 
 ###关于版本
 
-- ycmd  核心版本: 25 (3 October 2016) 静态编译
+- ycmd  核心版本: 25 (24 October 2016) 静态编译
 - libclang  版本: 3.9.0 (2 September 2016) [Clang][Clang]
 - Python    支持: 3.5.2 (27 June 2016) [Python][python-win-download]
 
@@ -2956,7 +2991,7 @@ This software is licensed under the [GPL v3 license][gpl].
 
 > NOTE: 默认的全局脚本指定索引当前目录下的头文件，为了不想影响其它项目可以针对不同项目单独设置脚本文件;
 将该个项目的 `.ycm_extra_conf.py` 文件放在该项目目录下，注意其中项目语言 如果是C项目请将 -x 项后的 c++ 改为 c ,
-其中编译特性使用了c++11 (-std=c++11), 使用请根据您的项目具体情况进行调整。
+	其中编译特性使用了c++11 (-std=c++11), 使用请根据您的项目具体情况进行调整。
 
 - 3. 如果你使用的 VIM for Windows 版本太低或支持的特性不满足自己的需求，自己编译又麻烦；那么特别推荐一个大神编译好的 [Vim builds for Windows][Vim builds for Windows] 此版本更新维护较频繁，官方更新补丁时都会及时跟上。如果大家喜欢或者有任何疑问，可以在页面下方有编译者的E-Mail可以联系，或者赞助其服务器的租金。
 
