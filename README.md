@@ -2916,7 +2916,6 @@ License
 This software is licensed under the [GPL v3 license][gpl].
 © 2015-2016 YouCompleteMe contributors
 
-
 中文入门指引
 ------------
 

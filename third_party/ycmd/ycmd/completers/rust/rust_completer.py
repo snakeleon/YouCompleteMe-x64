@@ -65,6 +65,8 @@ ERROR_FROM_RACERD_MESSAGE = (
   'set the rust_src_path option, which is probably causing this issue. '
   'See YCM docs for details.' )
 
+LOGFILE_FORMAT = 'racerd_{port}_{std}_'
+
 
 def FindRacerdBinary( user_options ):
   """
@@ -280,13 +282,10 @@ class RustCompleter( Completer ):
       if self._rust_source_path:
         args.extend( [ '--rust-src-path', self._rust_source_path ] )
 
-      filename_format = p.join( utils.PathToCreatedTempDir(),
-                                'racerd_{port}_{std}.log' )
-
-      self._server_stdout = filename_format.format( port = port,
-                                                    std = 'stdout' )
-      self._server_stderr = filename_format.format( port = port,
-                                                    std = 'stderr' )
+      self._server_stdout = utils.CreateLogfile(
+          LOGFILE_FORMAT.format( port = port, std = 'stdout' ) )
+      self._server_stderr = utils.CreateLogfile(
+          LOGFILE_FORMAT.format( port = port, std = 'stderr' ) )
 
       with utils.OpenForStdHandle( self._server_stderr ) as fstderr:
         with utils.OpenForStdHandle( self._server_stdout ) as fstdout:
@@ -380,6 +379,8 @@ class RustCompleter( Completer ):
                            self._StopServer() ),
       'RestartServer' : ( lambda self, request_data, args:
                            self._RestartServer() ),
+      'GetDoc' : ( lambda self, request_data, args:
+                           self._GetDoc( request_data ) ),
     }
 
 
@@ -394,6 +395,17 @@ class RustCompleter( Completer ):
       _logger.exception( e )
       raise RuntimeError( 'Can\'t jump to definition.' )
 
+
+  def _GetDoc( self, request_data ):
+    try:
+      definition = self._GetResponse( '/find_definition',
+                                      request_data )
+
+      docs = [ definition[ 'context' ], definition[ 'docs' ] ]
+      return responses.BuildDetailedInfoResponse( '\n---\n'.join( docs ) )
+    except Exception as e:
+      _logger.exception( e )
+      raise RuntimeError( 'Can\'t lookup docs.' )
 
   def Shutdown( self ):
     self._StopServer()
