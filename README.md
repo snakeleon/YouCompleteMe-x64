@@ -3076,3 +3076,6 @@ This software is licensed under the [GPL v3 license][gpl].
 [JediHTTP]: https://github.com/vheon/JediHTTP
 [vim_win-python2.7.11-bug]: https://github.com/vim/vim/issues/717
 [vim_win-python2.7.11-bug_workaround]: https://github.com/vim/vim-win32-installer/blob/master/appveyor.bat#L90
+[YouCompleteMe-x86]: https://github.com/snakeleon/YouCompleteMe-x86
+[YouCompleteMe-x64]: https://github.com/snakeleon/YouCompleteMe-x64
+[Vim builds for Windows]: https://tuxproject.de/projects/vim/
