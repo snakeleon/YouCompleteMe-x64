@@ -532,10 +532,10 @@ process.
     **Download the latest version of `libclang`**. Clang is an open-source
     compiler that can compile C/C++/Objective-C/Objective-C++. The `libclang`
     library it provides is used to power the YCM semantic completion engine for
-    those languages. YCM is designed to work with libclang version 3.8 or
+    those languages. YCM is designed to work with libclang version 3.9 or
     higher.
 
-    You can use the system libclang _only if you are sure it is version 3.8 or
+    You can use the system libclang _only if you are sure it is version 3.9 or
     higher_, otherwise don't. Even if it is, we recommend using the [official
     binaries from llvm.org][clang-download] if at all possible. Make sure you
     download the correct archive file for your OS.
@@ -1157,12 +1157,9 @@ completion engine.
 
 ### The `:YcmToggleLogs` command
 
-This command automatically opens in windows the stdout and stderr logfiles
-written by the [ycmd server][ycmd]. If one or both logfiles are already opened,
-they are automatically closed. `stderr` or `stdout` can be specified as an
-argument of this command to only open the corresponding logfile instead of both.
-If this logfile is already opened, it will be closed. Only for debugging
-purpose.
+This command opens in separate windows the logfiles given as arguments or closes
+them if they are already open in the editor. When no argument is given, list the
+available logfiles. Only for debugging purpose.
 
 ### The `:YcmCompleter` command
 
@@ -2027,23 +2024,24 @@ Default: `''`
 let g:ycm_server_python_interpreter = ''
 ```
 
-### The `g:ycm_server_keep_logfiles` option
+### The `g:ycm_keep_logfiles` option
 
-When this option is set to `1`, the [ycmd completion server][ycmd] will keep the
-logfiles around after shutting down (they are deleted on shutdown by default).
+When this option is set to `1`, YCM and the [ycmd completion server][ycmd] will
+keep the logfiles around after shutting down (they are deleted on shutdown by
+default).
 
 To see where the logfiles are, call `:YcmDebugInfo`.
 
 Default: `0`
 
 ```viml
-let g:ycm_server_keep_logfiles = 0
+let g:ycm_keep_logfiles = 0
 ```
 
-### The `g:ycm_server_log_level` option
+### The `g:ycm_log_level` option
 
-The logging level that the [ycmd completion server][ycmd] uses. Valid values are
-the following, from most verbose to least verbose:
+The logging level that YCM and the [ycmd completion server][ycmd] use. Valid
+values are the following, from most verbose to least verbose:
 - `debug`
 - `info`
 - `warning`
@@ -2055,7 +2053,7 @@ Note that `debug` is _very_ verbose.
 Default: `info`
 
 ```viml
-let g:ycm_server_log_level = 'info'
+let g:ycm_log_level = 'info'
 ```
 
 ### The `g:ycm_auto_start_csharp_server` option
@@ -2504,10 +2502,10 @@ the message log if it encounters problems. It's likely you misconfigured
 something and YCM is complaining about it.
 
 Also, you may want to run the `:YcmDebugInfo` command; it will make YCM spew out
-various debugging information, including the [ycmd][] logfile paths and the
-compile flags for the current file if the file is a C-family language file and
-you have compiled in Clang support. Logfiles can be automatically opened in the
-editor using the `:YcmToggleLogs` command.
+various debugging information, including the YCM and [ycmd][] logfile paths and
+the compile flags for the current file if the file is a C-family language file
+and you have compiled in Clang support. Logfiles can be opened in the editor
+using [the `:YcmToggleLogs` command](#the-ycmtogglelogs-command).
 
 ### Sometimes it takes much longer to get semantic completions than normal
 
@@ -2626,7 +2624,7 @@ undefined symbol: clang_CompileCommands_dispose
 ```
 
 This means that Vim is trying to load a `libclang.so` that is too old. You need
-at least a 3.8 libclang. Just go through the installation guide and make sure
+at least a 3.9 libclang. Just go through the installation guide and make sure
 you are using a correct `libclang.so`. We recommend downloading prebuilt
 binaries from llvm.org.
 
