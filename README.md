@@ -2927,9 +2927,9 @@ This software is licensed under the [GPL v3 license][gpl].
 
 ###关于版本
 
-- ycmd  核心版本: 25 (24 October 2016) 静态编译
-- libclang  版本: 3.9.0 (2 September 2016) [Clang][Clang]
-- Python    支持: 3.5.2 (27 June 2016) [Python][python-win-download]
+- ycmd  核心版本: 25 (4 January 2017) 静态编译
+- libclang  版本: 3.9.1 (23 December 2016) [Clang][Clang]
+- Python    支持: 3.6.0 (23 December 2016) [Python][python-win-download]
 
 支持操作系统:
 
