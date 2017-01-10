@@ -18,9 +18,9 @@ from .utils import fixture_filepath, py3only
 from webtest import TestApp
 from jedihttp import handlers
 from nose.tools import ok_
-from hamcrest import ( assert_that, only_contains, all_of, is_not, has_key,
-                       has_item, has_items, has_entry, has_length, equal_to,
-                       is_, empty )
+from hamcrest import ( assert_that, only_contains, contains,
+                       contains_inanyorder, all_of, is_not, has_key, has_item,
+                       has_items, has_entry, has_entries, equal_to, is_, empty )
 
 import bottle
 bottle.debug( True )
@@ -79,41 +79,46 @@ def test_good_gotodefinition():
   definitions = app.post_json( '/gotodefinition',
                                request_data ).json[ 'definitions' ]
 
-  assert_that( definitions, has_length( 2 ) )
-  assert_that( definitions, has_items(
-                              {
-                                'module_path': filepath,
-                                'name': 'f',
-                                'in_builtin_module': False,
-                                'line': 1,
-                                'column': 4,
-                                'docstring': 'f()\n\nModule method docs\nAre '
-                                             'dedented, like you might expect',
-                                'description': 'def f',
-                                'is_keyword': False,
-                              },
-                              {
-                                'module_path': filepath,
-                                'name': 'C',
-                                'in_builtin_module': False,
-                                'line': 6,
-                                'column': 6,
-                                'docstring': 'Class Documentation',
-                                'description': 'class C',
-                                'is_keyword': False
-                              } ) )
+  assert_that( definitions, contains_inanyorder(
+      {
+          'module_path': filepath,
+          'name': 'f',
+          'type': 'function',
+          'in_builtin_module': False,
+          'line': 1,
+          'column': 4,
+          'docstring': 'f()\n\nModule method docs\nAre '
+                       'dedented, like you might expect',
+          'description': 'def f',
+          'full_name': 'goto.f',
+          'is_keyword': False,
+      },
+      {
+          'module_path': filepath,
+          'name': 'C',
+          'type': 'class',
+          'in_builtin_module': False,
+          'line': 6,
+          'column': 6,
+          'docstring': 'Class Documentation',
+          'description': 'class C',
+          'full_name': 'goto.C',
+          'is_keyword': False
+      }
+  ) )
 
 
 def test_bad_gotodefinitions_blank_line():
   app = TestApp( handlers.app )
   filepath = fixture_filepath( 'goto.py' )
   request_data = {
-    'source': open( filepath ).read(),
-    'line': 9,
-    'col': 1,
-    'source_path': filepath
+      'source': open( filepath ).read(),
+      'line': 9,
+      'col': 1,
+      'source_path': filepath
   }
-  definitions = app.post_json( '/gotodefinition', request_data ).json[ 'definitions' ]
+  definitions = app.post_json( '/gotodefinition',
+                               request_data ).json[ 'definitions' ]
   assert_that( definitions, is_( empty() ) )
 
 
@@ -121,12 +126,14 @@ def test_bad_gotodefinitions_not_on_valid_position():
   app = TestApp( handlers.app )
   filepath = fixture_filepath( 'goto.py' )
   request_data = {
-    'source': open( filepath ).read(),
-    'line': 100,
-    'col': 1,
-    'source_path': filepath
+      'source': open( filepath ).read(),
+      'line': 100,
+      'col': 1,
+      'source_path': filepath
   }
-  response = app.post_json( '/gotodefinition', request_data, expect_errors = True )
+  response = app.post_json( '/gotodefinition',
+                            request_data,
+                            expect_errors = True )
   assert_that( response.status_int, equal_to( 500 ) )
 
 
@@ -143,17 +150,18 @@ def test_good_gotoassignment():
   definitions = app.post_json( '/gotoassignment',
                                request_data ).json[ 'definitions' ]
 
-  assert_that( definitions, has_length( 1 ) )
-  assert_that( definitions, has_item( {
-                                'module_path': filepath,
-                                'name': 'inception',
-                                'in_builtin_module': False,
-                                'line': 18,
-                                'column': 0,
-                                'docstring': '',
-                                'description': 'inception = _list[ 2 ]',
-                                'is_keyword': False
-                            } ) )
+  assert_that( definitions, contains( {
+      'module_path': filepath,
+      'name': 'inception',
+      'type': 'statement',
+      'in_builtin_module': False,
+      'line': 18,
+      'column': 0,
+      'docstring': '',
+      'description': 'inception = _list[ 2 ]',
+      'full_name': 'goto',
+      'is_keyword': False
+  } ) )
 
 
 def test_good_gotoassignment_do_not_follow_imports():
@@ -168,28 +176,27 @@ def test_good_gotoassignment_do_not_follow_imports():
   expected_definition = {
       'module_path': filepath,
       'name': 'imported_function',
+      'type': 'import',
       'in_builtin_module': False,
       'line': 1,
       'column': 21,
       'docstring': '',
-      'description': 'from imported '
-      'import imported_function',
+      'description': 'from imported import imported_function',
+      'full_name': 'imported.imported_function',
       'is_keyword': False
   }
 
   definitions = app.post_json( '/gotoassignment',
                                request_data ).json[ 'definitions' ]
 
-  assert_that( definitions, has_length( 1 ) )
-  assert_that( definitions, has_item( expected_definition ) )
+  assert_that( definitions, contains( expected_definition ) )
 
   request_data[ 'follow_imports' ] = False
 
   definitions = app.post_json( '/gotoassignment',
                                request_data ).json[ 'definitions' ]
 
-  assert_that( definitions, has_length( 1 ) )
-  assert_that( definitions, has_item( expected_definition ) )
+  assert_that( definitions, contains( expected_definition ) )
 
 
 def test_good_gotoassignment_follow_imports():
@@ -207,17 +214,18 @@ def test_good_gotoassignment_follow_imports():
   definitions = app.post_json( '/gotoassignment',
                                request_data ).json[ 'definitions' ]
 
-  assert_that( definitions, has_length( 1 ) )
-  assert_that( definitions, has_item( {
-                                'module_path': imported_filepath,
-                                'name': 'imported_function',
-                                'in_builtin_module': False,
-                                'line': 1,
-                                'column': 4,
-                                'docstring': 'imported_function()\n\n',
-                                'description': 'def imported_function',
-                                'is_keyword': False
-                            } ) )
+  assert_that( definitions, contains( {
+      'module_path': imported_filepath,
+      'name': 'imported_function',
+      'type': 'function',
+      'in_builtin_module': False,
+      'line': 1,
+      'column': 4,
+      'docstring': 'imported_function()\n\n',
+      'description': 'def imported_function',
+      'full_name': 'imported.imported_function',
+      'is_keyword': False
+  } ) )
 
 
 def test_usages():
@@ -233,48 +241,177 @@ def test_usages():
   definitions = app.post_json( '/usages',
                                request_data ).json[ 'definitions' ]
 
-  assert_that( definitions, has_length( 4 ) )
-  assert_that( definitions, has_items(
-                              {
-                                'module_path': filepath,
-                                'name': 'f',
-                                'in_builtin_module': False,
-                                'line': 1,
-                                'column': 4,
-                                'docstring': 'f()\n\nModule method docs\nAre dedented, like you might expect',
-                                'description': 'def f',
-                                'is_keyword': False
-                              },
-                              {
-                                'module_path': filepath,
-                                'name': 'f',
-                                'in_builtin_module': False,
-                                'line': 6,
-                                'column': 4,
-                                'description': 'a = f()',
-                                'docstring': '',
-                                'is_keyword': False
-                              },
-                              {
-                                'module_path': filepath,
-                                'name': 'f',
-                                'in_builtin_module': False,
-                                'line': 7,
-                                'column': 4,
-                                'description': 'b = f()',
-                                'docstring': '',
-                                'is_keyword': False
-                              },
-                              {
-                                'module_path': filepath,
-                                'name': 'f',
-                                'in_builtin_module': False,
-                                'line': 8,
-                                'column': 4,
-                                'description': 'c = f()',
-                                'docstring': '',
-                                'is_keyword': False
-                              } ) )
+  assert_that( definitions, contains_inanyorder(
+      {
+          'module_path': filepath,
+          'name': 'f',
+          'type': 'function',
+          'in_builtin_module': False,
+          'line': 1,
+          'column': 4,
+          'docstring': 'f()\n\nModule method docs\n'
+                       'Are dedented, like you might expect',
+          'description': 'def f',
+          'full_name': 'usages.f',
+          'is_keyword': False
+      },
+      {
+          'module_path': filepath,
+          'name': 'f',
+          'type': 'statement',
+          'in_builtin_module': False,
+          'line': 6,
+          'column': 4,
+          'description': 'a = f()',
+          'docstring': '',
+          'full_name': 'usages',
+          'is_keyword': False
+      },
+      {
+          'module_path': filepath,
+          'name': 'f',
+          'type': 'statement',
+          'in_builtin_module': False,
+          'line': 7,
+          'column': 4,
+          'description': 'b = f()',
+          'docstring': '',
+          'full_name': 'usages',
+          'is_keyword': False
+      },
+      {
+          'module_path': filepath,
+          'name': 'f',
+          'type': 'statement',
+          'in_builtin_module': False,
+          'line': 8,
+          'column': 4,
+          'description': 'c = f()',
+          'docstring': '',
+          'full_name': 'usages',
+          'is_keyword': False
+      }
+  ) )
+
+
+def test_names():
+  app = TestApp( handlers.app )
+  filepath = fixture_filepath( 'names.py' )
+  request_data = {
+      'source': open( filepath ).read(),
+      'path': filepath,
+      'all_scopes': False,
+      'definitions': True,
+      'references': False
+  }
+
+  definitions = app.post_json( '/names', request_data ).json[ 'definitions' ]
+
+  assert_that( definitions, contains_inanyorder(
+      {
+        'module_path': filepath,
+        'name': 'os',
+        'type': 'import',
+        'in_builtin_module': False,
+        'line': 1,
+        'column': 7,
+        'docstring': '',
+        'description': 'import os',
+        'full_name': 'os',
+        'is_keyword': False
+      },
+      {
+        'module_path': filepath,
+        'name': 'CONSTANT',
+        'type': 'statement',
+        'in_builtin_module': False,
+        'line': 3,
+        'column': 0,
+        'docstring': '',
+        'description': 'CONSTANT = 1',
+        'full_name': 'names',
+        'is_keyword': False
+      },
+      {
+        'module_path': filepath,
+        'name': 'test',
+        'type': 'function',
+        'in_builtin_module': False,
+        'line': 5,
+        'column': 4,
+        'docstring': 'test()\n\n',
+        'description': 'def test',
+        'full_name': 'names.test',
+        'is_keyword': False
+      },
+  ) )
+
+
+def test_preload_module():
+  app = TestApp( handlers.app )
+  request_data = {
+      'modules': [ 'os', 'sys' ]
+  }
+
+  ok_( app.post_json( '/preload_module', request_data ) )
+
+
+def test_usages_settings_additional_dynamic_modules():
+  app = TestApp( handlers.app )
+  file1 = fixture_filepath( 'module', 'some_module', 'file1.py' )
+  file2 = fixture_filepath( 'module', 'some_module', 'file2.py' )
+  main_file = fixture_filepath( 'module', 'main.py' )
+  request_data = {
+      'source': open( file2 ).read(),
+      'line': 5,
+      'col': 17,
+      'source_path': file2,
+      'settings': {
+          'additional_dynamic_modules': [ main_file ]
+      }
+  }
+
+  definitions = app.post_json( '/usages',
+                               request_data ).json[ 'definitions' ]
+
+  assert_that( definitions, contains_inanyorder(
+      has_entries( {
+          'module_path': file2,
+          'name': 'FILE1_CONSTANT',
+          'line': 5,
+          'column': 11
+      } ),
+      has_entries( {
+          'module_path': file2,
+          'name': 'FILE1_CONSTANT',
+          'line': 1,
+          'column': 18
+      } ),
+      has_entries( {
+          'module_path': file1,
+          'name': 'FILE1_CONSTANT',
+          'line': 5,
+          'column': 11
+      } ),
+      has_entries( {
+          'module_path': file1,
+          'name': 'FILE1_CONSTANT',
+          'line': 1,
+          'column': 0
+      } ),
+      has_entries( {
+          'module_path': main_file,
+          'name': 'FILE1_CONSTANT',
+          'line': 1,
+          'column': 30
+      } ),
+      has_entries( {
+          'module_path': main_file,
+          'name': 'FILE1_CONSTANT',
+          'line': 5,
+          'column': 11
+      } )
+  ) )
 
 
 @py3only
