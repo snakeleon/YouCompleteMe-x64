@@ -68,7 +68,12 @@ if ( USE_CLANG_COMPLETER AND
     # needed for our use case and a source of problems on some distributions
     # (see YCM issues #778 and #2259), and is available for 32-bit and 64-bit
     # architectures.
-    if ( 64_BIT_PLATFORM )
+    if (CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64.*|AARCH64.*)")
+      set( CLANG_DIRNAME "clang+llvm-${CLANG_VERSION}-aarch64-linux-gnu" )
+      set( CLANG_SHA256
+           "5ae2e0003c4aff00184560f27f7eef73b22f29d1582db99e37f6c1874dd41866" )
+      set( CLANG_FILENAME "${CLANG_DIRNAME}.tar.xz" )
+    elseif ( 64_BIT_PLATFORM )
       set( CLANG_DIRNAME "clang+llvm-${CLANG_VERSION}-x86_64-opensuse13.2" )
       set( CLANG_SHA256
            "9153b473dc37d2e21a260231e90e43b97aba1dff5d27f14c947815a90fbdc8d7" )
@@ -291,8 +296,8 @@ if ( EXTERNAL_LIBCLANG_PATH OR USE_SYSTEM_LIBCLANG )
                   /usr/lib
                   /usr/lib/llvm
                   ${SYS_LLVM_PATHS}
-                  /Library/Developer/CommandLineTools/usr/lib
-                  /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib )
+                  /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib
+                  /Library/Developer/CommandLineTools/usr/lib )
     set( EXTERNAL_LIBCLANG_PATH ${TEMP} )
   else()
     # For Macs, we do things differently; look further in this file.
@@ -468,16 +473,6 @@ if ( USE_DEV_FLAGS AND ( CMAKE_COMPILER_IS_GNUCXX OR COMPILER_IS_CLANG ) AND
      NOT CMAKE_GENERATOR_IS_XCODE )
   # We want all warnings, and warnings should be treated as errors
   set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Werror" )
-endif()
-
-#############################################################################
-
-# We want warnings if we accidentally use C++11 features
-# We can't use this warning on FreeBSD because std headers on that OS are dumb.
-# See here: https://github.com/Valloric/YouCompleteMe/issues/260
-if ( USE_DEV_FLAGS AND COMPILER_IS_CLANG AND NOT CMAKE_GENERATOR_IS_XCODE AND
-     NOT SYSTEM_IS_FREEBSD )
-  set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wc++98-compat" )
 endif()
 
 #############################################################################

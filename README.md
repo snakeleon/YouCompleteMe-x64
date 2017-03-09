@@ -1639,16 +1639,36 @@ For example:
 Autocommands
 ------------
 
+### The `YcmLocationOpened` autocommand
+
+This `User` autocommand is fired when YCM opens the location list window in
+response to the `YcmDiags` command. By default, the location list window is
+opened to full width at the bottom of the screen and its height is set to fit
+all entries. This behavior can be overridden by using the `YcmLocationOpened`
+autocommand which is triggered while the cursor is in the location list window.
+For instance:
+```viml
+function! s:CustomizeYcmLocationWindow()
+  " Move the window to the top of the screen.
+  execute "wincmd K"
+  " Set the window height to 5.
+  execute "5wincmd _"
+endfunction
+
+autocmd User YcmLocationOpened call s:CustomizeYcmLocationWindow()
+```
+
 ### The `YcmQuickFixOpened` autocommand
 
 This `User` autocommand is fired when YCM opens the quickfix window in response
 to the `GoTo*` and `RefactorRename` subcommands. By default, the quickfix window
 is opened to full width at the bottom of the screen and its height is set to fit
 all entries. This behavior can be overridden by using the `YcmQuickFixOpened`
-autocommand. For instance:
+autocommand which is triggered while the cursor is in the quickfix window. For
+instance:
 ```viml
-function s:CustomizeYcmQuickFixWindow()
-  " Move the window at the top of the screen.
+function! s:CustomizeYcmQuickFixWindow()
+  " Move the window to the top of the screen.
   execute "wincmd K"
   " Set the window height to 5.
   execute "5wincmd _"
@@ -2985,6 +3005,19 @@ virtual environment or since virtual environment will put that Python
 executable first in your PATH when the virtual environment is active then if
 you set `g:ycm_python_binary_path` to just `'python'` it will be found as the
 first Python and used to run [JediHTTP][].
+
+### I want to defer loading of YouCompleteMe until after Vim finishes booting
+
+In recent versions of Vim, you can install YCM in a folder under
+`~/.vim/pack/*/opt` and then load it once the user is idle via an autocommand:
+
+```viml
+augroup load_ycm
+  autocmd!
+  autocmd CursorHold, CursorHoldI * :packadd YouCompleteMe
+                                \ | autocmd! load_ycm
+augroup END
+```
 
 Contributor Code of Conduct
 ---------------------------
