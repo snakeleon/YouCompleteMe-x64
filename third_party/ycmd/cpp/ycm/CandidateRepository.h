@@ -20,8 +20,6 @@
 
 #include "DLLDefines.h"
 
-#include <boost/utility.hpp>
-
 #include <vector>
 #include <string>
 #include <unordered_map>
@@ -30,7 +28,6 @@
 namespace YouCompleteMe {
 
 class Candidate;
-struct CompletionData;
 
 typedef std::unordered_map< std::string, const Candidate * >
 CandidateHolder;
@@ -44,19 +41,17 @@ CandidateHolder;
 // work is not repeated.
 //
 // This class is thread-safe.
-class CandidateRepository : boost::noncopyable {
+class CandidateRepository {
 public:
   YCM_DLL_EXPORT static CandidateRepository &Instance();
+  // Make class noncopyable
+  CandidateRepository( const CandidateRepository& ) = delete;
+  CandidateRepository& operator=( const CandidateRepository& ) = delete;
 
   int NumStoredCandidates();
 
   YCM_DLL_EXPORT std::vector< const Candidate * > GetCandidatesForStrings(
     const std::vector< std::string > &strings );
-
-#ifdef USE_CLANG_COMPLETER
-  std::vector< const Candidate * > GetCandidatesForStrings(
-    const std::vector< CompletionData > &datas );
-#endif // USE_CLANG_COMPLETER
 
 private:
   CandidateRepository() {};

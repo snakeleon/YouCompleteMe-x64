@@ -24,11 +24,11 @@ standard_library.install_aliases()
 from builtins import *  # noqa
 
 from ycmd.completers.typescript.typescript_completer import (
-    ShouldEnableTypescriptCompleter, TypeScriptCompleter )
+    ShouldEnableTypeScriptCompleter, TypeScriptCompleter )
 
 
 def GetCompleter( user_options ):
-  if not ShouldEnableTypescriptCompleter():
+  if not ShouldEnableTypeScriptCompleter():
     return None
 
   return TypeScriptCompleter( user_options )

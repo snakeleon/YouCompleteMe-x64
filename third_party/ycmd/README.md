@@ -25,6 +25,8 @@ Known ycmd clients:
 - [YcmdCompletion][sublime-ycmd]: Sublime client
 - [kak-ycmd][]: Kakoune client.
 - [you-complete-me][vscode-you-complete-me]: VSCode client.
+- [gycm][]: Geany client.
+- [nano-ycmd][]: GNU nano client.
 
 Feel free to send a pull request adding a link to your client here if you've
 built one.
@@ -38,18 +40,24 @@ This is all for Ubuntu Linux. Details on getting ycmd running on other OS's can 
 found in [YCM's instructions][ycm-install] (ignore the Vim-specific parts). Note
 that **ycmd runs on Python 2.6, 2.7 and 3.3+.**
 
-First, install the dependencies:
+First, install the minimal dependencies:
 ```
 sudo apt-get install build-essential cmake python-dev
 ```
+
+Next, install the language specific dependencies you need:
+- `sudo apt-get install golang-go` for Go.
+- `sudo apt-get install npm` for JavaScript and TypeScript.
+- `sudo apt-get install mono-xbuild` for C#.
+- Concerning Rust, install Cargo and rustc with [rustup](https://www.rustup.rs/).
 
 When you first clone the repository you'll need to update the submodules:
 ```
 git submodule update --init --recursive
 ```
 
-Then run `./build.py --all`.
-This should get you going.
+Then run `./build.py --all` or any of the specific completers listed by
+`./build.py --help`. This should get you going.
 
 For more detailed instructions on building ycmd, see [YCM's
 instructions][ycm-install] (ignore the Vim-specific parts).
@@ -323,3 +331,5 @@ This software is licensed under the [GPL v3 license][gpl].
 [test-setup]: https://github.com/Valloric/ycmd/blob/master/TESTS.md
 [extra-conf-vim-data-doc]: https://github.com/Valloric/YouCompleteMe#the-gycm_extra_conf_vim_data-option
 [vscode-you-complete-me]: https://marketplace.visualstudio.com/items?itemName=RichardHe.you-complete-me
+[gycm]: https://github.com/jakeanq/gycm
+[nano-ycmd]: https://github.com/orsonteodoro/nano-ycmd

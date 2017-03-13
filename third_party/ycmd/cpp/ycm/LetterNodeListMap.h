@@ -22,8 +22,7 @@
 
 #include <vector>
 #include <memory>
-#include <boost/utility.hpp>
-#include <boost/array.hpp>
+#include <array>
 
 #define NUM_LETTERS 128
 
@@ -72,7 +71,7 @@ public:
   YCM_DLL_EXPORT NearestLetterNodeIndices *ListPointerAt( char letter );
 
 private:
-  typedef boost::array<NearestLetterNodeIndices , NUM_LETTERS>
+  typedef std::array<NearestLetterNodeIndices , NUM_LETTERS>
     NearestLetterNodeArray;
 
   std::unique_ptr< NearestLetterNodeArray > letters_;
