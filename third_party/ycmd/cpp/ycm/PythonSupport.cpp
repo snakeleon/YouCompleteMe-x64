@@ -22,12 +22,9 @@
 #include "ReleaseGil.h"
 #include "Utils.h"
 
-#include <algorithm>
 #include <vector>
-#include <locale>
 #include <utility>
 
-using std::any_of;
 using boost::python::len;
 using boost::python::str;
 using boost::python::extract;
@@ -82,9 +79,7 @@ boost::python::list FilterAndSortCandidates(
   {
     ReleaseGil unlock;
     Bitset query_bitset = LetterBitsetFromString( query );
-    bool query_has_uppercase_letters = any_of( query.cbegin(),
-                                               query.cend(),
-                                               IsUpper );
+    bool query_has_uppercase_letters = HasUppercase( query );
 
     for ( int i = 0; i < num_candidates; ++i ) {
       const Candidate *candidate = repository_candidates[ i ];
@@ -112,13 +107,38 @@ boost::python::list FilterAndSortCandidates(
 }
 
 
-std::string GetUtf8String( const boost::python::object &string_or_unicode ) {
-  extract< std::string > to_string( string_or_unicode );
+std::string GetUtf8String( const boost::python::object &value ) {
+#if PY_MAJOR_VERSION >= 3
+  // While strings are internally represented in UCS-2 or UCS-4 on Python 3,
+  // they are UTF-8 encoded when converted to std::string.
+  extract< std::string > to_string( value );
 
   if ( to_string.check() )
     return to_string();
+#else
+  std::string type = extract< std::string >( value.attr( "__class__" )
+                                                  .attr( "__name__" ) );
 
-  return extract< std::string >( str( string_or_unicode ).encode( "utf8" ) );
+  if ( type == "str" )
+    return extract< std::string >( value );
+
+  if ( type == "unicode" )
+    // unicode -> str
+    return extract< std::string >( value.attr( "encode" )( "utf8" ) );
+
+  // newstr and newbytes have a __native__ method that convert them
+  // respectively to unicode and str.
+  if ( type == "newstr" )
+    // newstr -> unicode -> str
+    return extract< std::string >( value.attr( "__native__" )()
+                                        .attr( "encode" )( "utf8" ) );
+
+  if ( type == "newbytes" )
+    // newbytes -> str
+    return extract< std::string >( value.attr( "__native__" )() );
+#endif
+
+  return extract< std::string >( str( value ).encode( "utf8" ) );
 }
 
 } // namespace YouCompleteMe

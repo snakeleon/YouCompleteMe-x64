@@ -48,27 +48,26 @@ class OmniCompleter( Completer ):
 
 
   def ShouldUseNow( self, request_data ):
+    self._omnifunc = utils.ToUnicode( vim.eval( '&omnifunc' ) )
     if not self._omnifunc:
       return False
-
     if self.ShouldUseCache():
       return super( OmniCompleter, self ).ShouldUseNow( request_data )
     return self.ShouldUseNowInner( request_data )
 
 
   def ShouldUseNowInner( self, request_data ):
-    if not self._omnifunc:
-      return False
+    if request_data.get( 'force_semantic', False ):
+      return True
     return super( OmniCompleter, self ).ShouldUseNowInner( request_data )
 
 
   def ComputeCandidates( self, request_data ):
     if self.ShouldUseCache():
       return super( OmniCompleter, self ).ComputeCandidates( request_data )
-    else:
-      if self.ShouldUseNowInner( request_data ):
-        return self.ComputeCandidatesInner( request_data )
-      return []
+    if self.ShouldUseNowInner( request_data ):
+      return self.ComputeCandidatesInner( request_data )
+    return []
 
 
   def ComputeCandidatesInner( self, request_data ):
@@ -76,17 +75,33 @@ class OmniCompleter( Completer ):
       return []
 
     try:
-      return_value = int( vim.eval( self._omnifunc + '(1,"")' ) )
+      return_value = vimsupport.GetIntValue( self._omnifunc + '(1,"")' )
       if return_value < 0:
         # FIXME: Technically, if the return is -1 we should raise an error
         return []
+
+      # Use the start column calculated by the omnifunc, rather than our own
+      # interpretation. This is important for certain languages where our
+      # identifier detection is either incorrect or not compatible with the
+      # behaviour of the omnifunc. Note: do this before calling the omnifunc
+      # because it affects the value returned by 'query'
+      request_data[ 'start_column' ] = return_value + 1
+
+      # Calling directly the omnifunc may move the cursor position. This is the
+      # case with the default Vim omnifunc for C-family languages
+      # (ccomplete#Complete) which calls searchdecl to find a declaration. This
+      # function is supposed to move the cursor to the found declaration but it
+      # doesn't when called through the omni completion mapping (CTRL-X CTRL-O).
+      # So, we restore the cursor position after calling the omnifunc.
+      line, column = vimsupport.CurrentLineAndColumn()
 
       omnifunc_call = [ self._omnifunc,
                         "(0,'",
                         vimsupport.EscapeForVim( request_data[ 'query' ] ),
                         "')" ]
-
       items = vim.eval( ''.join( omnifunc_call ) )
+
+      vimsupport.SetCurrentLineAndColumn( line, column )
 
       if isinstance( items, dict ) and 'words' in items:
         items = items[ 'words' ]
@@ -100,10 +115,6 @@ class OmniCompleter( Completer ):
       vimsupport.PostVimMessage(
         OMNIFUNC_RETURNED_BAD_VALUE + ' ' + str( error ) )
       return []
-
-
-  def OnFileReadyToParse( self, request_data ):
-    self._omnifunc = utils.ToUnicode( vim.eval( '&omnifunc' ) )
 
 
   def FilterAndSortCandidatesInner( self, candidates, sort_property, query ):

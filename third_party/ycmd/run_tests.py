@@ -117,8 +117,8 @@ def ParseArguments():
   parser.add_argument( '--skip-build', action = 'store_true',
                        help = 'Do not build ycmd before testing.' )
   parser.add_argument( '--msvc', type = int, choices = [ 12, 14, 15 ],
-                       help = 'Choose the Microsoft Visual '
-                       'Studio version. (default: 15).' )
+                       default = 15, help = 'Choose the Microsoft Visual '
+                       'Studio version (default: %(default)s).' )
   parser.add_argument( '--coverage', action = 'store_true',
                        help = 'Enable coverage report (requires coverage pkg)' )
   parser.add_argument( '--no-flake8', action = 'store_true',
@@ -145,7 +145,7 @@ def FixupCompleters( parsed_args ):
     completers = completers.difference( parsed_args.no_completers )
   elif parsed_args.no_clang_completer:
     print( 'WARNING: The "--no-clang-completer" flag is deprecated. '
-           'Please use "--no-completer cfamily" instead.' )
+           'Please use "--no-completers cfamily" instead.' )
     completers.remove( 'cfamily' )
 
   if 'USE_CLANG_COMPLETER' in os.environ:

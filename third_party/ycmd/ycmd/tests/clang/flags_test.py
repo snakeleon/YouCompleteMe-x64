@@ -31,7 +31,7 @@ from ycmd.tests.test_utils import MacOnly
 from ycmd.responses import NoExtraConfDetected
 from ycmd.tests.clang import TemporaryClangProject, TemporaryClangTestDir
 
-from hamcrest import assert_that, calling, contains, raises
+from hamcrest import assert_that, calling, contains, has_item, not_, raises
 
 
 @patch( 'ycmd.extra_conf_store.ModuleForSourceFile', return_value = Mock() )
@@ -383,6 +383,40 @@ def CompilationDatabase_NoDatabase_test():
       raises( NoExtraConfDetected ) )
 
 
+@MacOnly
+@patch( 'ycmd.completers.cpp.flags._MacIncludePaths',
+        return_value = [ 'sentinel_value_for_testing' ] )
+def PrepareFlagsForClang_NoSysroot_test( *args ):
+  assert_that(
+    list( flags.PrepareFlagsForClang( [ '-test', '--test1', '--test2=test' ],
+                                      'test.cc',
+                                      True ) ),
+    has_item( 'sentinel_value_for_testing' ) )
+
+
+@MacOnly
+@patch( 'ycmd.completers.cpp.flags._MacIncludePaths',
+        return_value = [ 'sentinel_value_for_testing' ] )
+def PrepareFlagsForClang_Sysroot_test( *args ):
+  assert_that(
+    list( flags.PrepareFlagsForClang( [ '-isysroot', 'test1', '--test2=test' ],
+                                      'test.cc',
+                                      True ) ),
+    not_( has_item( 'sentinel_value_for_testing' ) ) )
+
+  assert_that(
+    list( flags.PrepareFlagsForClang( [ '-test', '--sysroot', 'test1' ],
+                                      'test.cc',
+                                      True ) ),
+    not_( has_item( 'sentinel_value_for_testing' ) ) )
+
+  assert_that(
+    list( flags.PrepareFlagsForClang( [ '-test', 'test1', '--sysroot=test' ],
+                                      'test.cc',
+                                      True ) ),
+    not_( has_item( 'sentinel_value_for_testing' ) ) )
+
+
 def CompilationDatabase_FileNotInDatabase_test():
   compile_commands = [ ]
   with TemporaryClangTestDir() as tmp_dir:
@@ -542,6 +576,10 @@ def MakeRelativePathsInFlagsAbsolute_test():
       'flags':  [ '-isysroot', '/test' ],
       'expect': [ '-isysroot', os.path.normpath( '/test' ) ],
     },
+    {
+      'flags':  [ '-include-pch', '/test' ],
+      'expect': [ '-include-pch', os.path.normpath( '/test' ) ],
+    },
 
     # Already absolute, single arguments
     {
@@ -558,7 +596,11 @@ def MakeRelativePathsInFlagsAbsolute_test():
     },
     {
       'flags':  [ '-isysroot/test' ],
-      'expect': [ '-isysroot' +  os.path.normpath( '/test' ) ],
+      'expect': [ '-isysroot' + os.path.normpath( '/test' ) ],
+    },
+    {
+      'flags':  [ '-include-pch/test' ],
+      'expect': [ '-include-pch' + os.path.normpath( '/test' ) ],
     },
 
     # Already absolute, double-dash arguments
@@ -577,6 +619,10 @@ def MakeRelativePathsInFlagsAbsolute_test():
     {
       'flags':  [ '--sysroot=/test' ],
       'expect': [ '--sysroot=' + os.path.normpath( '/test' ) ],
+    },
+    {
+      'flags':  [ '--include-pch=/test' ],
+      'expect': [ '--include-pch=/test' ],
     },
 
     # Relative, positional arguments
@@ -598,6 +644,11 @@ def MakeRelativePathsInFlagsAbsolute_test():
     {
       'flags':  [ '-isysroot', 'test' ],
       'expect': [ '-isysroot', os.path.normpath( '/test/test' ) ],
+      'wd':     '/test',
+    },
+    {
+      'flags':  [ '-include-pch', 'test' ],
+      'expect': [ '-include-pch', os.path.normpath( '/test/test' ) ],
       'wd':     '/test',
     },
 
@@ -622,6 +673,11 @@ def MakeRelativePathsInFlagsAbsolute_test():
       'expect': [ '-isysroot' + os.path.normpath( '/test/test' ) ],
       'wd':     '/test',
     },
+    {
+      'flags':  [ '-include-pchtest' ],
+      'expect': [ '-include-pch' + os.path.normpath( '/test/test' ) ],
+      'wd':     '/test',
+    },
 
     # Already absolute, double-dash arguments
     {
@@ -642,6 +698,11 @@ def MakeRelativePathsInFlagsAbsolute_test():
     {
       'flags':  [ '--sysroot=test' ],
       'expect': [ '--sysroot=' + os.path.normpath( '/test/test' ) ],
+      'wd':     '/test',
+    },
+    {
+      'flags':  [ '--include-pch=test' ],
+      'expect': [ '--include-pch=test' ],
       'wd':     '/test',
     },
   ]

@@ -45,7 +45,7 @@ class TestFullNameWithGotoDefinitions(MixinTestFullName, TestCase):
         self.check("""
         import re
         any_re = re.compile('.*')
-        any_re""", '_sre.compile.SRE_Pattern')
+        any_re""", '_sre.SRE_Pattern')
 
     def test_from_import(self):
         self.check('from os import path', 'os.path')
@@ -69,7 +69,7 @@ class TestFullDefinedName(TestCase):
         self.check("""
         def f(): pass
         class C: pass
-        """, ['f', 'C'])
+        """, ['__main__.f', '__main__.C'])
 
     def test_imports(self):
         self.check("""
@@ -89,3 +89,10 @@ def test_sub_module():
     assert [d.full_name for d in defs] == ['jedi.api.classes']
     defs = jedi.Script('import jedi.api; jedi.api').goto_definitions()
     assert [d.full_name for d in defs] == ['jedi.api']
+
+
+def test_os_path():
+    d, = jedi.Script('from os.path import join').completions()
+    assert d.full_name == 'os.path.join'
+    d, = jedi.Script('import os.p').completions()
+    assert d.full_name == 'os.path'

@@ -7,7 +7,7 @@ from textwrap import dedent
 from jedi import api
 from jedi._compatibility import is_py3
 from pytest import raises
-from jedi.parser import utils
+from jedi.parser import cache
 
 
 def test_preload_modules():
@@ -17,15 +17,15 @@ def test_preload_modules():
         for i in modules:
             assert [i in k for k in parser_cache.keys() if k is not None]
 
-    temp_cache, utils.parser_cache = utils.parser_cache, {}
-    parser_cache = utils.parser_cache
+    temp_cache, cache.parser_cache = cache.parser_cache, {}
+    parser_cache = cache.parser_cache
 
     api.preload_module('sys')
     check_loaded()  # compiled (c_builtin) modules shouldn't be in the cache.
-    api.preload_module('json', 'token')
-    check_loaded('json', 'token')
+    api.preload_module('types', 'token')
+    check_loaded('types', 'token')
 
-    utils.parser_cache = temp_cache
+    cache.parser_cache = temp_cache
 
 
 def test_empty_script():
@@ -112,11 +112,16 @@ def test_goto_assignments_on_non_name():
         assert api.Script('True').goto_assignments() == []
     else:
         # In Python 2.7 True is still a name.
-        assert api.Script('True').goto_assignments()[0].description == 'class bool'
+        assert api.Script('True').goto_assignments()[0].description == 'instance True'
 
 
 def test_goto_definitions_on_non_name():
     assert api.Script('import x', column=0).goto_definitions() == []
+
+
+def test_goto_definitions_on_generator():
+    def_, = api.Script('def x(): yield 1\ny=x()\ny').goto_definitions()
+    assert def_.name == 'generator'
 
 
 def test_goto_definition_not_multiple():
@@ -161,7 +166,7 @@ def test_get_line_code():
     # With before/after
     line = '    foo'
     source = 'def foo():\n%s\nother_line' % line
-    assert get_line_code(source, line=2) == line
+    assert get_line_code(source, line=2) == line + '\n'
     assert get_line_code(source, line=2, after=1) == line + '\nother_line'
     assert get_line_code(source, line=2, after=1, before=1) == source
 
@@ -172,8 +177,25 @@ def test_goto_assignments_follow_imports():
     inspect.isfunction""")
     definition, = api.Script(code, column=0).goto_assignments(follow_imports=True)
     assert 'inspect.py' in definition.module_path
-    assert definition.start_pos == (1, 0)
+    assert (definition.line, definition.column) == (1, 0)
 
     definition, = api.Script(code).goto_assignments(follow_imports=True)
     assert 'inspect.py' in definition.module_path
-    assert definition.start_pos > (1, 0)
+    assert (definition.line, definition.column) > (1, 0)
+
+    code = '''def param(p): pass\nparam(1)'''
+    start_pos = 1, len('def param(')
+
+    script = api.Script(code, *start_pos)
+    definition, = script.goto_assignments(follow_imports=True)
+    assert (definition.line, definition.column) == start_pos
+    assert definition.name == 'p'
+    result, = definition.goto_assignments()
+    assert result.name == 'p'
+    result, = definition._goto_definitions()
+    assert result.name == 'int'
+    result, = result._goto_definitions()
+    assert result.name == 'int'
+
+    definition, = script.goto_assignments()
+    assert (definition.line, definition.column) == start_pos

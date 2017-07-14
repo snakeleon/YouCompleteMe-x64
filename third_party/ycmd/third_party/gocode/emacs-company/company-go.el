@@ -59,23 +59,24 @@ symbol is preceded by a \".\", ignoring `company-minimum-prefix-length'."
   :type '(repeat string))
 
 (defun company-go--invoke-autocomplete ()
-  (let ((temp-buffer (generate-new-buffer "*gocode*"))
+  (let ((code-buffer (current-buffer))
         (gocode-args (append company-go-gocode-args
                              (list "-f=csv"
                                    "autocomplete"
                                    (or (buffer-file-name) "")
                                    (concat "c" (int-to-string (- (point) 1)))))))
-    (prog2
-        (apply #'call-process-region
-               (point-min)
-               (point-max)
-               company-go-gocode-command
-               nil
-               temp-buffer
-               nil
-               gocode-args)
-        (with-current-buffer temp-buffer (buffer-string))
-      (kill-buffer temp-buffer))))
+    (with-temp-buffer
+      (let ((temp-buffer (current-buffer)))
+        (with-current-buffer code-buffer
+          (apply #'call-process-region
+                 (point-min)
+                 (point-max)
+                 company-go-gocode-command
+                 nil
+                 temp-buffer
+                 nil
+                 gocode-args))
+        (buffer-string)))))
 
 (defun company-go--format-meta (candidate)
   (let ((class (nth 0 candidate))
@@ -192,15 +193,32 @@ triggers a completion immediately."
     (when word
       (string-match-p "^0x\\|^[0-9]+" word))))
 
+(defun company-go--syntax-highlight (str)
+  "Apply syntax highlighting to STR."
+  ;; If the user has disabled font-lock, respect that.
+  (if global-font-lock-mode
+      (with-temp-buffer
+        (insert str)
+        (delay-mode-hooks (go-mode))
+        (if (fboundp 'font-lock-ensure)
+            (font-lock-ensure)
+          (with-no-warnings
+            (font-lock-fontify-buffer)))
+        (buffer-string))
+    str))
+
 ;;;###autoload
 (defun company-go (command &optional arg &rest ignored)
+  (interactive (list 'interactive))
   (case command
+    (interactive (company-begin-backend 'company-go))
     (prefix (and (derived-mode-p 'go-mode)
                  (not (company-in-string-or-comment))
                  (not (company-go--in-num-literal-p))
                  (or (company-go--prefix) 'stop)))
     (candidates (company-go--candidates))
-    (meta (get-text-property 0 'meta arg))
+    (meta
+     (company-go--syntax-highlight (get-text-property 0 'meta arg)))
     (annotation
      (when company-go-show-annotation
        (company-go--extract-annotation (get-text-property 0 'meta arg))))

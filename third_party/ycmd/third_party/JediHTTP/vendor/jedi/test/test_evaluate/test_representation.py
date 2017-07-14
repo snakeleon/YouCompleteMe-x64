@@ -4,8 +4,8 @@ from jedi import Script
 
 
 def get_definition_and_evaluator(source):
-    d = Script(dedent(source)).goto_definitions()[0]
-    return d._name.parent, d._evaluator
+    first, = Script(dedent(source)).goto_definitions()
+    return first._name._context, first._evaluator
 
 
 def test_function_execution():
@@ -22,8 +22,8 @@ def test_function_execution():
     # Now just use the internals of the result (easiest way to get a fully
     # usable function).
     # Should return the same result both times.
-    assert len(evaluator.execute(func)) == 1
-    assert len(evaluator.execute(func)) == 1
+    assert len(func.execute_evaluated()) == 1
+    assert len(func.execute_evaluated()) == 1
 
 
 def test_class_mro():
@@ -33,4 +33,4 @@ def test_class_mro():
     X"""
     cls, evaluator = get_definition_and_evaluator(s)
     mro = cls.py__mro__()
-    assert [str(c.name) for c in mro] == ['X', 'object']
+    assert [c.name.string_name for c in mro] == ['X', 'object']

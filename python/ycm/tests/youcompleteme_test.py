@@ -526,11 +526,7 @@ def YouCompleteMe_UpdateDiagnosticInterface_PrioritizeErrorsOverWarnings_test(
 
     # Only the error sign is placed.
     vim_command.assert_has_exact_calls( [
-      call( 'sign define ycm_dummy_sign' ),
-      call( 'sign place 3 name=ycm_dummy_sign line=3 buffer=5' ),
       call( 'sign place 1 name=YcmError line=3 buffer=5' ),
-      call( 'sign undefine ycm_dummy_sign' ),
-      call( 'sign unplace 3 buffer=5' )
     ] )
 
     # When moving the cursor on the diagnostics, the error is displayed to the
@@ -539,4 +535,23 @@ def YouCompleteMe_UpdateDiagnosticInterface_PrioritizeErrorsOverWarnings_test(
     post_vim_message.assert_has_exact_calls( [
       call( "expected ';' after expression (FixIt)",
             truncate = True, warning = False )
+    ] )
+
+    vim_command.reset_mock()
+    with patch( 'ycm.client.event_notification.EventNotification.Response',
+                return_value = diagnostics[ 1 : ] ):
+      ycm.OnFileReadyToParse()
+      ycm.HandleFileParseRequest( block = True )
+
+    assert_that(
+      test_utils.VIM_MATCHES,
+      contains(
+        VimMatch( 'YcmWarningSection', '\%3l\%5c\_.\{-}\%3l\%7c' ),
+        VimMatch( 'YcmWarningSection', '\%3l\%3c\_.\{-}\%3l\%9c' )
+      )
+    )
+
+    vim_command.assert_has_exact_calls( [
+      call( 'sign place 2 name=YcmWarning line=3 buffer=5' ),
+      call( 'try | exec "sign unplace 1 buffer=5" | catch /E158/ | endtry' )
     ] )

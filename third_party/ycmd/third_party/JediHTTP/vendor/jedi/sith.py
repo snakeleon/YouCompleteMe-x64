@@ -149,7 +149,7 @@ class TestCase(object):
         # Three lines ought to be enough
         lower = lineno - show if lineno - show > 0 else 0
         prefix = '  |'
-        for i, line in enumerate(self.script.source.split('\n')[lower:lineno]):
+        for i, line in enumerate(self.script._source.split('\n')[lower:lineno]):
             print(prefix, lower + i + 1, line)
         print(prefix, '   ', ' ' * (column + len(str(lineno))), '^')
 
@@ -173,7 +173,7 @@ class TestCase(object):
                 self.show_location(completion.line, completion.column)
 
     def show_errors(self):
-        print(self.traceback)
+        sys.stderr.write(self.traceback)
         print(("Error with running Script(...).{operation}() with\n"
               "\tpath:   {path}\n"
               "\tline:   {line}\n"

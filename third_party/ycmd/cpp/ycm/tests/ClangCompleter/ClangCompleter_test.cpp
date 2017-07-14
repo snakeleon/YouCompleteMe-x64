@@ -34,15 +34,23 @@ using ::testing::Contains;
 
 TEST( ClangCompleterTest, CandidatesForLocationInFile ) {
   ClangCompleter completer;
-  std::vector< CompletionData > completions =
+  std::vector< CompletionData > completions_class =
     completer.CandidatesForLocationInFile(
       PathToTestFile( "basic.cpp" ).string(),
-      15,
+      29,
+      7,
+      std::vector< UnsavedFile >(),
+      std::vector< std::string >() );
+  std::vector< CompletionData > completions_struct =
+    completer.CandidatesForLocationInFile(
+      PathToTestFile( "basic.cpp" ).string(),
+      30,
       7,
       std::vector< UnsavedFile >(),
       std::vector< std::string >() );
 
-  EXPECT_TRUE( !completions.empty() );
+  ASSERT_TRUE( !completions_struct.empty() );
+  ASSERT_TRUE( !completions_class.empty() );
 }
 
 
@@ -51,16 +59,36 @@ TEST( ClangCompleterTest, BufferTextNoParens ) {
   std::vector< CompletionData > completions =
     completer.CandidatesForLocationInFile(
       PathToTestFile( "basic.cpp" ).string(),
-      15,
+      29,
       7,
       std::vector< UnsavedFile >(),
       std::vector< std::string >() );
 
-  EXPECT_TRUE( !completions.empty() );
+  ASSERT_TRUE( !completions.empty() );
   EXPECT_THAT( completions,
                Contains(
                  Property( &CompletionData::TextToInsertInBuffer,
-                           StrEq( "foobar" ) ) ) );
+                           StrEq( "barbar" ) ) ) );
+}
+
+
+TEST( ClangCompleterTest, MemberFunctionWithDefaults ) {
+  ClangCompleter completer;
+  std::vector< CompletionData > completions =
+    completer.CandidatesForLocationInFile(
+      PathToTestFile( "basic.cpp" ).string(),
+      30,
+      7,
+      std::vector< UnsavedFile >(),
+      std::vector< std::string >() );
+
+  for ( size_t i = 0; i < completions.size(); ++i ) {
+    if ( completions[i].TextToInsertInBuffer() == "foobar" ) {
+      EXPECT_STREQ( "foobar( int a, float b, char c )",
+                    completions[i].MainCompletionText().c_str() );
+      break;
+    }
+  }
 }
 
 
@@ -77,7 +105,7 @@ TEST( ClangCompleterTest, CandidatesObjCForLocationInFile ) {
       std::vector< UnsavedFile >(),
       flags );
 
-  EXPECT_TRUE( !completions.empty() );
+  ASSERT_TRUE( !completions.empty() );
   EXPECT_THAT( completions[0].TextToInsertInBuffer(), StrEq( "withArg2:" ) );
 }
 
@@ -95,7 +123,7 @@ TEST( ClangCompleterTest, CandidatesObjCFuncForLocationInFile ) {
       std::vector< UnsavedFile >(),
       flags );
 
-  EXPECT_TRUE( !completions.empty() );
+  ASSERT_TRUE( !completions.empty() );
   EXPECT_THAT(
     completions[0].TextToInsertInBuffer(),
     StrEq( "(void)test:(int)arg1 withArg2:(int)arg2 withArg3:(int)arg3" ) );
@@ -109,15 +137,51 @@ TEST( ClangCompleterTest, GetDefinitionLocation ) {
 
   // Clang operates on the reasonable assumption that line and column numbers
   // are 1-based.
-  Location actual_location =
+  Location actual_location_struct =
     completer.GetDefinitionLocation(
       filename,
-      13,
+      26,
       3,
       std::vector< UnsavedFile >(),
       std::vector< std::string >() );
 
-  EXPECT_EQ( Location( filename, 1, 8 ), actual_location );
+  Location actual_location_class_method =
+    completer.GetDefinitionLocation(
+      filename,
+      29,
+      7,
+      std::vector< UnsavedFile >(),
+      std::vector< std::string >() );
+
+  Location actual_location_class =
+    completer.GetDefinitionLocation(
+      filename,
+      27,
+      3,
+      std::vector< UnsavedFile >(),
+      std::vector< std::string >() );
+
+  Location actual_location_enum_value =
+    completer.GetDefinitionLocation(
+      filename,
+      31,
+      25,
+      std::vector< UnsavedFile >(),
+      std::vector< std::string >() );
+
+  Location actual_location_enum =
+    completer.GetDefinitionLocation(
+      filename,
+      31,
+      3,
+      std::vector< UnsavedFile >(),
+      std::vector< std::string >() );
+
+  EXPECT_EQ( Location( filename, 12, 8 ), actual_location_struct );
+  EXPECT_EQ( Location( filename, 1, 7 ), actual_location_class );
+  EXPECT_EQ( Location( filename, 22, 35 ), actual_location_enum );
+  EXPECT_EQ( Location( filename, 22, 16 ), actual_location_enum_value );
+  EXPECT_EQ( Location( filename, 7, 8 ), actual_location_class_method );
 }
 
 
@@ -127,7 +191,7 @@ TEST( ClangCompleterTest, GetDocString ) {
   std::vector< CompletionData > completions =
     completer.CandidatesForLocationInFile(
       PathToTestFile( "basic.cpp" ).string(),
-      11,
+      30,
       7,
       std::vector< UnsavedFile >(),
       std::vector< std::string >() );
@@ -138,6 +202,61 @@ TEST( ClangCompleterTest, GetDocString ) {
       break;
     }
   }
+}
+
+
+TEST( ClangCompleterTest, NoTranslationUnit ) {
+  ClangCompleter completer;
+
+  const std::string filename;
+  const std::vector< UnsavedFile > unsaved_files;
+  const std::vector< std::string > flags;
+
+  EXPECT_EQ( std::vector< Diagnostic >(),
+             completer.UpdateTranslationUnit( filename, unsaved_files, flags) );
+
+  EXPECT_EQ( std::vector< CompletionData >(),
+             completer.CandidatesForLocationInFile( filename,
+                                                    1,
+                                                    1,
+                                                    unsaved_files,
+                                                    flags ) );
+
+  EXPECT_EQ( Location(), completer.GetDeclarationLocation( filename,
+                                                           1,
+                                                           1,
+                                                           unsaved_files,
+                                                           flags ) );
+  EXPECT_EQ( Location(), completer.GetDefinitionLocation( filename,
+                                                          1,
+                                                          1,
+                                                          unsaved_files,
+                                                          flags ) );
+  EXPECT_EQ( std::string( "no unit" ),
+             completer.GetTypeAtLocation( filename,
+                                          1,
+                                          1,
+                                          unsaved_files,
+                                          flags ) );
+  EXPECT_EQ( std::string( "no unit" ),
+             completer.GetEnclosingFunctionAtLocation( filename,
+                                                       1,
+                                                       1,
+                                                       unsaved_files,
+                                                       flags ) );
+  EXPECT_EQ( std::vector< FixIt >(),
+             completer.GetFixItsForLocationInFile( filename,
+                                                   1,
+                                                   1,
+                                                   unsaved_files,
+                                                   flags ) );
+
+  EXPECT_EQ( DocumentationData(),
+             completer.GetDocsForLocationInFile( filename,
+                                                 1,
+                                                 1,
+                                                 unsaved_files,
+                                                 flags ) );
 }
 
 } // namespace YouCompleteMe

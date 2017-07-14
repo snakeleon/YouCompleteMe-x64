@@ -168,7 +168,7 @@ func add_ast_decl_to_package(pkg *decl, decl ast.Decl, scope *scope) {
 		for i, name := range data.names {
 			typ, v, vi := data.type_value_index(i)
 
-			d := new_decl_full(name.Name, class, decl_foreign, typ, v, vi, scope)
+			d := new_decl_full(name.Name, class, decl_foreign|ast_decl_flags(data.decl), typ, v, vi, scope)
 			if d == nil {
 				return
 			}
@@ -240,11 +240,6 @@ package unsafe
 	func @"".Offsetof (? any) uintptr
 	func @"".Sizeof (? any) uintptr
 	func @"".Alignof (? any) uintptr
-	func @"".Typeof (i interface { }) interface { }
-	func @"".Reflect (i interface { }) (typ interface { }, addr @"".Pointer)
-	func @"".Unreflect (typ interface { }, addr @"".Pointer) interface { }
-	func @"".New (typ interface { }) @"".Pointer
-	func @"".NewArray (typ interface { }, n int) @"".Pointer
 
 $$
 `)

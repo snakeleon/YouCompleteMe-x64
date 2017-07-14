@@ -33,12 +33,12 @@ from ycmd.utils import ( ToCppStringCompatible, OnMac, OnWindows, ToUnicode,
 from ycmd.responses import NoExtraConfDetected
 
 
+# -include-pch and --sysroot= must be listed before -include and --sysroot
+# respectively because the latter is a prefix of the former (and the algorithm
+# checks prefixes).
 INCLUDE_FLAGS = [ '-isystem', '-I', '-iquote', '-isysroot', '--sysroot',
-                  '-gcc-toolchain', '-include', '-include-pch', '-iframework',
+                  '-gcc-toolchain', '-include-pch', '-include', '-iframework',
                   '-F', '-imacros' ]
-
-# --sysroot= must be first (or at least, before --sysroot) because the latter is
-# a prefix of the former (and the algorithm checks prefixes)
 PATH_FLAGS =  [ '--sysroot=' ] + INCLUDE_FLAGS
 
 # We need to remove --fcolor-diagnostics because it will cause shell escape
@@ -295,11 +295,22 @@ def _CallExtraConfFlagsForFile( module, filename, client_data ):
     return module.FlagsForFile( filename )
 
 
+def _SysRootSpecifedIn( flags ):
+  for flag in flags:
+    if flag == '-isysroot' or flag.startswith( '--sysroot' ):
+      return True
+
+  return False
+
+
 def PrepareFlagsForClang( flags, filename, add_extra_clang_flags = True ):
   flags = _AddLanguageFlagWhenAppropriate( flags )
   flags = _RemoveXclangFlags( flags )
   flags = _RemoveUnusedFlags( flags, filename )
   if add_extra_clang_flags:
+    if OnMac() and not _SysRootSpecifedIn( flags ):
+      for path in _MacIncludePaths():
+        flags.extend( [ '-isystem', path ] )
     flags = _EnableTypoCorrection( flags )
 
   vector = ycm_core.StringVector()
@@ -496,11 +507,13 @@ if OnMac():
   )
 
 
+def _MacIncludePaths():
+  # This method exists for testing only
+  return MAC_INCLUDE_PATHS
+
+
 def _ExtraClangFlags():
   flags = _SpecialClangIncludes()
-  if OnMac():
-    for path in MAC_INCLUDE_PATHS:
-      flags.extend( [ '-isystem', path ] )
   # On Windows, parsing of templates is delayed until instantiation time.
   # This makes GetType and GetParent commands fail to return the expected
   # result when the cursor is in a template.

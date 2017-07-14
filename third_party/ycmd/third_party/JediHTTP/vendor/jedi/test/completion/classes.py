@@ -50,6 +50,8 @@ class TestClass(object):
         self.var_local = 3
         #? ['var_class', 'var_func', 'var_inst', 'var_local']
         self.var_
+        #?
+        var_local
 
     def ret(self, a1):
         # should not know any class functions!
@@ -385,10 +387,33 @@ class PrivateVar():
         self.__var
         #? ['__var']
         self.__var
+
+    def __private_func(self):
+        return 1
+
+    def wrap_private(self):
+        return self.__private_func()
 #? []
 PrivateVar().__var
 #?
 PrivateVar().__var
+#? []
+PrivateVar().__private_func
+#? int()
+PrivateVar().wrap_private()
+
+
+class PrivateSub(PrivateVar):
+    def test(self):
+        #? []
+        self.__var
+
+    def wrap_private(self):
+        #? []
+        self.__var
+
+#? []
+PrivateSub().__var
 
 # -----------------
 # super
@@ -468,3 +493,19 @@ B().a
 B.b
 #? int()
 B().b
+
+
+# -----------------
+# With import
+# -----------------
+
+from import_tree.classes import Config2, BaseClass
+
+class Config(BaseClass):
+    """#884"""
+
+#? Config2()
+Config.mode
+
+#? int()
+Config.mode2

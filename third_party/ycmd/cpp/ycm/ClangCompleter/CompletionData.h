@@ -88,11 +88,10 @@ struct CompletionData {
   }
 
   bool operator== ( const CompletionData &other ) const {
-    return
-      kind_ == other.kind_ &&
-      everything_except_return_type_ == other.everything_except_return_type_ &&
-      return_type_ == other.return_type_ &&
-      original_string_ == other.original_string_;
+    return kind_ == other.kind_ &&
+           return_type_ == other.return_type_ &&
+           original_string_ == other.original_string_ &&
+           everything_except_return_type_ == other.everything_except_return_type_;
     // detailed_info_ doesn't matter
   }
 
@@ -119,9 +118,6 @@ private:
                              bool &saw_left_paren,
                              bool &saw_function_params,
                              bool &saw_placeholder );
-
-  bool IdentifierEndsWith( const std::string &identifier,
-                           const std::string &end );
 };
 
 } // namespace YouCompleteMe

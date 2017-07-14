@@ -50,14 +50,13 @@ class TestCallSignatures(TestCase):
 
     def test_more_complicated(self):
         run = self._run_simple
-        '''
+
         s4 = 'abs(zip(), , set,'
         run(s4, None, column=3)
         run(s4, 'abs', 0, 4)
         run(s4, 'zip', 0, 8)
         run(s4, 'abs', 0, 9)
-        #run(s4, 'abs', 1, 10)
-        '''
+        run(s4, 'abs', None, 10)
 
         s5 = "sorted(1,\nif 2:\n def a():"
         run(s5, 'sorted', 0, 7)
@@ -170,7 +169,7 @@ class TestCallSignatures(TestCase):
         signatures = Script(s).call_signatures()
         assert len(signatures) == 1
         x = [p.description for p in signatures[0].params]
-        assert x == ['*args']
+        assert x == ['param *args']
 
     def test_additional_brackets(self):
         assert_signature('str((', 'str', 0)
@@ -265,8 +264,7 @@ def test_signature_is_definition():
 
     # Now compare all the attributes that a CallSignature must also have.
     for attr_name in dir(definition):
-        dont_scan = ['defined_names', 'line_nr', 'start_pos', 'documentation',
-                     'doc', 'parent', 'goto_assignments']
+        dont_scan = ['defined_names', 'parent', 'goto_assignments', 'params']
         if attr_name.startswith('_') or attr_name in dont_scan:
             continue
         attribute = getattr(definition, attr_name)
@@ -287,6 +285,7 @@ def test_no_signature():
     X()(""")
     assert Script(s).call_signatures() == []
     assert len(Script(s, column=2).call_signatures()) == 1
+    assert Script('').call_signatures() == []
 
 
 def test_dict_literal_in_incomplete_call():
@@ -387,3 +386,37 @@ def test_lambda_params():
     assert sig.index == 0
     assert sig.name == '<lambda>'
     assert [p.name for p in sig.params] == ['x']
+
+
+def test_class_creation():
+    code = dedent('''\
+    class X():
+        def __init__(self, foo, bar):
+            self.foo = foo
+    ''')
+    sig, = Script(code + 'X(').call_signatures()
+    assert sig.index == 0
+    assert sig.name == 'X'
+    assert [p.name for p in sig.params] == ['foo', 'bar']
+
+    sig, = Script(code + 'X.__init__(').call_signatures()
+    assert [p.name for p in sig.params] == ['self', 'foo', 'bar']
+    sig, = Script(code + 'X().__init__(').call_signatures()
+    assert [p.name for p in sig.params] == ['foo', 'bar']
+
+
+def test_call_magic_method():
+    code = dedent('''\
+    class X():
+        def __call__(self, baz):
+            pass
+    ''')
+    sig, = Script(code + 'X()(').call_signatures()
+    assert sig.index == 0
+    assert sig.name == 'X'
+    assert [p.name for p in sig.params] == ['baz']
+
+    sig, = Script(code + 'X.__call__(').call_signatures()
+    assert [p.name for p in sig.params] == ['self', 'baz']
+    sig, = Script(code + 'X().__call__(').call_signatures()
+    assert [p.name for p in sig.params] == ['baz']

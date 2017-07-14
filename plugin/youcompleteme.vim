@@ -29,21 +29,28 @@ if exists( "g:loaded_youcompleteme" )
   finish
 elseif v:version < 704 || (v:version == 704 && !has( 'patch1578' ))
   echohl WarningMsg |
-        \ echomsg "YouCompleteMe unavailable: requires Vim 7.4.1578+" |
+        \ echomsg "YouCompleteMe unavailable: requires Vim 7.4.1578+." |
         \ echohl None
   call s:restore_cpo()
   finish
 elseif !has( 'timers' )
   echohl WarningMsg |
         \ echomsg "YouCompleteMe unavailable: requires Vim compiled with " .
-        \ "the timers feature" |
+        \ "the timers feature." |
         \ echohl None
   call s:restore_cpo()
   finish
 elseif !has( 'python' ) && !has( 'python3' )
   echohl WarningMsg |
         \ echomsg "YouCompleteMe unavailable: requires Vim compiled with " .
-        \ "Python (2.6+ or 3.3+) support" |
+        \ "Python (2.6+ or 3.3+) support." |
+        \ echohl None
+  call s:restore_cpo()
+  finish
+elseif &encoding !~? 'utf-\?8'
+  echohl WarningMsg |
+        \ echomsg "YouCompleteMe unavailable: requires UTF-8 encoding. " .
+        \ "Put the line 'set encoding=utf-8' in your vimrc." |
         \ echohl None
   call s:restore_cpo()
   finish
@@ -74,6 +81,9 @@ let g:ycm_key_list_select_completion =
 
 let g:ycm_key_list_previous_completion =
       \ get( g:, 'ycm_key_list_previous_completion', ['<S-TAB>', '<Up>'] )
+
+let g:ycm_key_list_stop_completion =
+      \ get( g:, 'ycm_key_list_stop_completion', ['<C-y>'] )
 
 let g:ycm_key_invoke_completion =
       \ get( g:, 'ycm_key_invoke_completion', '<C-Space>' )

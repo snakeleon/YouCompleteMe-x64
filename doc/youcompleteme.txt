@@ -115,18 +115,19 @@ Contents ~
   32. The |g:ycm_max_diagnostics_to_display| option
   33. The |g:ycm_key_list_select_completion| option
   34. The |g:ycm_key_list_previous_completion| option
-  35. The |g:ycm_key_invoke_completion| option
-  36. The |g:ycm_key_detailed_diagnostics| option
-  37. The |g:ycm_global_ycm_extra_conf| option
-  38. The |g:ycm_confirm_extra_conf| option
-  39. The |g:ycm_extra_conf_globlist| option
-  40. The |g:ycm_filepath_completion_use_working_dir| option
-  41. The |g:ycm_semantic_triggers| option
-  42. The |g:ycm_cache_omnifunc| option
-  43. The |g:ycm_use_ultisnips_completer| option
-  44. The |g:ycm_goto_buffer_command| option
-  45. The |g:ycm_disable_for_files_larger_than_kb| option
-  46. The |g:ycm_python_binary_path| option
+  35. The |g:ycm_key_list_stop_completion| option
+  36. The |g:ycm_key_invoke_completion| option
+  37. The |g:ycm_key_detailed_diagnostics| option
+  38. The |g:ycm_global_ycm_extra_conf| option
+  39. The |g:ycm_confirm_extra_conf| option
+  40. The |g:ycm_extra_conf_globlist| option
+  41. The |g:ycm_filepath_completion_use_working_dir| option
+  42. The |g:ycm_semantic_triggers| option
+  43. The |g:ycm_cache_omnifunc| option
+  44. The |g:ycm_use_ultisnips_completer| option
+  45. The |g:ycm_goto_buffer_command| option
+  46. The |g:ycm_disable_for_files_larger_than_kb| option
+  47. The |g:ycm_python_binary_path| option
  11. FAQ                                                    |youcompleteme-faq|
   1. I used to be able to 'import vim' in '.ycm_extra_conf.py', but now can't |youcompleteme-i-used-to-be-able-to-import-vim-in-.ycm_extra_conf.py-but-now-cant|
   2. I get 'ImportError' exceptions that mention 'PyInit_ycm_core' or 'initycm_core' |youcompleteme-i-get-importerror-exceptions-that-mention-pyinit_ycm_core-or-initycm_core|
@@ -564,6 +565,15 @@ Vim. Look at the features included: '+python/dyn' for Python 2 and
 using a 64-bit client. Daily updated copies of 32-bit and 64-bit Vim with
 Python 2 and Python 3 support [33] are available.
 
+Add the line:
+>
+  set encoding=utf-8
+<
+to your vimrc [34] if not already present. This option is required by YCM. Note
+that it does not prevent you from editing a file in another encoding than
+UTF-8. You can do that by specifying the '|++enc|' argument to the ':e'
+command.
+
 Install YouCompleteMe with Vundle [23].
 
 **Remember:** YCM is a plugin with a compiled component. If you **update** YCM
@@ -572,16 +582,16 @@ will notify you to recompile it. You should then rerun the install process.
 
 Download and install the following software:
 
-- Python 2 or Python 3 [34]. Be sure to pick the version corresponding to
+- Python 2 or Python 3 [35]. Be sure to pick the version corresponding to
   your Vim architecture. It is _Windows x86_ for a 32-bit Vim and _Windows
   x86-64_ for a 64-bit Vim. We recommend installing Python 3.
 
 - CMake [25]. Add CMake executable to the PATH environment variable.
 
-- Visual Studio [35]. Download the community edition. During setup, select
+- Visual Studio [36]. Download the community edition. During setup, select
   _Desktop development with C++_ in _Workloads_.
 
-- 7-zip [36]. Required to build YCM with semantic support for C-family
+- 7-zip [37]. Required to build YCM with semantic support for C-family
   languages.
 
 Compiling YCM **with** semantic support for C-family languages:
@@ -597,7 +607,7 @@ Compiling YCM **without** semantic support for C-family languages:
 The following additional language support options are available:
 
 - C# support: add '--omnisharp-completer' when calling 'install.py'. Be sure
-  that the build utility 'msbuild' is in your PATH [37].
+  that the build utility 'msbuild' is in your PATH [38].
 
 - Go support: install Go [27] and add '--gocode-completer' when calling
   'install.py'.
@@ -729,7 +739,7 @@ will notify you to recompile it. You should then rerun the install process.
    output; it should say 'Vi IMproved X.Y', where X.Y is the major version
    of vim. If your version is greater than 7.4, then you're all set. If your
    version is 7.4 then look below that where it says, 'Included patches:
-   1-Z', where Z will be some number. That number needs to be 143 or higher.
+   1-Z', where Z will be some number. That number needs to be 1578 or higher.
 
    If your version of Vim is not recent enough, you may need to compile Vim
    from source [30] (don't worry, it's easy).
@@ -742,9 +752,9 @@ will notify you to recompile it. You should then rerun the install process.
    critical because it must match the Python and the YCM libraries
    architectures. We recommend using a 64-bit Vim.
 
-2. **Install YCM** with Vundle [23] (or Pathogen [38], but Vundle is a
+2. **Install YCM** with Vundle [23] (or Pathogen [39], but Vundle is a
    better idea). With Vundle, this would mean adding a "Plugin
-   'Valloric/YouCompleteMe'" line to your vimrc [39].
+   'Valloric/YouCompleteMe'" line to your vimrc [34].
 
    If you don't install YCM with Vundle, make sure you have run 'git
    submodule update --init --recursive' after checking out the YCM
@@ -781,10 +791,10 @@ will notify you to recompile it. You should then rerun the install process.
    a Debian-like Linux distro, this would be 'sudo apt-get install python-
    dev python3-dev'. On Mac they should already be present.
 
-   On Windows, you need to download and install Python 2 or Python 3 [34].
+   On Windows, you need to download and install Python 2 or Python 3 [35].
    Pick the version corresponding to your Vim architecture. You will also
    need Microsoft Visual C++ (MSVC) to build YCM. You can obtain it by
-   installing Visual Studio [35]. MSVC 12 (Visual Studio 2013), 14 (2015),
+   installing Visual Studio [36]. MSVC 12 (Visual Studio 2013), 14 (2015),
    and 15 (2017) are officially supported.
 
    Here we'll assume you installed YCM with Vundle. That means that the top-
@@ -827,7 +837,7 @@ will notify you to recompile it. You should then rerun the install process.
    extracted the archive file to folder '~/ycm_temp/llvm_root_dir' (with
    'bin', 'lib', 'include' etc. folders right inside that folder). On
    Windows, you can extract the files from the LLVM+Clang installer using
-   7-zip [36].
+   7-zip [37].
 
    **NOTE:** This _only_ works with a _downloaded_ LLVM binary package, not
    a custom-built LLVM! See docs below for 'EXTERNAL_LIBCLANG_PATH' when
@@ -870,9 +880,12 @@ will notify you to recompile it. You should then rerun the install process.
 
    - C# support: install Mono on non-Windows platforms [41]. Navigate to
      'YouCompleteMe/third_party/ycmd/third_party/OmniSharpServer' and run
-     'msbuild /property:Configuration=Release' on Windows. Replace
-     'msbuild' by 'xbuild' on other platforms. On Windows, be sure that
-     the build utility 'msbuild' is in your PATH [37].
+
+     msbuild /property:Configuration=Release
+     /property:TargetFrameworkVersion=v4.5
+
+   Replace 'msbuild' by 'xbuild' if 'msbuild' is not available. On Windows,
+   be sure that the build utility 'msbuild' is in your PATH [38].
 
    - Go support: install Go [27] and add it to your path. Navigate to
      'YouCompleteMe/third_party/ycmd/third_party/gocode' and run 'go
@@ -1979,11 +1992,11 @@ Options ~
 
 All options have reasonable defaults so if the plug-in works after installation
 you don't need to change any options. These options can be configured in your
-vimrc script [39] by including a line like this:
+vimrc script [34] by including a line like this:
 >
   let g:ycm_min_num_of_chars_for_completion = 1
 <
-Note that after changing an option in your vimrc script [39] you have to
+Note that after changing an option in your vimrc script [34] you have to
 restart Vim for the changes to take effect.
 
 -------------------------------------------------------------------------------
@@ -2551,6 +2564,18 @@ Vim.
 Default: "['<S-TAB>', '<Up>']"
 >
   let g:ycm_key_list_previous_completion = ['<S-TAB>', '<Up>']
+<
+-------------------------------------------------------------------------------
+The *g:ycm_key_list_stop_completion* option
+
+This option controls the key mappings used to close the completion menu. This
+is useful when the menu is blocking the view, when you need to insert the
+'<TAB>' character, or when you want to expand a snippet from UltiSnips [21] and
+navigate through it.
+
+Default: "['<C-y>']"
+>
+  let g:ycm_key_list_stop_completion = ['<C-y>']
 <
 -------------------------------------------------------------------------------
 The *g:ycm_key_invoke_completion* option
@@ -3347,12 +3372,12 @@ References ~
 [31] http://www.mono-project.com/docs/getting-started/install/linux/#debian-ubuntu-and-derivatives
 [32] http://www.mono-project.com/docs/getting-started/install/linux/#centos-7-fedora-19-and-later-and-derivatives
 [33] https://bintray.com/micbou/generic/vim
-[34] https://www.python.org/downloads/windows/
-[35] https://www.visualstudio.com/downloads/
-[36] http://www.7-zip.org/download.html
-[37] http://stackoverflow.com/questions/6319274/how-do-i-run-msbuild-from-the-command-line-using-windows-sdk-7-1
-[38] https://github.com/tpope/vim-pathogen#pathogenvim
-[39] http://vimhelp.appspot.com/starting.txt.html#vimrc
+[34] http://vimhelp.appspot.com/starting.txt.html#vimrc
+[35] https://www.python.org/downloads/windows/
+[36] https://www.visualstudio.com/downloads/
+[37] http://www.7-zip.org/download.html
+[38] http://stackoverflow.com/questions/6319274/how-do-i-run-msbuild-from-the-command-line-using-windows-sdk-7-1
+[39] https://github.com/tpope/vim-pathogen#pathogenvim
 [40] http://llvm.org/releases/download.html
 [41] http://www.mono-project.com/docs/getting-started/install/
 [42] https://github.com/Valloric/YouCompleteMe#options

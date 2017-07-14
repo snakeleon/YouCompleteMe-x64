@@ -118,9 +118,11 @@ from io import StringIO
 from functools import reduce
 
 import jedi
+from jedi import debug
 from jedi._compatibility import unicode, is_py3
-from jedi.parser import Parser, load_grammar
+from jedi.parser.python import parse
 from jedi.api.classes import Definition
+from jedi.api.completion import get_user_scope
 
 
 TEST_COMPLETIONS = 0
@@ -185,19 +187,22 @@ class IntegrationTestCase(object):
             should_be = set()
             for match in re.finditer('(?:[^ ]+)', correct):
                 string = match.group(0)
-                parser = Parser(load_grammar(), string, start_symbol='eval_input')
-                parser.position_modifier.line = self.line_nr
-                element = parser.get_parsed_node()
-                element.parent = jedi.api.completion.get_user_scope(
-                    script._get_module(),
-                    (self.line_nr, self.column)
-                )
-                results = evaluator.eval_element(element)
+                parser = parse(string, start_symbol='eval_input', error_recovery=False)
+                parser.get_root_node().move(self.line_nr)
+                element = parser.get_root_node()
+                module_context = script._get_module()
+                # The context shouldn't matter for the test results.
+                user_context = get_user_scope(module_context, (self.line_nr, 0))
+                if user_context.api_type == 'function':
+                    user_context = user_context.get_function_execution()
+                element.parent = user_context.tree_node
+                results = evaluator.eval_element(user_context, element)
                 if not results:
                     raise Exception('Could not resolve %s on line %s'
                                     % (match.string, self.line_nr - 1))
 
-                should_be |= set(Definition(evaluator, r) for r in results)
+                should_be |= set(Definition(evaluator, r.name) for r in results)
+            debug.dbg('Finished getting types', color='YELLOW')
 
             # Because the objects have different ids, `repr`, then compare.
             should = set(comparison(r) for r in should_be)
@@ -358,9 +363,6 @@ if __name__ == '__main__':
 
     import time
     t_start = time.time()
-    # Sorry I didn't use argparse here. It's because argparse is not in the
-    # stdlib in 2.5.
-    import sys
 
     if arguments['--debug']:
         jedi.set_debug_function()

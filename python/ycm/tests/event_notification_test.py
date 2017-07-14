@@ -25,7 +25,8 @@ from __future__ import absolute_import
 from builtins import *  # noqa
 
 from ycm.tests.test_utils import ( CurrentWorkingDirectory, ExtendedMock,
-                                   MockVimBuffers, MockVimModule, VimBuffer )
+                                   MockVimBuffers, MockVimModule, VimBuffer,
+                                   ToBytesOnPY2 )
 MockVimModule()
 
 import contextlib
@@ -86,15 +87,15 @@ def MockEventNotification( response_method, native_filetype_completer = True ):
               'PostDataToHandlerAsync',
               return_value = MagicMock( return_value=True ) ):
 
-    # We set up a fake a Response (as called by EventNotification.Response)
-    # which calls the supplied callback method. Generally this callback just
-    # raises an apropriate exception, otherwise it would have to return a mock
-    # future object.
+    # We set up a fake response (as called by EventNotification.Response) which
+    # calls the supplied callback method. Generally this callback just raises an
+    # apropriate exception, otherwise it would have to return a mock future
+    # object.
     #
     # Note: JsonFromFuture is actually part of ycm.client.base_request, but we
-    # must patch where an object is looked up, not where it is defined.
-    # See https://docs.python.org/dev/library/unittest.mock.html#where-to-patch
-    # for details.
+    # must patch where an object is looked up, not where it is defined.  See
+    # https://docs.python.org/dev/library/unittest.mock.html#where-to-patch for
+    # details.
     with patch( 'ycm.client.event_notification.JsonFromFuture',
                 side_effect = response_method ):
 
@@ -293,7 +294,6 @@ def _Check_FileReadyToParse_Diagnostic_Error( ycm, vim_command ):
       # Consequent calls to HandleFileParseRequest shouldn't mess with
       # existing diagnostics, when there is no new parse request.
       vim_command.reset_mock()
-      ok_( not ycm.FileParseRequestReady() )
       ycm.HandleFileParseRequest()
       vim_command.assert_not_called()
       eq_( ycm.GetErrorCount(), 1 )
@@ -327,7 +327,6 @@ def _Check_FileReadyToParse_Diagnostic_Warning( ycm, vim_command ):
       # Consequent calls to HandleFileParseRequest shouldn't mess with
       # existing diagnostics, when there is no new parse request.
       vim_command.reset_mock()
-      ok_( not ycm.FileParseRequestReady() )
       ycm.HandleFileParseRequest()
       vim_command.assert_not_called()
       eq_( ycm.GetErrorCount(), 0 )
@@ -363,7 +362,7 @@ def EventNotification_FileReadyToParse_TagFiles_UnicodeWorkingDirectory_test(
   with patch( 'ycm.client.event_notification.EventNotification.'
               'PostDataToHandlerAsync' ) as post_data_to_handler_async:
     with CurrentWorkingDirectory( unicode_dir ):
-      with MockVimBuffers( [ current_buffer ], current_buffer, ( 6, 5 ) ):
+      with MockVimBuffers( [ current_buffer ], current_buffer, ( 1, 5 ) ):
         ycm.OnFileReadyToParse()
 
     assert_that(
@@ -372,7 +371,7 @@ def EventNotification_FileReadyToParse_TagFiles_UnicodeWorkingDirectory_test(
       contains(
         has_entries( {
           'filepath': current_buffer_file,
-          'line_num': 6,
+          'line_num': 1,
           'column_num': 6,
           'file_data': has_entries( {
             current_buffer_file: has_entries( {
@@ -418,7 +417,7 @@ def EventNotification_BufferVisit_BuildRequestForCurrentAndUnsavedBuffers_test(
               'PostDataToHandlerAsync' ) as post_data_to_handler_async:
     with MockVimBuffers( [ current_buffer, modified_buffer, unmodified_buffer ],
                          current_buffer,
-                         ( 3, 5 ) ):
+                         ( 1, 5 ) ):
       ycm.OnBufferVisit()
 
     assert_that(
@@ -427,7 +426,7 @@ def EventNotification_BufferVisit_BuildRequestForCurrentAndUnsavedBuffers_test(
       contains(
         has_entries( {
           'filepath': current_buffer_file,
-          'line_num': 3,
+          'line_num': 1,
           'column_num': 6,
           'file_data': has_entries( {
             current_buffer_file: has_entries( {
@@ -449,14 +448,14 @@ def EventNotification_BufferVisit_BuildRequestForCurrentAndUnsavedBuffers_test(
 @YouCompleteMeInstance()
 def EventNotification_BufferUnload_BuildRequestForDeletedAndUnsavedBuffers_test(
     ycm ):
-  current_buffer_file = os.path.realpath( 'current_buffer' )
+  current_buffer_file = os.path.realpath( 'current_βuffer' )
   current_buffer = VimBuffer( name = current_buffer_file,
                               number = 1,
                               contents = [ 'current_buffer_contents' ],
                               filetype = 'some_filetype',
                               modified = True )
 
-  deleted_buffer_file = os.path.realpath( 'deleted_buffer' )
+  deleted_buffer_file = os.path.realpath( 'deleted_βuffer' )
   deleted_buffer = VimBuffer( name = deleted_buffer_file,
                               number = 2,
                               contents = [ 'deleted_buffer_contents' ],
@@ -466,7 +465,7 @@ def EventNotification_BufferUnload_BuildRequestForDeletedAndUnsavedBuffers_test(
   with patch( 'ycm.client.event_notification.EventNotification.'
               'PostDataToHandlerAsync' ) as post_data_to_handler_async:
     with MockVimBuffers( [ current_buffer, deleted_buffer ], current_buffer ):
-      ycm.OnBufferUnload( deleted_buffer_file )
+      ycm.OnBufferUnload( ToBytesOnPY2( deleted_buffer_file ) )
 
   assert_that(
     # Positional arguments passed to PostDataToHandlerAsync.

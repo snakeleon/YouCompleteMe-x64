@@ -23,6 +23,7 @@ from __future__ import absolute_import
 # Not installing aliases from python-future; it's unreliable and slow.
 from builtins import *  # noqa
 
+from future.utils import PY2
 from mock import MagicMock, patch
 from hamcrest import assert_that, equal_to
 import contextlib
@@ -32,7 +33,7 @@ import os
 import re
 import sys
 
-from ycmd.utils import GetCurrentDirectory, ToUnicode
+from ycmd.utils import GetCurrentDirectory, ToBytes, ToUnicode
 
 
 BUFNR_REGEX = re.compile( '^bufnr\(\'(?P<buffer_filename>.+)\', ([01])\)$' )
@@ -40,10 +41,12 @@ BUFWINNR_REGEX = re.compile( '^bufwinnr\((?P<buffer_number>[0-9]+)\)$' )
 BWIPEOUT_REGEX = re.compile(
   '^(?:silent! )bwipeout!? (?P<buffer_number>[0-9]+)$' )
 GETBUFVAR_REGEX = re.compile(
-  '^getbufvar\((?P<buffer_number>[0-9]+), "&(?P<option>.+)"\)$' )
+  '^getbufvar\((?P<buffer_number>[0-9]+), "(?P<option>.+)"\)$' )
 MATCHADD_REGEX = re.compile(
   '^matchadd\(\'(?P<group>.+)\', \'(?P<pattern>.+)\'\)$' )
-MATCHDELETE_REGEX = re.compile( '^matchdelete\((?P<id>)\)$' )
+MATCHDELETE_REGEX = re.compile( '^matchdelete\((?P<id>\d+)\)$' )
+OMNIFUNC_REGEX_FORMAT = (
+  '^{omnifunc_name}\((?P<findstart>[01]),[\'"](?P<base>.*)[\'"]\)$' )
 
 # One-and only instance of mocked Vim object. The first 'import vim' that is
 # executed binds the vim module to the instance of MagicMock that is created,
@@ -85,17 +88,21 @@ def _MockGetBufferWindowNumber( buffer_number ):
 def _MockGetBufferVariable( buffer_number, option ):
   for vim_buffer in VIM_MOCK.buffers:
     if vim_buffer.number == buffer_number:
-      if option == 'mod':
+      if option == '&mod':
         return vim_buffer.modified
-      if option == 'ft':
+      if option == '&ft':
         return vim_buffer.filetype
+      if option == 'changedtick':
+        return vim_buffer.changedtick
+      if option == '&bh':
+        return vim_buffer.bufhidden
       return ''
   return ''
 
 
 def _MockVimBufferEval( value ):
   if value == '&omnifunc':
-    return VIM_MOCK.current.buffer.omnifunc
+    return VIM_MOCK.current.buffer.omnifunc_name
 
   if value == '&filetype':
     return VIM_MOCK.current.buffer.filetype
@@ -116,6 +123,16 @@ def _MockVimBufferEval( value ):
     option = match.group( 'option' )
     return _MockGetBufferVariable( buffer_number, option )
 
+  current_buffer = VIM_MOCK.current.buffer
+  match = re.search( OMNIFUNC_REGEX_FORMAT.format(
+                         omnifunc_name = current_buffer.omnifunc_name ),
+                     value )
+  if match:
+    findstart = int( match.group( 'findstart' ) )
+    base = match.group( 'base' )
+    value = current_buffer.omnifunc( findstart, base )
+    return value if findstart else ToBytesOnPY2( value )
+
   return None
 
 
@@ -132,12 +149,17 @@ def _MockVimOptionsEval( value ):
   if value == '&showcmd':
     return 1
 
+  if value == '&hidden':
+    return 0
+
   return None
 
 
 def _MockVimMatchEval( value ):
   if value == 'getmatches()':
-    return VIM_MATCHES
+    # Returning a copy, because ClearYcmSyntaxMatches() gets the result of
+    # getmatches(), iterates over it and removes elements from VIM_MATCHES.
+    return list( VIM_MATCHES )
 
   match = MATCHADD_REGEX.search( value )
   if match:
@@ -149,7 +171,7 @@ def _MockVimMatchEval( value ):
 
   match = MATCHDELETE_REGEX.search( value )
   if match:
-    identity = match.group( 'id' )
+    identity = int( match.group( 'id' ) )
     for index, vim_match in enumerate( VIM_MATCHES ):
       if vim_match.id == identity:
         VIM_MATCHES.pop( index )
@@ -168,9 +190,6 @@ def _MockVimEval( value ):
 
   if value == 'tempname()':
     return '_TEMP_FILE_'
-
-  if value == 'complete_check()':
-    return 0
 
   if value == 'tagfiles()':
     return [ 'tags' ]
@@ -208,28 +227,41 @@ def MockVimCommand( command ):
 
 class VimBuffer( object ):
   """An object that looks like a vim.buffer object:
-   - |name|    : full path of the buffer with symbolic links resolved;
-   - |number|  : buffer number;
-   - |contents|: list of lines representing the buffer contents;
-   - |filetype|: buffer filetype. Empty string if no filetype is set;
-   - |modified|: True if the buffer has unsaved changes, False otherwise;
-   - |window|  : number of the buffer window. None if the buffer is hidden;
-   - |omnifunc|: omni completion function used by the buffer."""
+   - |name|     : full path of the buffer with symbolic links resolved;
+   - |number|   : buffer number;
+   - |contents| : list of lines representing the buffer contents;
+   - |filetype| : buffer filetype. Empty string if no filetype is set;
+   - |modified| : True if the buffer has unsaved changes, False otherwise;
+   - |bufhidden|: value of the 'bufhidden' option (see :h bufhidden);
+   - |window|   : number of the buffer window. None if the buffer is hidden;
+   - |omnifunc| : omni completion function used by the buffer. Must be a Python
+                  function that takes the same arguments and returns the same
+                  values as a Vim completion function (:h complete-functions).
+                  Example:
+
+                    def Omnifunc( findstart, base ):
+                      if findstart:
+                        return 5
+                      return [ 'a', 'b', 'c' ]"""
 
   def __init__( self, name,
                       number = 1,
-                      contents = [],
+                      contents = [ '' ],
                       filetype = '',
-                      modified = True,
+                      modified = False,
+                      bufhidden = '',
                       window = None,
-                      omnifunc = '' ):
+                      omnifunc = None ):
     self.name = os.path.realpath( name ) if name else ''
     self.number = number
     self.contents = contents
     self.filetype = filetype
     self.modified = modified
+    self.bufhidden = bufhidden
     self.window = window
     self.omnifunc = omnifunc
+    self.omnifunc_name = omnifunc.__name__ if omnifunc else ''
+    self.changedtick = 1
 
 
   def __getitem__( self, index ):
@@ -267,6 +299,13 @@ class VimMatch( object ):
                                                                 self.pattern )
 
 
+  def __getitem__( self, key ):
+    if key == 'group':
+      return self.group
+    elif key == 'id':
+      return self.id
+
+
 @contextlib.contextmanager
 def MockVimBuffers( buffers, current_buffer, cursor_position = ( 1, 1 ) ):
   """Simulates the Vim buffers list |buffers| where |current_buffer| is the
@@ -275,10 +314,13 @@ def MockVimBuffers( buffers, current_buffer, cursor_position = ( 1, 1 ) ):
   if current_buffer not in buffers:
     raise RuntimeError( 'Current buffer must be part of the buffers list.' )
 
+  line = current_buffer.contents[ cursor_position[ 0 ] - 1 ]
+
   with patch( 'vim.buffers', buffers ):
     with patch( 'vim.current.buffer', current_buffer ):
       with patch( 'vim.current.window.cursor', cursor_position ):
-        yield
+        with patch( 'vim.current.line', line ):
+          yield VIM_MOCK
 
 
 def MockVimModule():
@@ -308,6 +350,16 @@ def MockVimModule():
   sys.modules[ 'vim' ] = VIM_MOCK
 
   return VIM_MOCK
+
+
+class VimError( Exception ):
+
+  def __init__( self, code ):
+      self.code = code
+
+
+  def __str__( self ):
+      return repr( self.code )
 
 
 class ExtendedMock( MagicMock ):
@@ -368,3 +420,20 @@ def ExpectedFailure( reason, *exception_matchers ):
     return Wrapper
 
   return decorator
+
+
+def ToBytesOnPY2( data ):
+  # To test the omnifunc, etc. returning strings, which can be of different
+  # types depending on python version, we use ToBytes on PY2 and just the native
+  # str on python3. This roughly matches what happens between py2 and py3
+  # versions within Vim.
+  if not PY2:
+    return data
+
+  if isinstance( data, list ):
+    return [ ToBytesOnPY2( item ) for item in data ]
+  if isinstance( data, dict ):
+    for item in data:
+      data[ item ] = ToBytesOnPY2( data[ item ] )
+    return data
+  return ToBytes( data )
