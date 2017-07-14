@@ -366,6 +366,14 @@ Vim. Look at the features included: `+python/dyn` for Python 2 and
 using a 64-bit client. [Daily updated copies of 32-bit and 64-bit Vim with
 Python 2 and Python 3 support][vim-win-download] are available.
 
+Add the line:
+
+    set encoding=utf-8
+
+to your [vimrc][] if not already present. This option is required by YCM. Note
+that it does not prevent you from editing a file in another encoding than UTF-8.
+You can do that by specifying [the `++enc` argument][++enc] to the `:e` command.
+
 Install YouCompleteMe with [Vundle][].
 
 **Remember:** YCM is a plugin with a compiled component. If you **update** YCM
@@ -521,7 +529,7 @@ process.
     it should say `Vi IMproved X.Y`, where X.Y is the major version of vim. If
     your version is greater than 7.4, then you're all set. If your version is
     7.4 then look below that where it says, `Included patches: 1-Z`, where Z
-    will be some number. That number needs to be 143 or higher.
+    will be some number. That number needs to be 1578 or higher.
 
     If your version of Vim is not recent enough, you may need to [compile Vim
     from source][vim-build] (don't worry, it's easy).
@@ -661,9 +669,13 @@ process.
 
     - C# support: install [Mono on non-Windows platforms][mono-install].
       Navigate to `YouCompleteMe/third_party/ycmd/third_party/OmniSharpServer`
-      and run `msbuild /property:Configuration=Release` on Windows. Replace
-      `msbuild` by `xbuild` on other platforms. On Windows, be sure that [the
-      build utility `msbuild` is in your PATH][add-msbuild-to-path].
+      and run
+
+          msbuild /property:Configuration=Release /property:TargetFrameworkVersion=v4.5
+
+      Replace `msbuild` by `xbuild` if `msbuild` is not available. On Windows,
+      be sure that [the build utility `msbuild` is in your
+      PATH][add-msbuild-to-path].
 
     - Go support: install [Go][go-install] and add it to your path. Navigate to
       `YouCompleteMe/third_party/ycmd/third_party/gocode` and run `go build`.
@@ -2306,6 +2318,19 @@ Default: `['<S-TAB>', '<Up>']`
 let g:ycm_key_list_previous_completion = ['<S-TAB>', '<Up>']
 ```
 
+### The `g:ycm_key_list_stop_completion` option
+
+This option controls the key mappings used to close the completion menu. This is
+useful when the menu is blocking the view, when you need to insert the `<TAB>`
+character, or when you want to expand a snippet from [UltiSnips][] and navigate
+through it.
+
+Default: `['<C-y>']`
+
+```viml
+let g:ycm_key_list_stop_completion = ['<C-y>']
+```
+
 ### The `g:ycm_key_invoke_completion` option
 
 This option controls the key mapping used to invoke the completion menu for
@@ -3042,9 +3067,9 @@ This software is licensed under the [GPL v3 license][gpl].
 
 ###关于版本
 
-- ycmd  核心版本: 25 (10 January 2017) 静态编译
+- ycmd  核心版本: 28 (13 July 2017) 静态编译
 - libclang  版本: 3.9.1 (23 December 2016) [Clang][Clang]
-- Python    支持: 3.6.0 (23 December 2016) [Python][python-win-download]
+- Python    支持: 3.6.1 (23 December 2016) [Python][python-win-download]
 
 支持操作系统:
 
@@ -3193,6 +3218,7 @@ This software is licensed under the [GPL v3 license][gpl].
 [gitter]: https://gitter.im/Valloric/YouCompleteMe
 [ninja-compdb]: https://ninja-build.org/manual.html
 [vim-nerdtree-tabs]: https://github.com/jistr/vim-nerdtree-tabs
+[++enc]: http://vimdoc.sourceforge.net/htmldoc/editing.html#++enc
 [YouCompleteMe-x86]: https://github.com/snakeleon/YouCompleteMe-x86
 [YouCompleteMe-x64]: https://github.com/snakeleon/YouCompleteMe-x64
 [Vim builds for Windows]: https://tuxproject.de/projects/vim/
