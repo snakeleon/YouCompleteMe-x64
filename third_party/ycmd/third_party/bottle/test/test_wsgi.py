@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-from __future__ import with_statement
 import unittest
 import bottle
 from tools import ServerTestBase
@@ -257,7 +256,7 @@ class TestRouteDecorator(ServerTestBase):
     def test_name(self):
         @bottle.route(name='foo')
         def test(x=5): return 'ok'
-        self.assertEqual('/test/6', bottle.url('foo', x=6))
+        self.assertEquals('/test/6', bottle.url('foo', x=6))
 
     def test_callback(self):
         def test(x=5): return str(x)
@@ -336,14 +335,6 @@ class TestDecorators(ServerTestBase):
 class TestAppShortcuts(ServerTestBase):
     def setUp(self):
         ServerTestBase.setUp(self)
-        
-    def testWithStatement(self):
-        default = bottle.default_app()
-        inner_app = bottle.Bottle()
-        self.assertEqual(default, bottle.default_app())
-        with inner_app:
-            self.assertEqual(inner_app, bottle.default_app())
-        self.assertEqual(default, bottle.default_app())
 
     def assertWraps(self, test, other):
         self.assertEqual(test.__doc__, other.__doc__)

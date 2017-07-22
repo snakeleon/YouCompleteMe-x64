@@ -172,7 +172,7 @@ Let's have a look at some practical examples::
     def callback(path):
         return static_file(path, ...)
 
-You can add your own filters as well. See :doc:`routing` for details.
+You can add your own filters as well. See :doc:`Routing` for details.
 
 .. versionchanged:: 0.10
 
@@ -195,7 +195,7 @@ HTTP Request Methods
 
 .. __: http_method_
 
-The HTTP protocol defines several `request methods`__ (sometimes referred to as "verbs") for different tasks. GET is the default for all routes with no other method specified. These routes will match GET requests only. To handle other methods such as POST, PUT, DELETE or PATCH, add a ``method`` keyword argument to the :func:`route` decorator or use one of the four alternative decorators: :func:`get`, :func:`post`, :func:`put`, :func:`delete` or :func:`patch`.
+The HTTP protocol defines several `request methods`__ (sometimes referred to as "verbs") for different tasks. GET is the default for all routes with no other method specified. These routes will match GET requests only. To handle other methods such as POST, PUT or DELETE, add a ``method`` keyword argument to the :func:`route` decorator or use one of the four alternative decorators: :func:`get`, :func:`post`, :func:`put` or :func:`delete`.
 
 The POST method is commonly used for HTML form submission. This example shows how to handle a login form using POST::
 
@@ -887,7 +887,7 @@ Development
 ================================================================================
 
 So you have learned the basics and want to write your own application? Here are
-some tips that might help you beeing more productive.
+some tips that might help you to be more productive.
 
 .. _default-app:
 
@@ -900,9 +900,7 @@ Bottle maintains a global stack of :class:`Bottle` instances and uses the top of
     def hello():
         return 'Hello World'
 
-    run()
-
-This is very convenient for small applications and saves you some typing, but also means that, as soon as your module is imported, routes are installed to the global default application. To avoid this kind of import side-effects, Bottle offers a second, more explicit way to build applications::
+This is very convenient for small applications and saves you some typing, but also means that, as soon as your module is imported, routes are installed to the global application. To avoid this kind of import side-effects, Bottle offers a second, more explicit way to build applications::
 
     app = Bottle()
 
@@ -910,32 +908,25 @@ This is very convenient for small applications and saves you some typing, but al
     def hello():
         return 'Hello World'
 
-    app.run()
-
 Separating the application object improves re-usability a lot, too. Other developers can safely import the ``app`` object from your module and use :meth:`Bottle.mount` to merge applications together.
 
+As an alternative, you can make use of the application stack to isolate your routes while still using the convenient shortcuts::
 
-.. versionadded:: 0.13
+    default_app.push()
 
-Starting with bottle-0.13 you can use :class:`Bottle` instances as context managers::
+    @route('/')
+    def hello():
+        return 'Hello World'
 
-    app = Bottle()
+    app = default_app.pop()
 
-    with app:
+Both :func:`app` and :func:`default_app` are instance of :class:`AppStack` and implement a stack-like API. You can push and pop applications from and to the stack as needed. This also helps if you want to import a third party module that does not offer a separate application object::
 
-        # Our application object is now the default
-        # for all shortcut functions and decorators
+    default_app.push()
 
-        assert my_app is default_app()
+    import some.module
 
-        @route('/')
-        def hello():
-            return 'Hello World'
-
-        # Also useful to capture routes defined in other modules
-        import some_package.more_routes
-
-
+    app = default_app.pop()
 
 
 .. _tutorial-debugging:

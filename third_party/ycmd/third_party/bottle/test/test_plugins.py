@@ -171,9 +171,9 @@ class TestPluginAPI(tools.ServerTestBase):
 
     def test_apply(self):
         class Plugin(object):
-            def apply(self, func, route):
+            def apply(self, func, cfg):
                 def wrapper(*a, **ka):
-                    return func(test=route.config['test'], *a, **ka) + '; tail'
+                    return func(test=cfg['config']['test'], *a, **ka) + '; tail'
                 return wrapper
             def __call__(self, func):
                 raise AssertionError("Plugins must not be called "\
@@ -195,7 +195,7 @@ class TestPluginAPI(tools.ServerTestBase):
             def __call__(self, func): return func
             def setup(self, app): self.app = app
         plugin = self.app.install(Plugin())
-        self.assertEqual(getattr(plugin, 'app', None), self.app)
+        self.assertEquals(getattr(plugin, 'app', None), self.app)
 
     def test_close(self):
         class Plugin(object):

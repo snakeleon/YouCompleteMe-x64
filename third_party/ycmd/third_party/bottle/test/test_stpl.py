@@ -44,7 +44,7 @@ class TestSimpleTemplate(unittest.TestCase):
         t = SimpleTemplate('<{{var}}>')
         self.assertRenders('<{{var}}>', '<True>', var=True)
         self.assertRenders('<{{var}}>', '<False>', var=False)
-        self.assertRenders('<{{var}}>', '<>', var=None)
+        self.assertRenders('<{{var}}>', '<None>', var=None)
         self.assertRenders('<{{var}}>', '<0>', var=0)
         self.assertRenders('<{{var}}>', '<5>', var=5)
         self.assertRenders('<{{var}}>', '<b>', var=tob('b'))
@@ -52,7 +52,7 @@ class TestSimpleTemplate(unittest.TestCase):
         self.assertRenders('<{{var}}>', '<[1, 2]>', var=[1,2])
 
     def test_htmlutils_quote(self):
-        self.assertEqual('"&lt;&#039;&#13;&#10;&#9;&quot;\\&gt;"', html_quote('<\'\r\n\t"\\>'));
+        self.assertEquals('"&lt;&#039;&#13;&#10;&#9;&quot;\\&gt;"', html_quote('<\'\r\n\t"\\>'));
 
     def test_escape(self):
         self.assertRenders('<{{var}}>', '<b>', var='b')
@@ -133,6 +133,8 @@ class TestSimpleTemplate(unittest.TestCase):
         self.assertRenders(t, 'start\n\nend', l=[])
 
     def test_escaped_codelines(self):
+        self.assertRenders('%% test', '% test')
+        self.assertRenders('%%% test', '%% test')
         self.assertRenders('\\% test', '% test')
         self.assertRenders('\\%% test', '%% test')
 
@@ -193,6 +195,33 @@ class TestSimpleTemplate(unittest.TestCase):
         t = SimpleTemplate('...\n%#test\n...')
         self.assertNotEqual('#test', t.code.splitlines()[0])
 
+    def test_detect_pep263(self):
+        ''' PEP263 strings in code-lines change the template encoding on the fly '''
+        t = SimpleTemplate(touni('%#coding: iso8859_15\nöäü?@€').encode('utf8'))
+        self.assertNotEqual(touni('öäü?@€'), t.render())
+        self.assertEqual(t.encoding, 'iso8859_15')
+        t = SimpleTemplate(touni('%#coding: iso8859_15\nöäü?@€').encode('iso8859_15'))
+        self.assertEqual(touni('öäü?@€'), t.render())
+        self.assertEqual(t.encoding, 'iso8859_15')
+        self.assertEqual(2, len(t.code.splitlines()))
+
+    def test_ignore_pep263_in_textline(self):
+        ''' PEP263 strings in text-lines have no effect '''
+        t = SimpleTemplate(touni('#coding: iso8859_15\nöäü?@€').encode('utf8'))
+        self.assertEqual(touni('#coding: iso8859_15\nöäü?@€'), t.render())
+        self.assertEqual(t.encoding, 'utf8')
+
+    def test_ignore_late_pep263(self):
+        ''' PEP263 strings must appear within the first two lines '''
+        t = SimpleTemplate(touni('\n\n%#coding: iso8859_15\nöäü?@€').encode('utf8'))
+        self.assertEqual(touni('\n\nöäü?@€'), t.render())
+        self.assertEqual(t.encoding, 'utf8')
+
+    def test_coding_stress(self):
+        self.assertRenders('%a=1\n%coding=a\nok', 'ok')
+        self.assertRenders('a %coding:b', 'a %coding:b')
+        self.assertRenders(' % #coding:utf-8', '')
+
     def test_template_shortcut(self):
         result = template('start {{var}} end', var='middle')
         self.assertEqual(touni('start middle end'), result)
@@ -250,6 +279,20 @@ class TestSTPLDir(unittest.TestCase):
             self.fail('Syntax error in template:\n%s\n\nTemplate code:\n##########\n%s\n##########' %
                      (traceback.format_exc(), tpl.code))
 
+    def test_old_include(self):
+        t1 = SimpleTemplate('%include foo')
+        t1.cache['foo'] = SimpleTemplate('foo')
+        self.assertEqual(t1.render(), 'foo')
+
+    def test_old_include_with_args(self):
+        t1 = SimpleTemplate('%include foo x=y')
+        t1.cache['foo'] = SimpleTemplate('foo{{x}}')
+        self.assertEqual(t1.render(y='bar'), 'foobar')
+
+    def test_defect_coding(self):
+        t1 = SimpleTemplate('%#coding comment\nfoo{{y}}')
+        self.assertEqual(t1.render(y='bar'), 'foobar')
+
     def test_multiline_block(self):
         source = '''
             <% a = 5
@@ -260,6 +303,9 @@ class TestSTPLDir(unittest.TestCase):
             18
         '''
         self.assertRenders(source, result)
+        source_wineol = '<% a = 5\r\nb = 6\r\nc = 7\r\n%>\r\n{{a+b+c}}'
+        result_wineol = '18'
+        self.assertRenders(source_wineol, result_wineol)
 
     def test_multiline_ignore_eob_in_string(self):
         source = '''
@@ -331,6 +377,18 @@ class TestSTPLDir(unittest.TestCase):
                   line 2
         '''
         self.assertRenders(source, result)
+
+    def test_multiline_comprehensions_in_code_line(self):
+        self.assertRenders(source='''
+            % a = [
+            %    (i + 1)
+            %    for i in range(5)
+            %    if i%2 == 0
+            % ]
+            {{a}}
+        ''', result='''
+            [1, 3, 5]
+        ''')
 
 if __name__ == '__main__': #pragma: no cover
     unittest.main()

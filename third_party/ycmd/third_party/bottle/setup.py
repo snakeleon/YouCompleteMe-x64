@@ -2,10 +2,7 @@
 
 import sys
 import os
-try:
-    from setuptools import setup
-except ImportError:
-    from distutils.core import setup
+from setuptools import setup
 
 if sys.version_info < (2,5):
     raise NotImplementedError("Sorry, you need at least Python 2.5 or Python 3.x to use bottle.")

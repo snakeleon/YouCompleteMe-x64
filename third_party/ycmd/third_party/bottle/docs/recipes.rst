@@ -168,15 +168,15 @@ Several "push" mechanisms like XHR multipart need the ability to write response 
 
     from gevent import monkey; monkey.patch_all()
 
-    import gevent
+    import time
     from bottle import route, run
     
     @route('/stream')
     def stream():
         yield 'START'
-        gevent.sleep(3)
+        time.sleep(3)
         yield 'MIDDLE'
-        gevent.sleep(5)
+        time.sleep(5)
         yield 'END'
     
     run(host='0.0.0.0', port=8080, server='gevent')

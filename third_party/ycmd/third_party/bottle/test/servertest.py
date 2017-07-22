@@ -20,9 +20,6 @@ try:
     if server == 'gevent':
         from gevent import monkey
         monkey.patch_all()
-    elif server == 'eventlet':
-        import eventlet
-        eventlet.monkey_patch()
 
     from bottle import route, run
     route('/test', callback=lambda: 'OK')

@@ -49,7 +49,6 @@ Bottle maintains a stack of :class:`Bottle` instances (see :func:`app` and :clas
               post(...)
               put(...)
               delete(...)
-              patch(...)
 
    Decorator to install a route to the current default application. See :meth:`Bottle.route` for details.
 

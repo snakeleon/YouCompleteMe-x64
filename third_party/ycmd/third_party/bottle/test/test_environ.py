@@ -3,6 +3,7 @@
 
 import unittest
 import sys
+
 import bottle
 from bottle import request, tob, touni, tonat, json_dumps, _e, HTTPError, parse_date
 import tools
@@ -10,6 +11,18 @@ import wsgiref.util
 import base64
 
 from bottle import BaseRequest, BaseResponse, LocalRequest
+
+
+try:
+    from itertools import product
+except ImportError:
+    def product(*args):
+        pools = map(tuple, args)
+        result = [[]]
+        for pool in pools:
+            result = [x + [y] for x in result for y in pool]
+        for prod in result:
+            yield tuple(prod)
 
 class TestRequest(unittest.TestCase):
 
@@ -286,7 +299,7 @@ class TestRequest(unittest.TestCase):
         e['wsgi.input'].seek(0)
         e['HTTP_TRANSFER_ENCODING'] = 'chunked'
         if isinstance(expect, str):
-            self.assertEqual(tob(expect), BaseRequest(e).body.read())
+            self.assertEquals(tob(expect), BaseRequest(e).body.read())
         else:
             self.assertRaises(expect, lambda: BaseRequest(e).body)
 
@@ -392,6 +405,14 @@ class TestRequest(unittest.TestCase):
         e['wsgi.input'].write(tob(json_dumps(test)))
         e['wsgi.input'].seek(0)
         e['CONTENT_LENGTH'] = str(len(json_dumps(test)))
+        self.assertEqual(BaseRequest(e).json, None)
+
+    def test_json_header_empty_body(self):
+        """Request Content-Type is application/json but body is empty"""
+        e = {'CONTENT_TYPE': 'application/json'}
+        wsgiref.util.setup_testing_defaults(e)
+        wsgiref.util.setup_testing_defaults(e)
+        e['CONTENT_LENGTH'] = "0"
         self.assertEqual(BaseRequest(e).json, None)
 
     def test_isajax(self):
@@ -557,7 +578,7 @@ class TestResponse(unittest.TestCase):
     def test_content_type(self):
         rs = BaseResponse()
         rs.content_type = 'test/some'
-        self.assertEqual('test/some', rs.headers.get('Content-Type'))
+        self.assertEquals('test/some', rs.headers.get('Content-Type'))
 
     def test_charset(self):
         rs = BaseResponse()
@@ -646,6 +667,30 @@ class TestResponse(unittest.TestCase):
         self.assertEqual('5', response['x-test'])
         response['x-test'] = None
         self.assertEqual('None', response['x-test'])
+        response['x-test'] = touni('瓶')
+        self.assertEqual(tonat(touni('瓶')), response['x-test'])
+
+    def test_prevent_control_characters_in_headers(self):
+        masks = '{}test', 'test{}', 'te{}st'
+        tests = '\n', '\r', '\n\r', '\0'
+
+        # Test HeaderDict
+        apis = 'append', 'replace', '__setitem__', 'setdefault'
+        for api, mask, test in product(apis, masks, tests):
+            hd = bottle.HeaderDict()
+            func = getattr(hd, api)
+            value = mask.replace("{}", test)
+            self.assertRaises(ValueError, func, value, "test-value")
+            self.assertRaises(ValueError, func, "test-name", value)
+
+        # Test functions on BaseResponse
+        apis = 'add_header', 'set_header', '__setitem__'
+        for api, mask, test in product(apis, masks, tests):
+            rs = bottle.BaseResponse()
+            func = getattr(rs, api)
+            value = mask.replace("{}", test)
+            self.assertRaises(ValueError, func, value, "test-value")
+            self.assertRaises(ValueError, func, "test-name", value)
 
     def test_expires_header(self):
         import datetime

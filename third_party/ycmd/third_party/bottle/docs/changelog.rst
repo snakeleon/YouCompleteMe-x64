@@ -5,12 +5,6 @@
 Release Notes and Changelog
 ===========================
 
-Release 0.13
-==============
-
-.. warning: Not released yet.
-
-* Added :func:`patch` shortcut for `route(..., method='PATCH')`
 
 
 Release 0.12
