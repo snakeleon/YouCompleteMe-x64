@@ -1730,9 +1730,9 @@ For example:
   class C {
       void f();
   };
-
+  
   void C::f() {
-
+  
   }
 <
 In the out-of-line definition of 'C::f', the semantic parent is the class 'C',
@@ -1965,7 +1965,7 @@ For instance:
     " Switch back to working window.
     wincmd p
   endfunction
-
+  
   autocmd User YcmLocationOpened call s:CustomizeYcmLocationWindow()
 <
 -------------------------------------------------------------------------------
@@ -1984,7 +1984,7 @@ quickfix window. For instance:
     " Set the window height to 5.
     5wincmd _
   endfunction
-
+  
   autocmd User YcmQuickFixOpened call s:CustomizeYcmQuickFixWindow()
 <
 ===============================================================================
@@ -3239,7 +3239,7 @@ entries from the path.
   import os
   import re
   path = os.environ['PATH'].split(';')
-
+  
   def contains_msvcr_lib(folder):
       try:
           for item in os.listdir(folder):
@@ -3248,7 +3248,7 @@ entries from the path.
       except:
           pass
       return False
-
+  
   path = [folder for folder in path if not contains_msvcr_lib(folder)]
   os.environ['PATH'] = ';'.join(path)
   EOF
