@@ -81,6 +81,7 @@ from jedi.evaluate import pep0484
 from jedi.evaluate.filters import TreeNameDefinition, ParamName
 from jedi.evaluate.instance import AnonymousInstance, BoundMethod
 from jedi.evaluate.context import ContextualizedName, ContextualizedNode
+from jedi import parser_utils
 
 
 class Evaluator(object):
@@ -154,27 +155,27 @@ class Evaluator(object):
             c_node = ContextualizedName(context, seek_name)
             types = finder.check_tuple_assignments(self, c_node, types)
 
-        first_operation = stmt.first_operation()
-        if first_operation not in ('=', None) and first_operation.type == 'operator':
+        first_operator = next(stmt.yield_operators(), None)
+        if first_operator not in ('=', None) and first_operator.type == 'operator':
             # `=` is always the last character in aug assignments -> -1
-            operator = copy.copy(first_operation)
+            operator = copy.copy(first_operator)
             operator.value = operator.value[:-1]
-            name = str(stmt.get_defined_names()[0])
+            name = stmt.get_defined_names()[0].value
             left = context.py__getattribute__(
                 name, position=stmt.start_pos, search_global=True)
 
             for_stmt = tree.search_ancestor(stmt, 'for_stmt')
             if for_stmt is not None and for_stmt.type == 'for_stmt' and types \
-                    and for_stmt.defines_one_name():
+                    and parser_utils.for_stmt_defines_one_name(for_stmt):
                 # Iterate through result and add the values, that's possible
                 # only in for loops without clutter, because they are
                 # predictable. Also only do it, if the variable is not a tuple.
-                node = for_stmt.get_input_node()
+                node = for_stmt.get_testlist()
                 cn = ContextualizedNode(context, node)
                 ordered = list(iterable.py__iter__(self, cn.infer(), cn))
 
                 for lazy_context in ordered:
-                    dct = {str(for_stmt.children[1]): lazy_context.infer()}
+                    dct = {for_stmt.children[1].value: lazy_context.infer()}
                     with helpers.predefine_names(context, for_stmt, dct):
                         t = self.eval_element(context, rhs)
                         left = precedence.calculate(self, context, left, operator, t)
@@ -193,7 +194,7 @@ class Evaluator(object):
             if_stmt = if_stmt.parent
             if if_stmt.type in ('if_stmt', 'for_stmt'):
                 break
-            if if_stmt.is_scope():
+            if parser_utils.is_scope(if_stmt):
                 if_stmt = None
                 break
         predefined_if_name_dict = context.predefined_names.get(if_stmt)
@@ -209,8 +210,8 @@ class Evaluator(object):
                 # names in the suite.
                 if_names = helpers.get_names_of_node(if_stmt_test)
                 element_names = helpers.get_names_of_node(element)
-                str_element_names = [str(e) for e in element_names]
-                if any(str(i) in str_element_names for i in if_names):
+                str_element_names = [e.value for e in element_names]
+                if any(i.value in str_element_names for i in if_names):
                     for if_name in if_names:
                         definitions = self.goto_definitions(context, if_name)
                         # Every name that has multiple different definitions
@@ -231,12 +232,12 @@ class Evaluator(object):
                                 new_name_dicts = list(original_name_dicts)
                                 for i, name_dict in enumerate(new_name_dicts):
                                     new_name_dicts[i] = name_dict.copy()
-                                    new_name_dicts[i][str(if_name)] = set([definition])
+                                    new_name_dicts[i][if_name.value] = set([definition])
 
                                 name_dicts += new_name_dicts
                         else:
                             for name_dict in name_dicts:
-                                name_dict[str(if_name)] = definitions
+                                name_dict[if_name.value] = definitions
             if len(name_dicts) > 1:
                 result = set()
                 for name_dict in name_dicts:
@@ -279,7 +280,7 @@ class Evaluator(object):
             if element.value in ('False', 'True', 'None'):
                 types.add(compiled.builtin_from_name(self, element.value))
             # else: print e.g. could be evaluated like this in Python 2.7
-        elif typ == 'lambda':
+        elif typ == 'lambdef':
             types = set([er.FunctionContext(self, context, element)])
         elif typ == 'expr_stmt':
             types = self.eval_statement(context, element)
@@ -336,7 +337,7 @@ class Evaluator(object):
             # This is the first global lookup.
             stmt = atom.get_definition()
             if stmt.type == 'comp_for':
-                stmt = tree.search_ancestor(stmt, ('expr_stmt', 'lambda', 'funcdef', 'classdef'))
+                stmt = tree.search_ancestor(stmt, 'expr_stmt', 'lambdef', 'funcdef', 'classdef')
             if stmt is None or stmt.type != 'expr_stmt':
                 # We only need to adjust the start_pos for statements, because
                 # there the name cannot be used.
@@ -347,7 +348,8 @@ class Evaluator(object):
                 search_global=True
             )
         elif isinstance(atom, tree.Literal):
-            return set([compiled.create(self, atom.eval())])
+            string = parser_utils.safe_literal_eval(atom.value)
+            return set([compiled.create(self, string)])
         else:
             c = atom.children
             if c[0].type == 'string':
@@ -450,7 +452,8 @@ class Evaluator(object):
                 raise NotImplementedError
             if def_.type == 'expr_stmt' and name in def_.get_defined_names():
                 return self.eval_statement(context, def_, name)
-            elif def_.type == 'for_stmt':
+            elif def_.type == 'for_stmt' and \
+                    name.start_pos < def_.children[1].end_pos:
                 container_types = self.eval_element(context, def_.children[3])
                 cn = ContextualizedNode(context, def_.children[3])
                 for_types = iterable.py__iter__types(self, container_types, cn)
@@ -464,7 +467,8 @@ class Evaluator(object):
     def goto(self, context, name):
         stmt = name.get_definition()
         par = name.parent
-        if par.type == 'argument' and par.children[1] == '=' and par.children[0] == name:
+        typ = par.type
+        if typ == 'argument' and par.children[1] == '=' and par.children[0] == name:
             # Named param goto.
             trailer = par.parent
             if trailer.type == 'arglist':
@@ -489,18 +493,18 @@ class Evaluator(object):
                             if param_name.string_name == name.value:
                                 param_names.append(param_name)
                 return param_names
-        elif par.type == 'expr_stmt' and name in par.get_defined_names():
+        elif typ == 'expr_stmt' and name in par.get_defined_names():
             # Only take the parent, because if it's more complicated than just
             # a name it's something you can "goto" again.
             return [TreeNameDefinition(context, name)]
-        elif par.type == 'param' and par.name:
+        elif typ == 'param' and par.name:
             return [ParamName(context, name)]
-        elif isinstance(par, (tree.Param, tree.Function, tree.Class)) and par.name is name:
+        elif typ in ('param', 'funcdef', 'classdef') and par.name is name:
             return [TreeNameDefinition(context, name)]
         elif isinstance(stmt, tree.Import):
             module_names = imports.infer_import(context, name, is_goto=True)
             return module_names
-        elif par.type == 'dotted_name':  # Is a decorator.
+        elif typ == 'dotted_name':  # Is a decorator.
             index = par.children.index(name)
             if index > 0:
                 new_dotted = helpers.deep_ast_copy(par)
@@ -511,7 +515,7 @@ class Evaluator(object):
                     for value in values
                 )
 
-        if par.type == 'trailer' and par.children[0] == '.':
+        if typ == 'trailer' and par.children[0] == '.':
             values = helpers.evaluate_call_of_leaf(context, name, cut_own_trailer=True)
             return unite(
                 value.py__getattribute__(name, name_context=context, is_goto=True)
@@ -533,7 +537,7 @@ class Evaluator(object):
             while True:
                 node = node.parent
 
-                if node.is_scope():
+                if parser_utils.is_scope(node):
                     return node
                 elif node.type in ('argument', 'testlist_comp'):
                     if node.children[1].type == 'comp_for':
@@ -548,8 +552,8 @@ class Evaluator(object):
             if scope_node == base_node:
                 return base_context
 
-            is_funcdef = scope_node.type in ('funcdef', 'lambda')
-            parent_scope = scope_node.get_parent_scope()
+            is_funcdef = scope_node.type in ('funcdef', 'lambdef')
+            parent_scope = parser_utils.get_parent_scope(scope_node)
             parent_context = from_scope_node(parent_scope, child_is_funcdef=is_funcdef)
 
             if is_funcdef:
@@ -582,7 +586,7 @@ class Evaluator(object):
 
         base_node = base_context.tree_node
 
-        if node_is_context and node.is_scope():
+        if node_is_context and parser_utils.is_scope(node):
             scope_node = node
         else:
             if node.parent.type in ('funcdef', 'classdef'):

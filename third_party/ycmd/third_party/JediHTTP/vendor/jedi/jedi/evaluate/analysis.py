@@ -99,7 +99,7 @@ def _check_for_setattr(instance):
 
     node = module.tree_node
     try:
-        stmts = node.used_names['setattr']
+        stmts = node.get_used_names()['setattr']
     except KeyError:
         return False
 
@@ -153,7 +153,7 @@ def _check_for_exception_catch(node_context, jedi_name, exception, payload=None)
                     and not (branch_type.start_pos < jedi_name.start_pos <= suite.end_pos):
                 return False
 
-        for node in obj.except_clauses():
+        for node in obj.get_except_clause_tests():
             if node is None:
                 return True  # An exception block that catches everything.
             else:
@@ -190,7 +190,7 @@ def _check_for_exception_catch(node_context, jedi_name, exception, payload=None)
             key, lazy_context = args[1]
             names = list(lazy_context.infer())
             assert len(names) == 1 and isinstance(names[0], CompiledObject)
-            assert names[0].obj == str(payload[1])
+            assert names[0].obj == payload[1].value
 
             # Check objects
             key, lazy_context = args[0]

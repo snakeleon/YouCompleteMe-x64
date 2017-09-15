@@ -8,6 +8,7 @@ from jedi.parser import tokenize
 from jedi.parser.python import parse
 from jedi.common import splitlines
 from jedi.parser.tokenize import TokenInfo
+from jedi.parser_utils import safe_literal_eval
 
 
 from ..helpers import unittest
@@ -22,8 +23,9 @@ class TokenTest(unittest.TestCase):
         def testit():
             a = "huhu"
         '''))
-        tok = parsed.subscopes[0].statements[0].children[2]
-        assert tok.end_pos == (3, 14)
+        simple_stmt = next(parsed.iter_funcdefs()).get_suite().children[-1]
+        string = simple_stmt.children[0].get_rhs()
+        assert string.end_pos == (3, 14)
 
     def test_end_pos_multi_line(self):
         parsed = parse(dedent('''
@@ -31,8 +33,9 @@ class TokenTest(unittest.TestCase):
             a = """huhu
         asdfasdf""" + "h"
         '''))
-        tok = parsed.subscopes[0].statements[0].children[2].children[0]
-        assert tok.end_pos == (4, 11)
+        expr_stmt = next(parsed.iter_funcdefs()).get_suite().children[1].children[0]
+        string_leaf = expr_stmt.get_rhs().children[0]
+        assert string_leaf.end_pos == (4, 11)
 
     def test_simple_no_whitespace(self):
         # Test a simple one line string, no preceding whitespace
@@ -141,13 +144,7 @@ class TokenTest(unittest.TestCase):
             string_tok = expr_stmt.children[2]
             assert string_tok.type == 'string'
             assert string_tok.value == s
-            assert string_tok.eval() == 'test'
-
-
-def test_tokenizer_with_string_literal_backslash():
-    import jedi
-    c = jedi.Script("statement = u'foo\\\n'; statement").goto_definitions()
-    assert c[0]._name._context.obj == 'foo'
+            assert safe_literal_eval(string_tok.value) == 'test'
 
 
 def test_ur_literals():

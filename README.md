@@ -947,7 +947,7 @@ necessary for your project. That should be enough for 99% of projects.
 You could also consider using [YCM-Generator][ygen] to generate the
 `ycm_extra_conf.py` file.
 
-#### Errors during compilaton
+#### Errors during compilation
 
 If Clang encounters errors when compiling the header files that your file
 includes, then it's probably going to take a long time to get completions.  When
@@ -1610,12 +1610,13 @@ Supported in filetypes: `cs, go, javascript, python, rust, typescript`
 #### The `ClearCompilationFlagCache` subcommand
 
 YCM caches the flags it gets from the `FlagsForFile` function in your
-`ycm_extra_conf.py` file if you return them with the `do_cache` parameter set to
-`True`. The cache is in memory and is never invalidated (unless you restart Vim
-of course).
+`ycm_extra_conf.py` file unless you return them with the `do_cache` parameter
+set to `False`. It also caches the flags extracted from the compilation
+database. The cache is in memory and is never invalidated (unless you restart
+the server with the `:YcmRestartServer` command).
 
 This command clears that cache entirely. YCM will then re-query your
-`FlagsForFile` function as needed in the future.
+`FlagsForFile` function or your compilation database as needed in the future.
 
 Supported in filetypes: `c, cpp, objc, objcpp`
 
@@ -1744,6 +1745,43 @@ Default: `0`
 
 ```viml
 let g:ycm_min_num_identifier_candidate_chars = 0
+```
+
+### The `g:ycm_max_num_candidates` option
+
+This option controls the maximum number of semantic completion suggestions shown
+in the completion menu. This only applies to suggestions from semantic
+completion engines; see [the `g:ycm_max_identifier_candidates`
+option](#the-gycm_max_num_identifier_candidates-option) to limit the number of
+suggestions from the identifier-based engine.
+
+A special value of `0` means there is no limit.
+
+**NOTE:** Setting this option to `0` or to a value greater than `100` is not
+recommended as it will slow down completion when there are a very large number
+of suggestions.
+
+Default: `50`
+
+```viml
+let g:ycm_max_num_candidates = 50
+```
+
+### The `g:ycm_max_num_identifier_candidates` option
+
+This option controls the maximum number of completion suggestions from the
+identifier-based engine shown in the completion menu.
+
+A special value of `0` means there is no limit.
+
+**NOTE:** Setting this option to `0` or to a value greater than `100` is not
+recommended as it will slow down completion when there are a very large number
+of suggestions.
+
+Default: `10`
+
+```viml
+let g:ycm_max_num_identifier_candidates = 10
 ```
 
 ### The `g:ycm_auto_trigger` option
@@ -3067,9 +3105,9 @@ This software is licensed under the [GPL v3 license][gpl].
 
 ###关于版本
 
-- ycmd  核心版本: 28 (13 July 2017) 静态编译
+- ycmd  核心版本: 31 (15 September 2017) 静态编译
 - libclang  版本: 3.9.1 (23 December 2016) [Clang][Clang]
-- Python    支持: 3.6.1 (23 December 2016) [Python][python-win-download]
+- Python    支持: 3.6.2 (17 July 2017) [Python][python-win-download]
 
 支持操作系统:
 
@@ -3165,7 +3203,7 @@ This software is licensed under the [GPL v3 license][gpl].
 [vim]: http://www.vim.org/
 [syntastic]: https://github.com/scrooloose/syntastic
 [lightline]: https://github.com/itchyny/lightline.vim
-[flags_example]: https://raw.githubusercontent.com/Valloric/ycmd/6463774035e61a660ad9150a592b8829eb37fd10/cpp/ycm/.ycm_extra_conf.py
+[flags_example]: https://raw.githubusercontent.com/Valloric/ycmd/3ad0300e94edc13799e8bf7b831de8b57153c5aa/cpp/ycm/.ycm_extra_conf.py
 [compdb]: http://clang.llvm.org/docs/JSONCompilationDatabase.html
 [subsequence]: https://en.wikipedia.org/wiki/Subsequence
 [listtoggle]: https://github.com/Valloric/ListToggle

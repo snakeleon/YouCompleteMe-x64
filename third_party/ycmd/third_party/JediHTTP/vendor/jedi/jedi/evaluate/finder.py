@@ -16,6 +16,7 @@ check for -> a is a string). There's big potential in these checks.
 """
 
 from jedi.parser.python import tree
+from jedi.parser.tree import search_ancestor
 from jedi import debug
 from jedi.common import unite
 from jedi import settings
@@ -31,6 +32,7 @@ from jedi.evaluate import param
 from jedi.evaluate import helpers
 from jedi.evaluate.filters import get_global_filters
 from jedi.evaluate.context import ContextualizedName, ContextualizedNode
+from jedi.parser_utils import is_scope, get_parent_scope
 
 
 class NameFinder(object):
@@ -105,7 +107,7 @@ class NameFinder(object):
         if self._context.predefined_names:
             # TODO is this ok? node might not always be a tree.Name
             node = self._name
-            while node is not None and not node.is_scope():
+            while node is not None and not is_scope(node):
                 node = node.parent
                 if node.type in ("if_stmt", "for_stmt", "comp_for"):
                     try:
@@ -118,7 +120,7 @@ class NameFinder(object):
                         break
 
         for filter in filters:
-            names = filter.get(self._name)
+            names = filter.get(self._string_name)
             if names:
                 break
         debug.dbg('finder.filter_name "%s" in (%s): %s@%s', self._string_name,
@@ -159,7 +161,7 @@ class NameFinder(object):
             if base_node.type == 'comp_for':
                 return types
             while True:
-                flow_scope = flow_scope.get_parent_scope(include_flows=True)
+                flow_scope = get_parent_scope(flow_scope, include_flows=True)
                 n = _check_flow_information(self._name_context, flow_scope,
                                             self._name, self._position)
                 if n is not None:
@@ -192,14 +194,14 @@ def _name_to_types(evaluator, context, tree_name):
     elif typ == 'expr_stmt':
         types = _remove_statements(evaluator, context, node, tree_name)
     elif typ == 'with_stmt':
-        types = context.eval_node(node.node_from_name(tree_name))
+        types = context.eval_node(node.get_context_manager_from_name(tree_name))
     elif typ in ('import_from', 'import_name'):
         types = imports.infer_import(context, tree_name)
     elif typ in ('funcdef', 'classdef'):
         types = _apply_decorators(evaluator, context, node)
     elif typ == 'global_stmt':
         context = evaluator.create_context(context, tree_name)
-        finder = NameFinder(evaluator, context, context, str(tree_name))
+        finder = NameFinder(evaluator, context, context, tree_name.value)
         filters = finder.get_filters(search_global=True)
         # For global_stmt lookups, we only need the first possible scope,
         # which means the function itself.
@@ -297,11 +299,11 @@ def _check_flow_information(context, flow, search_name, pos):
         return None
 
     result = None
-    if flow.is_scope():
+    if is_scope(flow):
         # Check for asserts.
         module_node = flow.get_root_node()
         try:
-            names = module_node.used_names[search_name.value]
+            names = module_node.get_used_names()[search_name.value]
         except KeyError:
             return None
         names = reversed([
@@ -310,9 +312,9 @@ def _check_flow_information(context, flow, search_name, pos):
         ])
 
         for name in names:
-            ass = tree.search_ancestor(name, 'assert_stmt')
+            ass = search_ancestor(name, 'assert_stmt')
             if ass is not None:
-                result = _check_isinstance_type(context, ass.assertion(), search_name)
+                result = _check_isinstance_type(context, ass.assertion, search_name)
                 if result is not None:
                     return result
 

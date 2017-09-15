@@ -12,7 +12,7 @@ Jedi - an awesome autocompletion/static analysis library for Python
 
 
 *If you have specific questions, please add an issue or ask on* `stackoverflow
-<https://stackoverflow.com>`_ *with the label* ``python-jedi``.
+<https://stackoverflow.com/questions/tagged/python-jedi>`_ *with the label* ``python-jedi``.
 
 
 Jedi is a static analysis tool for Python that can be used in IDEs/editors. Its
@@ -45,6 +45,7 @@ Jedi can currently be used with the following editors/projects:
 - Gedit (gedi_)
 - wdb_ - Web Debugger
 - `Eric IDE`_ (Available as a plugin)
+- `Ipython 6.0.0+ <http://ipython.readthedocs.io/en/stable/whatsnew/version6.html>`_
 
 and many more!
 
@@ -122,8 +123,11 @@ The returned objects are very powerful and really all you might need.
 Autocompletion in your REPL (IPython, etc.)
 -------------------------------------------
 
+Starting with Ipython `6.0.0` Jedi is a dependency of IPython. Autocompletion
+in IPython is therefore possible without additional configuration.
+
 It's possible to have Jedi autocompletion in REPL modes - `example video <https://vimeo.com/122332037>`_.
-This means that IPython and others are `supported
+This means that in Python you can enable tab completion in a `REPL
 <https://jedi.readthedocs.org/en/latest/docs/usage.html#tab-completion-in-the-python-shell>`_.
 
 

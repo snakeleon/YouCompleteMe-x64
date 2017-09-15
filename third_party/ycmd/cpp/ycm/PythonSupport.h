@@ -18,6 +18,8 @@
 #ifndef PYTHONSUPPORT_H_KWGFEX0V
 #define PYTHONSUPPORT_H_KWGFEX0V
 
+#include "DLLDefines.h"
+
 #include <boost/python.hpp>
 
 namespace YouCompleteMe {
@@ -25,11 +27,14 @@ namespace YouCompleteMe {
 /// Given a list of python objects (that represent completion candidates) in a
 /// python list |candidates|, a |candidate_property| on which to filter and sort
 /// the candidates and a user query, returns a new sorted python list with the
-/// original objects that survived the filtering.
-boost::python::list FilterAndSortCandidates(
+/// original objects that survived the filtering. This list contains at most
+/// |max_candidates|. If |max_candidates| is omitted or 0, all candidates are
+/// sorted.
+YCM_DLL_EXPORT boost::python::list FilterAndSortCandidates(
   const boost::python::list &candidates,
   const std::string &candidate_property,
-  const std::string &query );
+  const std::string &query,
+  const size_t max_candidates = 0 );
 
 /// Given a Python object that's supposed to be "string-like", returns a UTF-8
 /// encoded std::string. Raises an exception if the object can't be converted to

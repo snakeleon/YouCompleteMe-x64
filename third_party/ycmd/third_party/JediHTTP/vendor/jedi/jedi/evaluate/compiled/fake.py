@@ -7,6 +7,7 @@ mixing in Python code, the autocompletion should work much better for builtins.
 import os
 import inspect
 import types
+from itertools import chain
 
 from jedi._compatibility import is_py3, builtins, unicode, is_py34
 from jedi.parser.python import parse
@@ -74,7 +75,7 @@ def _load_faked_module(module):
 
 
 def _search_scope(scope, obj_name):
-    for s in scope.subscopes:
+    for s in chain(scope.iter_classdefs(), scope.iter_funcdefs()):
         if s.name.value == obj_name:
             return s
 
@@ -198,7 +199,7 @@ def get_faked(evaluator, module, obj, name=None, parent_context=None):
 
     faked, fake_module = _get_faked(module and module.obj, obj, name)
     if module is not None:
-        module.used_names = fake_module.used_names
+        module.get_used_names = fake_module.get_used_names
     return faked
 
 

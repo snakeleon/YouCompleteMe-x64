@@ -1,18 +1,33 @@
+from abc import abstractmethod, abstractproperty
 from jedi._compatibility import utf8_repr, encoding, is_py3
 
 
-class _NodeOrLeaf(object):
+def search_ancestor(node, *node_types):
     """
-    This is just here to have an isinstance check, which is also used on
-    evaluate classes. But since they have sometimes a special type of
-    delegation, it is important for those classes to override this method.
+    Recursively looks at the parents of a node and checks if the type names
+    match.
 
-    I know that there is a chance to do such things with __instancecheck__, but
-    since Python 2.5 doesn't support it, I decided to do it this way.
+    :param node: The node that is looked at.
+    :param node_types: A tuple or a string of type names that are
+        searched for.
+    """
+    while True:
+        node = node.parent
+        if node is None or node.type in node_types:
+            return node
+
+
+class NodeOrLeaf(object):
+    """
+    The base class for nodes and leaves.
     """
     __slots__ = ()
 
     def get_root_node(self):
+        """
+        Returns the root node of a parser tree. The returned node doesn't have
+        a parent node like all the other nodes/leaves.
+        """
         scope = self
         while scope.parent is not None:
             scope = scope.parent
@@ -47,7 +62,7 @@ class _NodeOrLeaf(object):
     def get_previous_leaf(self):
         """
         Returns the previous leaf in the parser tree.
-        Raises an IndexError if it's the first element.
+        Raises an IndexError if it's the first element in the parser tree.
         """
         node = self
         while True:
@@ -69,8 +84,8 @@ class _NodeOrLeaf(object):
 
     def get_next_leaf(self):
         """
-        Returns the previous leaf in the parser tree.
-        Raises an IndexError if it's the last element.
+        Returns the next leaf in the parser tree.
+        Returns `None` if it's the last element in the parser tree.
         """
         node = self
         while True:
@@ -90,8 +105,59 @@ class _NodeOrLeaf(object):
             except AttributeError:  # A Leaf doesn't have children.
                 return node
 
+    @abstractproperty
+    def start_pos(self):
+        """
+        Returns the starting position of the prefix as a tuple, e.g. `(3, 4)`.
 
-class Leaf(_NodeOrLeaf):
+        :return tuple of int: (line, column)
+        """
+
+    @abstractproperty
+    def end_pos(self):
+        """
+        Returns the end position of the prefix as a tuple, e.g. `(3, 4)`.
+
+        :return tuple of int: (line, column)
+        """
+
+    @abstractmethod
+    def get_start_pos_of_prefix(self):
+        """
+        Returns the start_pos of the prefix. This means basically it returns
+        the end_pos of the last prefix. The `get_start_pos_of_prefix()` of the
+        prefix `+` in `2 + 1` would be `(1, 1)`, while the start_pos is
+        `(1, 2)`.
+
+        :return tuple of int: (line, column)
+        """
+
+    @abstractmethod
+    def get_first_leaf(self):
+        """
+        Returns the first leaf of a node or itself it's a leaf.
+        """
+
+    @abstractmethod
+    def get_last_leaf(self):
+        """
+        Returns the last leaf of a node or itself it's a leaf.
+        """
+
+    @abstractmethod
+    def get_code(self, normalized=False, include_prefix=True):
+        """
+        Returns the code that was the input of the parser.
+
+        If a normalizer is given, the returned code will be normalized and will
+        not be equal to the input.
+
+        :param include_prefix: Removes the prefix (whitespace and comments) of e.g. a statement.
+        :param normalized: Deprecated. Please don't use. Will be replaced with something more powerful.
+        """
+
+
+class Leaf(NodeOrLeaf):
     __slots__ = ('value', 'parent', 'line', 'indent', 'prefix')
 
     def __init__(self, value, start_pos, prefix=''):
@@ -115,9 +181,6 @@ class Leaf(_NodeOrLeaf):
             return self.line - self.prefix.count('\n'), 0  # It's the first leaf.
         return previous_leaf.end_pos
 
-    def move(self, line_offset):
-        self.line += line_offset
-
     def get_first_leaf(self):
         return self
 
@@ -132,15 +195,8 @@ class Leaf(_NodeOrLeaf):
         else:
             return self.value
 
-    def nodes_to_execute(self, last_added=False):
-        return []
-
     @property
     def end_pos(self):
-        """
-        Literals and whitespace end_pos are more complicated than normal
-        end_pos, because the containing newlines may change the indexes.
-        """
         lines = self.value.split('\n')
         end_pos_line = self.line + len(lines) - 1
         # Check for multiline token
@@ -155,7 +211,7 @@ class Leaf(_NodeOrLeaf):
         return "<%s: %s start=%s>" % (type(self).__name__, self.value, self.start_pos)
 
 
-class BaseNode(_NodeOrLeaf):
+class BaseNode(NodeOrLeaf):
     """
     The super class for all nodes.
 
@@ -166,22 +222,10 @@ class BaseNode(_NodeOrLeaf):
     type = None
 
     def __init__(self, children):
-        """
-        Initialize :class:`BaseNode`.
-
-        :param children: The module in which this Python object locates.
-        """
         for c in children:
             c.parent = self
         self.children = children
         self.parent = None
-
-    def move(self, line_offset):
-        """
-        Move the Node's start_pos.
-        """
-        for c in self.children:
-            c.move(line_offset)
 
     @property
     def start_pos(self):
@@ -236,33 +280,6 @@ class BaseNode(_NodeOrLeaf):
     def get_last_leaf(self):
         return self.children[-1].get_last_leaf()
 
-    def get_following_comment_same_line(self):
-        """
-        returns (as string) any comment that appears on the same line,
-        after the node, including the #
-        """
-        try:
-            if self.type == 'for_stmt':
-                whitespace = self.children[5].get_first_leaf().prefix
-            elif self.type == 'with_stmt':
-                whitespace = self.children[3].get_first_leaf().prefix
-            else:
-                whitespace = self.get_last_leaf().get_next_leaf().prefix
-        except AttributeError:
-            return None
-        except ValueError:
-            # TODO in some particular cases, the tree doesn't seem to be linked
-            # correctly
-            return None
-        if "#" not in whitespace:
-            return None
-        comment = whitespace[whitespace.index("#"):]
-        if "\r" in comment:
-            comment = comment[:comment.index("\r")]
-        if "\n" in comment:
-            comment = comment[:comment.index("\n")]
-        return comment
-
     @utf8_repr
     def __repr__(self):
         code = self.get_code().replace('\n', ' ').strip()
@@ -276,37 +293,9 @@ class Node(BaseNode):
     """Concrete implementation for interior nodes."""
     __slots__ = ('type',)
 
-    _IGNORE_EXECUTE_NODES = set([
-        'suite', 'subscriptlist', 'subscript', 'simple_stmt', 'sliceop',
-        'testlist_comp', 'dictorsetmaker', 'trailer', 'decorators',
-        'decorated', 'arglist', 'argument', 'exprlist', 'testlist',
-        'testlist_safe', 'testlist1'
-    ])
-
     def __init__(self, type, children):
-        """
-        Initializer.
-
-        Takes a type constant (a symbol number >= 256), a sequence of
-        child nodes, and an optional context keyword argument.
-
-        As a side effect, the parent pointers of the children are updated.
-        """
         super(Node, self).__init__(children)
         self.type = type
-
-    def nodes_to_execute(self, last_added=False):
-        """
-        For static analysis.
-        """
-        result = []
-        if self.type not in Node._IGNORE_EXECUTE_NODES and not last_added:
-            result.append(self)
-            last_added = True
-
-        for child in self.children:
-            result += child.nodes_to_execute(last_added)
-        return result
 
     def __repr__(self):
         return "%s(%s, %r)" % (self.__class__.__name__, self.type, self.children)
@@ -314,18 +303,18 @@ class Node(BaseNode):
 
 class ErrorNode(BaseNode):
     """
-    TODO doc
+    A node that containes valid nodes/leaves that we're follow by a token that
+    was invalid. This basically means that the leaf after this node is where
+    Python would mark a syntax error.
     """
     __slots__ = ()
     type = 'error_node'
 
-    def nodes_to_execute(self, last_added=False):
-        return []
-
 
 class ErrorLeaf(Leaf):
     """
-    TODO doc
+    A leaf that is either completely invalid in a language (like `$` in Python)
+    or is invalid at that position. Like the star in `1 +* 1`.
     """
     __slots__ = ('original_type')
     type = 'error_leaf'
@@ -337,5 +326,3 @@ class ErrorLeaf(Leaf):
     def __repr__(self):
         return "<%s: %s:%s, %s)>" % \
             (type(self).__name__, self.original_type, repr(self.value), self.start_pos)
-
-

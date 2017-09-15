@@ -4,86 +4,48 @@ from textwrap import dedent
 
 import pytest
 
-import jedi
 from jedi._compatibility import u, is_py3
 from jedi.parser.python import parse, load_grammar
 from jedi.parser.python import tree
 from jedi.common import splitlines
 
 
-def test_user_statement_on_import():
-    """github #285"""
-    s = "from datetime import (\n" \
-        "    time)"
+def test_basic_parsing():
+    def compare(string):
+        """Generates the AST object and then regenerates the code."""
+        assert parse(string).get_code() == string
 
-    for pos in [(2, 1), (2, 4)]:
-        p = parse(s)
-        stmt = p.get_statement_for_position(pos)
-        assert isinstance(stmt, tree.Import)
-        assert [str(n) for n in stmt.get_defined_names()] == ['time']
-
-
-class TestCallAndName():
-    def get_call(self, source):
-        # Get the simple_stmt and then the first one.
-        simple_stmt = parse(source).children[0]
-        return simple_stmt.children[0]
-
-    def test_name_and_call_positions(self):
-        name = self.get_call('name\nsomething_else')
-        assert str(name) == 'name'
-        assert name.start_pos == (1, 0)
-        assert name.end_pos == (1, 4)
-
-        leaf = self.get_call('1.0\n')
-        assert leaf.value == '1.0'
-        assert leaf.eval() == 1.0
-        assert leaf.start_pos == (1, 0)
-        assert leaf.end_pos == (1, 3)
-
-    def test_call_type(self):
-        call = self.get_call('hello')
-        assert isinstance(call, tree.Name)
-
-    def test_literal_type(self):
-        literal = self.get_call('1.0')
-        assert isinstance(literal, tree.Literal)
-        assert type(literal.eval()) == float
-
-        literal = self.get_call('1')
-        assert isinstance(literal, tree.Literal)
-        assert type(literal.eval()) == int
-
-        literal = self.get_call('"hello"')
-        assert isinstance(literal, tree.Literal)
-        assert literal.eval() == 'hello'
+    compare('\na #pass\n')
+    compare('wblabla* 1\t\n')
+    compare('def x(a, b:3): pass\n')
+    compare('assert foo\n')
 
 
 class TestSubscopes():
     def get_sub(self, source):
-        return parse(source).subscopes[0]
+        return parse(source).children[0]
 
     def test_subscope_names(self):
         name = self.get_sub('class Foo: pass').name
         assert name.start_pos == (1, len('class '))
         assert name.end_pos == (1, len('class Foo'))
-        assert str(name) == 'Foo'
+        assert name.value == 'Foo'
 
         name = self.get_sub('def foo(): pass').name
         assert name.start_pos == (1, len('def '))
         assert name.end_pos == (1, len('def foo'))
-        assert str(name) == 'foo'
+        assert name.value == 'foo'
 
 
 class TestImports():
     def get_import(self, source):
-        return parse(source).imports[0]
+        return next(parse(source).iter_imports())
 
     def test_import_names(self):
         imp = self.get_import(u('import math\n'))
         names = imp.get_defined_names()
         assert len(names) == 1
-        assert str(names[0]) == 'math'
+        assert names[0].value == 'math'
         assert names[0].start_pos == (1, len('import '))
         assert names[0].end_pos == (1, len('import math'))
 
@@ -98,7 +60,7 @@ def test_end_pos():
                    y = None
                ''')
     parser = parse(s)
-    scope = parser.subscopes[0]
+    scope = next(parser.iter_funcdefs())
     assert scope.start_pos == (3, 0)
     assert scope.end_pos == (5, 0)
 
@@ -110,7 +72,7 @@ def test_carriage_return_statements():
         # this is a namespace package
     ''')
     source = source.replace('\n', '\r\n')
-    stmt = parse(source).statements[0]
+    stmt = parse(source).children[0]
     assert '#' not in stmt.get_code()
 
 
@@ -118,34 +80,9 @@ def test_incomplete_list_comprehension():
     """ Shouldn't raise an error, same bug as #418. """
     # With the old parser this actually returned a statement. With the new
     # parser only valid statements generate one.
-    assert parse('(1 for def').statements == []
-
-
-def test_hex_values_in_docstring():
-    source = r'''
-        def foo(object):
-            """
-             \xff
-            """
-            return 1
-        '''
-
-    doc = parse(source).subscopes[0].raw_doc
-    if is_py3:
-        assert doc == '\xff'
-    else:
-        assert doc == u('�')
-
-
-def test_error_correction_with():
-    source = """
-    with open() as f:
-        try:
-            f."""
-    comps = jedi.Script(source).completions()
-    assert len(comps) > 30
-    # `open` completions have a closed attribute.
-    assert [1 for c in comps if c.name == 'closed']
+    children = parse('(1 for def').children
+    assert [c.type for c in children] == \
+        ['error_node', 'error_node', 'newline', 'endmarker']
 
 
 def test_newline_positions():
@@ -180,12 +117,12 @@ def test_param_splitting():
         grammar = load_grammar('%s.%s' % sys.version_info[:2])
         m = parse(src, grammar=grammar)
         if is_py3:
-            assert not m.subscopes
+            assert not list(m.iter_funcdefs())
         else:
             # We don't want b and c to be a part of the param enumeration. Just
             # ignore them, because it's not what we want to support in the
             # future.
-            assert [str(param.name) for param in m.subscopes[0].params] == result
+            assert [param.name.value for param in next(m.iter_funcdefs()).params] == result
 
     check('def x(a, (b, c)):\n pass', ['a'])
     check('def x((b, c)):\n pass', [])

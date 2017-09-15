@@ -30,6 +30,7 @@ from jedi.evaluate import compiled
 from jedi.evaluate.context import LazyTreeContext
 from jedi import debug
 from jedi import _compatibility
+from jedi import parser_utils
 import re
 
 
@@ -72,7 +73,7 @@ def _fix_forward_reference(context, node):
             return node
         else:
             module = node.get_root_node()
-            new_node.move(module.end_pos[0])
+            parser_utils.move(new_node, module.end_pos[0])
             new_node.parent = context.tree_node
             return new_node
     else:
@@ -80,28 +81,30 @@ def _fix_forward_reference(context, node):
 
 
 @memoize_default()
-def follow_param(context, param):
-    annotation = param.annotation()
-    return _evaluate_for_annotation(context, annotation)
+def infer_param(execution_context, param):
+    annotation = param.annotation
+    module_context = execution_context.get_root_context()
+    return _evaluate_for_annotation(module_context, annotation)
 
 
 def py__annotations__(funcdef):
-    return_annotation = funcdef.annotation()
+    return_annotation = funcdef.annotation
     if return_annotation:
         dct = {'return': return_annotation}
     else:
         dct = {}
     for function_param in funcdef.params:
-        param_annotation = function_param.annotation()
+        param_annotation = function_param.annotation
         if param_annotation is not None:
             dct[function_param.name.value] = param_annotation
     return dct
 
 
 @memoize_default()
-def find_return_types(context, func):
-    annotation = py__annotations__(func).get("return", None)
-    return _evaluate_for_annotation(context, annotation)
+def infer_return_types(function_context):
+    annotation = py__annotations__(function_context.tree_node).get("return", None)
+    module_context = function_context.get_root_context()
+    return _evaluate_for_annotation(module_context, annotation)
 
 
 _typing_module = None
@@ -207,7 +210,7 @@ def _find_type_from_comment_hint(context, node, varlist, name):
         else:
             return []
 
-    comment = node.get_following_comment_same_line()
+    comment = parser_utils.get_following_comment_same_line(node)
     if comment is None:
         return []
     match = re.match(r"^#\s*type:\s*([^#]*)", comment)

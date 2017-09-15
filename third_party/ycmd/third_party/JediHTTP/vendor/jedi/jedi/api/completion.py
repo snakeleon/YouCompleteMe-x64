@@ -8,6 +8,7 @@ from jedi.evaluate import imports
 from jedi.api import keywords
 from jedi.evaluate.helpers import evaluate_call_of_leaf
 from jedi.evaluate.filters import get_global_filters
+from jedi.parser_utils import get_statement_of_position
 
 
 def get_call_signature_param_names(call_signatures):
@@ -22,7 +23,7 @@ def get_call_signature_param_names(call_signatures):
                 # public API and we don't want to make the internal
                 # Name object public.
                 tree_param = tree.search_ancestor(tree_name, 'param')
-                if tree_param.stars == 0:  # no *args/**kwargs
+                if tree_param.star_count == 0:  # no *args/**kwargs
                     yield p._name
 
 
@@ -51,7 +52,7 @@ def get_user_scope(module_context, position):
     """
     Returns the scope in which the user resides. This includes flows.
     """
-    user_stmt = module_context.tree_node.get_statement_for_position(position)
+    user_stmt = get_statement_of_position(module_context.tree_node, position)
     if user_stmt is None:
         def scan(scope):
             for s in scope.children:

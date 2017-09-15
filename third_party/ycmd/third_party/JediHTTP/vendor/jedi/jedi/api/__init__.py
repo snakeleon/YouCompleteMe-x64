@@ -16,6 +16,7 @@ import sys
 from jedi.parser.python import load_grammar
 from jedi.parser.python import tree
 from jedi.parser.python import parse
+from jedi.parser_utils import get_executable_nodes, get_statement_of_position
 from jedi import debug
 from jedi import settings
 from jedi import common
@@ -92,10 +93,10 @@ class Script(object):
                  encoding='utf-8', source_path=None, source_encoding=None,
                  sys_path=None):
         if source_path is not None:
-            warnings.warn("Use path instead of source_path.", DeprecationWarning)
+            warnings.warn("Deprecated since version 0.7. Use path instead of source_path.", DeprecationWarning, stacklevel=2)
             path = source_path
         if source_encoding is not None:
-            warnings.warn("Use encoding instead of source_encoding.", DeprecationWarning)
+            warnings.warn("Deprecated since version 0.8. Use encoding instead of source_encoding.", DeprecationWarning, stacklevel=2)
             encoding = source_encoding
 
         self._orig_path = path
@@ -157,7 +158,7 @@ class Script(object):
            Use :attr:`.path` instead.
         .. todo:: Remove!
         """
-        warnings.warn("Use path instead of source_path.", DeprecationWarning)
+        warnings.warn("Deprecated since version 0.7. Use path instead of source_path.", DeprecationWarning, stacklevel=2)
         return self.path
 
     def __repr__(self):
@@ -193,7 +194,7 @@ class Script(object):
         :rtype: list of :class:`classes.Definition`
         """
         module_node = self._get_module_node()
-        leaf = module_node.name_for_position(self._pos)
+        leaf = module_node.get_name_of_position(self._pos)
         if leaf is None:
             leaf = module_node.get_leaf_for_position(self._pos)
             if leaf is None:
@@ -237,7 +238,7 @@ class Script(object):
         """
         Used for goto_assignments and usages.
         """
-        name = self._get_module_node().name_for_position(self._pos)
+        name = self._get_module_node().get_name_of_position(self._pos)
         if name is None:
             return []
         context = self._evaluator.create_context(self._get_module(), name)
@@ -258,13 +259,13 @@ class Script(object):
             settings.dynamic_flow_information, False
         try:
             module_node = self._get_module_node()
-            user_stmt = module_node.get_statement_for_position(self._pos)
+            user_stmt = get_statement_of_position(module_node, self._pos)
             definition_names = self._goto()
             if not definition_names and isinstance(user_stmt, tree.Import):
                 # For not defined imports (goto doesn't find something, we take
                 # the name as a definition. This is enough, because every name
                 # points to it.
-                name = user_stmt.name_for_position(self._pos)
+                name = user_stmt.get_name_of_position(self._pos)
                 if name is None:
                     # Must be syntax
                     return []
@@ -331,7 +332,7 @@ class Script(object):
         module_node = self._get_module_node()
         self._evaluator.analysis_modules = [module_node]
         try:
-            for node in module_node.nodes_to_execute():
+            for node in get_executable_nodes(module_node):
                 context = self._get_module().create_context(node)
                 if node.type in ('funcdef', 'classdef'):
                     # TODO This is stupid, should be private
@@ -341,7 +342,7 @@ class Script(object):
                 elif isinstance(node, tree.Import):
                     import_names = set(node.get_defined_names())
                     if node.is_nested():
-                        import_names |= set(path[-1] for path in node.paths())
+                        import_names |= set(path[-1] for path in node.get_paths())
                     for n in import_names:
                         imports.infer_import(context, n)
                 elif node.type == 'expr_stmt':

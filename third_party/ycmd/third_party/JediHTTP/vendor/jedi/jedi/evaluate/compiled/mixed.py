@@ -116,8 +116,21 @@ def _load_module(evaluator, path, python_object):
     return module
 
 
+def source_findable(python_object):
+    """Check if inspect.getfile has a chance to find the source."""
+    return (inspect.ismodule(python_object) or
+            inspect.isclass(python_object) or
+            inspect.ismethod(python_object) or
+            inspect.isfunction(python_object) or
+            inspect.istraceback(python_object) or
+            inspect.isframe(python_object) or
+            inspect.iscode(python_object))
+
+
 def find_syntax_node_name(evaluator, python_object):
     try:
+        if not source_findable(python_object):
+            raise TypeError  # Prevents computation of `repr` within inspect.
         path = inspect.getsourcefile(python_object)
     except TypeError:
         # The type might not be known (e.g. class_with_dict.__weakref__)
@@ -145,7 +158,7 @@ def find_syntax_node_name(evaluator, python_object):
 
     # Doesn't always work (e.g. os.stat_result)
     try:
-        names = module.used_names[name_str]
+        names = module.get_used_names()[name_str]
     except KeyError:
         return None, None
     names = [n for n in names if n.is_definition()]

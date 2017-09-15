@@ -155,18 +155,6 @@ def PatchCompleter( completer, filetype ):
 
 
 @contextlib.contextmanager
-def UserOption( key, value ):
-  try:
-    current_options = dict( user_options_store.GetAll() )
-    user_options = current_options.copy()
-    user_options.update( { key: value } )
-    handlers.UpdateUserOptions( user_options )
-    yield user_options
-  finally:
-    handlers.UpdateUserOptions( current_options )
-
-
-@contextlib.contextmanager
 def CurrentWorkingDirectory( path ):
   old_cwd = GetCurrentDirectory()
   os.chdir( path )
@@ -183,6 +171,15 @@ def TemporaryExecutable( extension = '.exe' ):
                                     suffix = extension ) as executable:
     os.chmod( executable.name, stat.S_IXUSR )
     yield executable.name
+
+
+@contextlib.contextmanager
+def TemporarySymlink( source, link ):
+  os.symlink( source, link )
+  try:
+    yield
+  finally:
+    os.remove( link )
 
 
 def SetUpApp( custom_options = {} ):

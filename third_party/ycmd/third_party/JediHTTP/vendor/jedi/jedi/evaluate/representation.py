@@ -32,6 +32,8 @@ py__package__()                        Only on modules. For the import system.
 py__path__()                           Only on modules. For the import system.
 py__get__(call_object)                 Only on instances. Simulates
                                        descriptors.
+py__doc__(include_call_signature:      Returns the docstring for a context.
+          bool)
 ====================================== ========================================
 
 """
@@ -62,6 +64,7 @@ from jedi.evaluate.filters import ParserTreeFilter, FunctionExecutionFilter, \
 from jedi.evaluate.dynamic import search_params
 from jedi.evaluate import context
 from jedi.evaluate.context import ContextualizedNode
+from jedi import parser_utils
 
 
 def apply_py__get__(context, base_context):
@@ -189,14 +192,6 @@ class ClassContext(use_metaclass(CachedMetaClass, context.TreeContext)):
     def is_class(self):
         return True
 
-    def get_subscope_by_name(self, name):
-        raise DeprecationWarning
-        for s in self.py__mro__():
-            for sub in reversed(s.subscopes):
-                if sub.name.value == name:
-                    return sub
-        raise KeyError("Couldn't find subscope.")
-
     def get_function_slot_names(self, name):
         for filter in self.get_filters(search_global=False):
             names = filter.get(name)
@@ -218,6 +213,20 @@ class ClassContext(use_metaclass(CachedMetaClass, context.TreeContext)):
     @property
     def name(self):
         return ContextName(self, self.tree_node.name)
+
+
+class LambdaName(AbstractNameDefinition):
+    string_name = '<lambda>'
+
+    def __init__(self, lambda_context):
+        self._lambda_context = lambda_context
+        self.parent_context = lambda_context.parent_context
+
+    def start_pos(self):
+        return self._lambda_context.tree_node.start_pos
+
+    def infer(self):
+        return set([self._lambda_context])
 
 
 class FunctionContext(use_metaclass(CachedMetaClass, context.TreeContext)):
@@ -267,7 +276,7 @@ class FunctionContext(use_metaclass(CachedMetaClass, context.TreeContext)):
     def py__class__(self):
         # This differentiation is only necessary for Python2. Python3 does not
         # use a different method class.
-        if isinstance(self.tree_node.get_parent_scope(), tree.Class):
+        if isinstance(parser_utils.get_parent_scope(self.tree_node), tree.Class):
             name = 'METHOD_CLASS'
         else:
             name = 'FUNCTION_CLASS'
@@ -275,6 +284,8 @@ class FunctionContext(use_metaclass(CachedMetaClass, context.TreeContext)):
 
     @property
     def name(self):
+        if self.tree_node.type == 'lambdef':
+            return LambdaName(self)
         return ContextName(self, self.tree_node.name)
 
     def get_param_names(self):
@@ -303,16 +314,16 @@ class FunctionExecutionContext(context.TreeContext):
     @recursion.execution_recursion_decorator()
     def get_return_values(self, check_yields=False):
         funcdef = self.tree_node
-        if funcdef.type == 'lambda':
+        if funcdef.type == 'lambdef':
             return self.evaluator.eval_element(self, funcdef.children[-1])
 
         if check_yields:
             types = set()
-            returns = funcdef.yields
+            returns = funcdef.iter_yield_exprs()
         else:
-            returns = funcdef.returns
-            types = set(docstrings.find_return_types(self.get_root_context(), funcdef))
-            types |= set(pep0484.find_return_types(self.get_root_context(), funcdef))
+            returns = funcdef.iter_return_stmts()
+            types = set(docstrings.infer_return_types(self.function_context))
+            types |= set(pep0484.infer_return_types(self.function_context))
 
         for r in returns:
             check = flow_analysis.reachability_check(self, funcdef, r)
@@ -339,9 +350,9 @@ class FunctionExecutionContext(context.TreeContext):
 
     @recursion.execution_recursion_decorator(default=iter([]))
     def get_yield_values(self):
-        for_parents = [(y, tree.search_ancestor(y, ('for_stmt', 'funcdef',
-                                                    'while_stmt', 'if_stmt')))
-                       for y in self.tree_node.yields]
+        for_parents = [(y, tree.search_ancestor(y, 'for_stmt', 'funcdef',
+                                                'while_stmt', 'if_stmt'))
+                       for y in self.tree_node.iter_yield_exprs()]
 
         # Calculate if the yields are placed within the same for loop.
         yields_order = []
@@ -353,7 +364,7 @@ class FunctionExecutionContext(context.TreeContext):
             if parent.type == 'suite':
                 parent = parent.parent
             if for_stmt.type == 'for_stmt' and parent == self.tree_node \
-                    and for_stmt.defines_one_name():  # Simplicity for now.
+                    and parser_utils.for_stmt_defines_one_name(for_stmt):  # Simplicity for now.
                 if for_stmt == last_for_stmt:
                     yields_order[-1][1].append(yield_)
                 else:
@@ -375,12 +386,12 @@ class FunctionExecutionContext(context.TreeContext):
                     for result in self._eval_yield(yield_):
                         yield result
             else:
-                input_node = for_stmt.get_input_node()
+                input_node = for_stmt.get_testlist()
                 cn = ContextualizedNode(self, input_node)
                 ordered = iterable.py__iter__(evaluator, cn.infer(), cn)
                 ordered = list(ordered)
                 for lazy_context in ordered:
-                    dct = {str(for_stmt.children[1]): lazy_context.infer()}
+                    dct = {str(for_stmt.children[1].value): lazy_context.infer()}
                     with helpers.predefine_names(self, for_stmt, dct):
                         for yield_in_same_for_stmt in yields:
                             for result in self._eval_yield(yield_in_same_for_stmt):
@@ -393,7 +404,7 @@ class FunctionExecutionContext(context.TreeContext):
 
     @memoize_default(default=NO_DEFAULT)
     def get_params(self):
-        return param.get_params(self.evaluator, self.parent_context, self.tree_node, self.var_args)
+        return param.get_params(self, self.var_args)
 
 
 class AnonymousFunctionExecution(FunctionExecutionContext):
@@ -404,7 +415,7 @@ class AnonymousFunctionExecution(FunctionExecutionContext):
     @memoize_default(default=NO_DEFAULT)
     def get_params(self):
         # We need to do a dynamic search here.
-        return search_params(self.evaluator, self.parent_context, self.tree_node)
+        return search_params(self.evaluator, self, self.tree_node)
 
 
 class ModuleAttributeName(AbstractNameDefinition):
@@ -463,9 +474,9 @@ class ModuleContext(use_metaclass(CachedMetaClass, context.TreeContext)):
     @memoize_default([])
     def star_imports(self):
         modules = []
-        for i in self.tree_node.imports:
+        for i in self.tree_node.iter_imports():
             if i.is_star_import():
-                name = i.star_import_name()
+                name = i.get_paths()[-1][-1]
                 new = imports.infer_import(self, name)
                 for module in new:
                     if isinstance(module, ModuleContext):

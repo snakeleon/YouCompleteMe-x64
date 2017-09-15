@@ -19,62 +19,24 @@ The easiest way to play with this module is to use :class:`parsing.Parser`.
 <Module: @1-1>
 
 Any subclasses of :class:`Scope`, including :class:`Module` has an attribute
-:attr:`imports <Scope.imports>`:
+:attr:`iter_imports <Scope.iter_imports>`:
 
->>> module.imports
+>>> list(module.iter_imports())
 [<ImportName: import os@1,0>]
-
-See also :attr:`Scope.subscopes` and :attr:`Scope.statements`.
-
-For static analysis purposes there exists a method called
-``nodes_to_execute`` on all nodes and leaves. It's documented in the static
-anaylsis documentation.
 """
 
-from inspect import cleandoc
-from itertools import chain
-import textwrap
-import abc
-
-from jedi._compatibility import (Python3Method, is_py3, utf8_repr,
-                                 literal_eval, unicode)
-from jedi.parser.tree import Node, BaseNode, Leaf, ErrorNode, ErrorLeaf
-
-
-def _safe_literal_eval(value):
-    first_two = value[:2].lower()
-    if first_two[0] == 'f' or first_two in ('fr', 'rf'):
-        # literal_eval is not able to resovle f literals. We have to do that
-        # manually in a later stage
-        return ''
-
-    try:
-        return literal_eval(value)
-    except SyntaxError:
-        # It's possible to create syntax errors with literals like rb'' in
-        # Python 2. This should not be possible and in that case just return an
-        # empty string.
-        # Before Python 3.3 there was a more strict definition in which order
-        # you could define literals.
-        return ''
-
-
-def search_ancestor(node, node_type_or_types):
-    if not isinstance(node_type_or_types, (list, tuple)):
-        node_type_or_types = (node_type_or_types,)
-
-    while True:
-        node = node.parent
-        if node is None or node.type in node_type_or_types:
-            return node
+from jedi._compatibility import utf8_repr, unicode
+from jedi.parser.tree import Node, BaseNode, Leaf, ErrorNode, ErrorLeaf, \
+    search_ancestor
 
 
 class DocstringMixin(object):
     __slots__ = ()
 
-    @property
-    def raw_doc(self):
-        """ Returns a cleaned version of the docstring token. """
+    def get_doc_node(self):
+        """
+        Returns the string leaf of a docstring. e.g. ``r'''foo'''``.
+        """
         if self.type == 'file_input':
             node = self.children[0]
         elif isinstance(self, ClassOrFunc):
@@ -86,40 +48,21 @@ class DocstringMixin(object):
             c = simple_stmt.parent.children
             index = c.index(simple_stmt)
             if not index:
-                return ''
+                return None
             node = c[index - 1]
 
         if node.type == 'simple_stmt':
             node = node.children[0]
-
         if node.type == 'string':
-            # TODO We have to check next leaves until there are no new
-            # leaves anymore that might be part of the docstring. A
-            # docstring can also look like this: ``'foo' 'bar'
-            # Returns a literal cleaned version of the ``Token``.
-            cleaned = cleandoc(_safe_literal_eval(node.value))
-            # Since we want the docstr output to be always unicode, just
-            # force it.
-            if is_py3 or isinstance(cleaned, unicode):
-                return cleaned
-            else:
-                return unicode(cleaned, 'UTF-8', 'replace')
-        return ''
+            return node
+        return None
 
 
-class PythonMixin():
-    def get_parent_scope(self, include_flows=False):
-        """
-        Returns the underlying scope.
-        """
-        scope = self.parent
-        while scope is not None:
-            if include_flows and isinstance(scope, Flow):
-                return scope
-            if scope.is_scope():
-                break
-            scope = scope.parent
-        return scope
+class PythonMixin(object):
+    """
+    Some Python specific utitilies.
+    """
+    __slots__ = ()
 
     def get_definition(self):
         if self.type in ('newline', 'endmarker'):
@@ -139,38 +82,15 @@ class PythonMixin():
                 break
         return scope
 
-    def is_scope(self):
-        # Default is not being a scope. Just inherit from Scope.
-        return False
-
-    @abc.abstractmethod
-    def nodes_to_execute(self, last_added=False):
-        raise NotImplementedError()
-
-    @Python3Method
-    def name_for_position(self, position):
+    def get_name_of_position(self, position):
         for c in self.children:
             if isinstance(c, Leaf):
-                if isinstance(c, Name) and c.start_pos <= position <= c.end_pos:
+                if c.type == 'name' and c.start_pos <= position <= c.end_pos:
                     return c
             else:
-                result = c.name_for_position(position)
+                result = c.get_name_of_position(position)
                 if result is not None:
                     return result
-        return None
-
-    @Python3Method
-    def get_statement_for_position(self, pos):
-        for c in self.children:
-            if c.start_pos <= pos <= c.end_pos:
-                if c.type not in ('decorated', 'simple_stmt', 'suite') \
-                        and not isinstance(c, (Flow, ClassOrFunc)):
-                    return c
-                else:
-                    try:
-                        return c.get_statement_for_position(pos)
-                    except AttributeError:
-                        pass  # Must be a non-scope
         return None
 
 
@@ -229,12 +149,6 @@ class Name(_LeafWithoutNewlines):
     type = 'name'
     __slots__ = ()
 
-    def __str__(self):
-        return self.value
-
-    def __unicode__(self):
-        return self.value
-
     def __repr__(self):
         return "<%s: %s@%s,%s>" % (type(self).__name__, self.value,
                                    self.line, self.indent)
@@ -256,16 +170,9 @@ class Name(_LeafWithoutNewlines):
                                  'comp_for', 'with_stmt') \
                 and self in stmt.get_defined_names()
 
-    def nodes_to_execute(self, last_added=False):
-        if last_added is False:
-            yield self
-
 
 class Literal(PythonLeaf):
     __slots__ = ()
-
-    def eval(self):
-        return _safe_literal_eval(self.value)
 
 
 class Number(Literal):
@@ -278,43 +185,16 @@ class String(Literal):
     __slots__ = ()
 
 
-class Operator(_LeafWithoutNewlines):
-    type = 'operator'
-    __slots__ = ()
-
-    def __str__(self):
-        return self.value
-
+class _StringComparisonMixin(object):
     def __eq__(self, other):
         """
         Make comparisons with strings easy.
         Improves the readability of the parser.
         """
-        if isinstance(other, Operator):
-            return self is other
-        else:
+        if isinstance(other, (str, unicode)):
             return self.value == other
 
-    def __ne__(self, other):
-        """Python 2 compatibility."""
-        return self.value != other
-
-    def __hash__(self):
-        return hash(self.value)
-
-
-class Keyword(_LeafWithoutNewlines):
-    type = 'keyword'
-    __slots__ = ()
-
-    def __eq__(self, other):
-        """
-        Make comparisons with strings easy.
-        Improves the readability of the parser.
-        """
-        if isinstance(other, Keyword):
-            return self is other
-        return self.value == other
+        return self is other
 
     def __ne__(self, other):
         """Python 2 compatibility."""
@@ -324,81 +204,71 @@ class Keyword(_LeafWithoutNewlines):
         return hash(self.value)
 
 
+class Operator(_LeafWithoutNewlines, _StringComparisonMixin):
+    type = 'operator'
+    __slots__ = ()
+
+
+class Keyword(_LeafWithoutNewlines, _StringComparisonMixin):
+    type = 'keyword'
+    __slots__ = ()
+
+
 class Scope(PythonBaseNode, DocstringMixin):
     """
     Super class for the parser tree, which represents the state of a python
     text file.
-    A Scope manages and owns its subscopes, which are classes and functions, as
-    well as variables and imports. It is used to access the structure of python
-    files.
-
-    :param start_pos: The position (line and column) of the scope.
-    :type start_pos: tuple(int, int)
+    A Scope is either a function, class or lambda.
     """
     __slots__ = ()
 
     def __init__(self, children):
         super(Scope, self).__init__(children)
 
-    @property
-    def returns(self):
-        # Needed here for fast_parser, because the fast_parser splits and
-        # returns will be in "normal" modules.
-        return self._search_in_scope(ReturnStmt)
+    def iter_funcdefs(self):
+        """
+        Returns a generator of `funcdef` nodes.
+        """
+        return self._search_in_scope('funcdef')
 
-    @property
-    def subscopes(self):
-        return self._search_in_scope(Scope)
+    def iter_classdefs(self):
+        """
+        Returns a generator of `classdef` nodes.
+        """
+        return self._search_in_scope('classdef')
 
-    @property
-    def flows(self):
-        return self._search_in_scope(Flow)
+    def iter_imports(self):
+        """
+        Returns a generator of `import_name` and `import_from` nodes.
+        """
+        return self._search_in_scope('import_name', 'import_from')
 
-    @property
-    def imports(self):
-        return self._search_in_scope(Import)
-
-    @Python3Method
-    def _search_in_scope(self, typ):
+    def _search_in_scope(self, *names):
         def scan(children):
-            elements = []
             for element in children:
-                if isinstance(element, typ):
-                    elements.append(element)
+                if element.type in names:
+                    yield element
                 if element.type in ('suite', 'simple_stmt', 'decorated') \
                         or isinstance(element, Flow):
-                    elements += scan(element.children)
-            return elements
+                    for e in scan(element.children):
+                        yield e
 
         return scan(self.children)
 
-    @property
-    def statements(self):
-        return self._search_in_scope((ExprStmt, KeywordStatement))
-
-    def is_scope(self):
-        return True
+    def get_suite(self):
+        """
+        Returns the part that is executed by the function.
+        """
+        return self.children[-1]
 
     def __repr__(self):
         try:
-            name = self.name
+            name = self.name.value
         except AttributeError:
             name = ''
 
         return "<%s: %s@%s-%s>" % (type(self).__name__, name,
                                    self.start_pos[0], self.end_pos[0])
-
-    def walk(self):
-        yield self
-        for s in self.subscopes:
-            for scope in s.walk():
-                yield scope
-
-        for r in self.statements:
-            while isinstance(r, Flow):
-                for scope in r.walk():
-                    yield scope
-                r = r.next
 
 
 class Module(Scope):
@@ -414,32 +284,37 @@ class Module(Scope):
         super(Module, self).__init__(children)
         self._used_names = None
 
-    @property
-    def has_explicit_absolute_import(self):
+    def iter_future_import_names(self):
         """
-        Checks if imports in this module are explicitly absolute, i.e. there
-        is a ``__future__`` import.
+        :return list of str: A list of future import names.
         """
         # TODO this is a strange scan and not fully correct. I think Python's
         # parser does it in a different way and scans for the first
         # statement/import with a tokenizer (to check for syntax changes like
         # the future print statement).
-        for imp in self.imports:
+        for imp in self.iter_imports():
             if imp.type == 'import_from' and imp.level == 0:
-                for path in imp.paths():
-                    if [str(name) for name in path] == ['__future__', 'absolute_import']:
-                        return True
+                for path in imp.get_paths():
+                    names = [name.value for name in path]
+                    if len(names) == 2 and names[0] == '__future__':
+                        yield names[1]
+
+    def has_explicit_absolute_import(self):
+        """
+        Checks if imports in this module are explicitly absolute, i.e. there
+        is a ``__future__`` import.
+        :return bool:
+        """
+        for name in self.iter_future_import_names():
+            if name == 'absolute_import':
+                return True
         return False
 
-    def nodes_to_execute(self, last_added=False):
-        # Yield itself, class needs to be executed for decorator checks.
-        result = []
-        for child in self.children:
-            result += child.nodes_to_execute()
-        return result
-
-    @property
-    def used_names(self):
+    def get_used_names(self):
+        """
+        Returns all the `Name` leafs that exist in this module. Tihs includes
+        both definitions and references of names.
+        """
         if self._used_names is None:
             # Don't directly use self._used_names to eliminate a lookup.
             dct = {}
@@ -464,22 +339,21 @@ class Decorator(PythonBaseNode):
     type = 'decorator'
     __slots__ = ()
 
-    def nodes_to_execute(self, last_added=False):
-        if self.children[-2] == ')':
-            node = self.children[-3]
-            if node != '(':
-                return node.nodes_to_execute()
-        return []
-
 
 class ClassOrFunc(Scope):
     __slots__ = ()
 
     @property
     def name(self):
+        """
+        Returns the `Name` leaf that defines the function or class name.
+        """
         return self.children[1]
 
     def get_decorators(self):
+        """
+        :return list of Decorator:
+        """
         decorated = self.parent
         if decorated.type == 'decorated':
             if decorated.children[0].type == 'decorators':
@@ -508,6 +382,10 @@ class Class(ClassOrFunc):
         super(Class, self).__init__(children)
 
     def get_super_arglist(self):
+        """
+        Returns the `arglist` node that defines the super classes. It returns
+        None if there are no arguments.
+        """
         if self.children[2] != '(':  # Has no parentheses
             return None
         else:
@@ -515,46 +393,6 @@ class Class(ClassOrFunc):
                 return None
             else:
                 return self.children[3]
-
-    @property
-    def doc(self):
-        """
-        Return a document string including call signature of __init__.
-        """
-        docstr = self.raw_doc
-        for sub in self.subscopes:
-            if str(sub.name) == '__init__':
-                return '%s\n\n%s' % (
-                    sub.get_call_signature(func_name=self.name), docstr)
-        return docstr
-
-    def nodes_to_execute(self, last_added=False):
-        # Yield itself, class needs to be executed for decorator checks.
-        yield self
-        # Super arguments.
-        arglist = self.get_super_arglist()
-        try:
-            children = arglist.children
-        except AttributeError:
-            if arglist is not None:
-                for node_to_execute in arglist.nodes_to_execute():
-                    yield node_to_execute
-        else:
-            for argument in children:
-                if argument.type == 'argument':
-                    # metaclass= or list comprehension or */**
-                    raise NotImplementedError('Metaclasses not implemented')
-                else:
-                    for node_to_execute in argument.nodes_to_execute():
-                        yield node_to_execute
-
-        # care for the class suite:
-        for node in self.children[self.children.index(':'):]:
-            # This could be easier without the fast parser. But we need to find
-            # the position of the colon, because everything after it can be a
-            # part of the class, not just its suite.
-            for node_to_execute in node.nodes_to_execute():
-                yield node_to_execute
 
 
 def _create_params(parent, argslist_list):
@@ -611,14 +449,15 @@ class Function(ClassOrFunc):
     """
     Used to store the parsed contents of a python function.
 
-    Children:
-      0) <Keyword: def>
-      1) <Name>
-      2) parameter list (including open-paren and close-paren <Operator>s)
-      3 or 5) <Operator: :>
-      4 or 6) Node() representing function body
-      3) -> (if annotation is also present)
-      4) annotation (if present)
+    Children::
+
+        0. <Keyword: def>
+        1. <Name>
+        2. parameter list (including open-paren and close-paren <Operator>s)
+        3. or 5. <Operator: :>
+        4. or 6. Node() representing function body
+        3. -> (if annotation is also present)
+        4. annotation (if present)
     """
     type = 'funcdef'
 
@@ -627,23 +466,44 @@ class Function(ClassOrFunc):
         parameters = self.children[2]  # After `def foo`
         parameters.children[1:-1] = _create_params(parameters, parameters.children[1:-1])
 
+    def _get_param_nodes(self):
+        return self.children[2].children
+
     @property
     def params(self):
-        return [p for p in self.children[2].children if p.type == 'param']
+        """
+        Returns a list of `Param()`.
+        """
+        return [p for p in self._get_param_nodes() if p.type == 'param']
 
     @property
     def name(self):
         return self.children[1]  # First token after `def`
 
-    @property
-    def yields(self):
+    def iter_yield_exprs(self):
+        """
+        Returns a generator of `yield_expr`.
+        """
         # TODO This is incorrect, yields are also possible in a statement.
-        return self._search_in_scope(YieldExpr)
+        return self._search_in_scope('yield_expr')
+
+    def iter_return_stmts(self):
+        """
+        Returns a generator of `return_stmt`.
+        """
+        return self._search_in_scope('return_stmt')
 
     def is_generator(self):
-        return bool(self.yields)
+        """
+        :return bool: Checks if a function is a generator or not.
+        """
+        return next(self.iter_yield_exprs(), None) is not None
 
+    @property
     def annotation(self):
+        """
+        Returns the test node after `->` or `None` if there is no annotation.
+        """
         try:
             if self.children[3] == "->":
                 return self.children[4]
@@ -652,95 +512,42 @@ class Function(ClassOrFunc):
         except IndexError:
             return None
 
-    def get_call_signature(self, width=72, func_name=None):
-        """
-        Generate call signature of this function.
-
-        :param width: Fold lines if a line is longer than this value.
-        :type width: int
-        :arg func_name: Override function name when given.
-        :type func_name: str
-
-        :rtype: str
-        """
-        func_name = func_name or self.name
-        code = unicode(func_name) + self._get_paramlist_code()
-        return '\n'.join(textwrap.wrap(code, width))
-
-    def _get_paramlist_code(self):
-        return self.children[2].get_code()
-
-    @property
-    def doc(self):
-        """ Return a document string including call signature. """
-        docstr = self.raw_doc
-        return '%s\n\n%s' % (self.get_call_signature(), docstr)
-
-    def nodes_to_execute(self, last_added=False):
-        # Yield itself, functions needs to be executed for decorator checks.
-        yield self
-        for param in self.params:
-            if param.default is not None:
-                yield param.default
-        # care for the function suite:
-        for node in self.children[4:]:
-            # This could be easier without the fast parser. The fast parser
-            # allows that the 4th position is empty or that there's even a
-            # fifth element (another function/class). So just scan everything
-            # after colon.
-            for node_to_execute in node.nodes_to_execute():
-                yield node_to_execute
-
-
 class Lambda(Function):
     """
     Lambdas are basically trimmed functions, so give it the same interface.
 
-    Children:
-       0) <Keyword: lambda>
-       *) <Param x> for each argument x
-      -2) <Operator: :>
-      -1) Node() representing body
+    Children::
+
+         0. <Keyword: lambda>
+         *. <Param x> for each argument x
+        -2. <Operator: :>
+        -1. Node() representing body
     """
-    type = 'lambda'
+    type = 'lambdef'
     __slots__ = ()
 
     def __init__(self, children):
         # We don't want to call the Function constructor, call its parent.
         super(Function, self).__init__(children)
-        lst = self.children[1:-2]  # Everything between `lambda` and the `:` operator is a parameter.
-        self.children[1:-2] = _create_params(self, lst)
+        # Everything between `lambda` and the `:` operator is a parameter.
+        self.children[1:-2] = _create_params(self, self.children[1:-2])
 
     @property
     def name(self):
-        # Borrow the position of the <Keyword: lambda> AST node.
-        return Name('<lambda>', self.children[0].start_pos)
+        """
+        Raises an AttributeError. Lambdas don't have a defined name.
+        """
+        raise AttributeError("lambda is not named.")
 
-    def _get_paramlist_code(self):
-        return '(' + ''.join(param.get_code() for param in self.params).strip() + ')'
-
-    @property
-    def params(self):
+    def _get_param_nodes(self):
         return self.children[1:-2]
 
-    def is_generator(self):
-        return False
-
-    def annotation(self):
-        # lambda functions do not support annotations
-        return None
-
     @property
-    def yields(self):
-        return []
-
-    def nodes_to_execute(self, last_added=False):
-        for param in self.params:
-            if param.default is not None:
-                yield param.default
-        # Care for the lambda test (last child):
-        for node_to_execute in self.children[-1].nodes_to_execute():
-            yield node_to_execute
+    def annotation(self):
+        """
+        Returns `None`, lambdas don't have annotations.
+        """
+        return None
 
     def __repr__(self):
         return "<%s@%s>" % (self.__class__.__name__, self.start_pos)
@@ -748,37 +555,15 @@ class Lambda(Function):
 
 class Flow(PythonBaseNode):
     __slots__ = ()
-    FLOW_KEYWORDS = (
-        'try', 'except', 'finally', 'else', 'if', 'elif', 'with', 'for', 'while'
-    )
-
-    def nodes_to_execute(self, last_added=False):
-        for child in self.children:
-            for node_to_execute in child.nodes_to_execute():
-                yield node_to_execute
-
-    def get_branch_keyword(self, node):
-        start_pos = node.start_pos
-        if not (self.start_pos < start_pos <= self.end_pos):
-            raise ValueError('The node is not part of the flow.')
-
-        keyword = None
-        for i, child in enumerate(self.children):
-            if start_pos < child.start_pos:
-                return keyword
-            first_leaf = child.get_first_leaf()
-            if first_leaf in self.FLOW_KEYWORDS:
-                keyword = first_leaf
-        return 0
 
 
 class IfStmt(Flow):
     type = 'if_stmt'
     __slots__ = ()
 
-    def check_nodes(self):
+    def get_test_nodes(self):
         """
-        Returns all the `test` nodes that are defined as x, here:
+        E.g. returns all the `test` nodes that are named as x, below:
 
             if x:
                 pass
@@ -789,14 +574,14 @@ class IfStmt(Flow):
             if c in ('elif', 'if'):
                 yield self.children[i + 1]
 
-    def node_in_which_check_node(self, node):
+    def get_corresponding_test_node(self, node):
         """
-        Returns the check node (see function above) that a node is contained
-        in. However if it the node is in the check node itself and not in the
-        suite return None.
+        Searches for the branch in which the node is and returns the
+        corresponding test node (see function above). However if the node is in
+        the test node itself and not in the suite return None.
         """
         start_pos = node.start_pos
-        for check_node in reversed(list(self.check_nodes())):
+        for check_node in reversed(list(self.get_test_nodes())):
             if check_node.start_pos < start_pos:
                 if start_pos < check_node.end_pos:
                     return None
@@ -805,7 +590,7 @@ class IfStmt(Flow):
                 else:
                     return check_node
 
-    def node_after_else(self, node):
+    def is_node_after_else(self, node):
         """
         Checks if a node is defined after `else`.
         """
@@ -826,46 +611,28 @@ class ForStmt(Flow):
     type = 'for_stmt'
     __slots__ = ()
 
-    def get_input_node(self):
+    def get_testlist(self):
         """
         Returns the input node ``y`` from: ``for x in y:``.
         """
         return self.children[3]
-
-    def defines_one_name(self):
-        """
-        Returns True if only one name is returned: ``for x in y``.
-        Returns False if the for loop is more complicated: ``for x, z in y``.
-
-        :returns: bool
-        """
-        return self.children[1].type == 'name'
 
 
 class TryStmt(Flow):
     type = 'try_stmt'
     __slots__ = ()
 
-    def except_clauses(self):
+    def get_except_clause_tests(self):
         """
         Returns the ``test`` nodes found in ``except_clause`` nodes.
         Returns ``[None]`` for except clauses without an exception given.
         """
         for node in self.children:
+            # TODO this is not correct. We're not returning an except clause.
             if node.type == 'except_clause':
                 yield node.children[1]
             elif node == 'except':
                 yield None
-
-    def nodes_to_execute(self, last_added=False):
-        result = []
-        for child in self.children[2::3]:
-            result += child.nodes_to_execute()
-        for child in self.children[0::3]:
-            if child.type == 'except_clause':
-                # Add the test node and ignore the `as NAME` definition.
-                result += child.children[1].nodes_to_execute()
-        return result
 
 
 class WithStmt(Flow):
@@ -873,6 +640,10 @@ class WithStmt(Flow):
     __slots__ = ()
 
     def get_defined_names(self):
+        """
+        Returns the a list of `Name` that the with statement defines. The
+        defined names are set after `as`.
+        """
         names = []
         for with_item in self.children[1:-2:2]:
             # Check with items for 'as' names.
@@ -880,35 +651,30 @@ class WithStmt(Flow):
                 names += _defined_names(with_item.children[2])
         return names
 
-    def node_from_name(self, name):
-        node = name
-        while True:
-            node = node.parent
-            if node.type == 'with_item':
-                return node.children[0]
-
-    def nodes_to_execute(self, last_added=False):
-        result = []
-        for child in self.children[1::2]:
-            if child.type == 'with_item':
-                # Just ignore the `as EXPR` part - at least for now, because
-                # most times it's just a name.
-                child = child.children[0]
-            result += child.nodes_to_execute()
-        return result
+    def get_context_manager_from_name(self, name):
+        # TODO Replace context_manager with test?
+        node = name.parent
+        if node.type != 'with_item':
+            raise ValueError('The name is not actually part of a with statement.')
+        return node.children[0]
 
 
 class Import(PythonBaseNode):
     __slots__ = ()
 
-    def path_for_name(self, name):
+    def get_path_for_name(self, name):
+        """
+        The path is the list of names that leads to the searched name.
+
+        :return list of Name:
+        """
         try:
             # The name may be an alias. If it is, just map it back to the name.
-            name = self.aliases()[name]
+            name = self._aliases()[name]
         except KeyError:
             pass
 
-        for path in self.paths():
+        for path in self.get_paths():
             if name in path:
                 return path[:path.index(name) + 1]
         raise ValueError('Name should be defined in the import itself')
@@ -919,23 +685,20 @@ class Import(PythonBaseNode):
     def is_star_import(self):
         return self.children[-1] == '*'
 
-    def nodes_to_execute(self, last_added=False):
-        """
-        `nodes_to_execute` works a bit different for imports, because the names
-        itself cannot directly get resolved (except on itself).
-        """
-        # TODO couldn't we return the names? Would be nicer.
-        return [self]
-
 
 class ImportFrom(Import):
     type = 'import_from'
     __slots__ = ()
 
     def get_defined_names(self):
+        """
+        Returns the a list of `Name` that the import defines. The
+        defined names are set after `import` or in case an alias - `as` - is
+        present that name is returned.
+        """
         return [alias or name for name, alias in self._as_name_tuples()]
 
-    def aliases(self):
+    def _aliases(self):
         """Mapping from alias to its corresponding name."""
         return dict((alias, name) for name, alias in self._as_name_tuples()
                     if alias is not None)
@@ -979,16 +742,12 @@ class ImportFrom(Import):
             else:
                 yield as_name.children[::2]  # yields x, y -> ``x as y``
 
-    def star_import_name(self):
-        """
-        The last name defined in a star import.
-        """
-        return self.paths()[-1][-1]
-
-    def paths(self):
+    def get_paths(self):
         """
         The import paths defined in an import statement. Typically an array
         like this: ``[<Name: datetime>, <Name: date>]``.
+
+        :return list of list of Name:
         """
         dotted = self.get_from_names()
 
@@ -1003,6 +762,11 @@ class ImportName(Import):
     __slots__ = ()
 
     def get_defined_names(self):
+        """
+        Returns the a list of `Name` that the import defines. The defined names
+        is always the first name after `import` or in case an alias - `as` - is
+        present that name is returned.
+        """
         return [alias or path[0] for path, alias in self._dotted_as_names()]
 
     @property
@@ -1010,7 +774,7 @@ class ImportName(Import):
         """The level parameter of ``__import__``."""
         return 0  # Obviously 0 for imports without from.
 
-    def paths(self):
+    def get_paths(self):
         return [path for path, alias in self._dotted_as_names()]
 
     def _dotted_as_names(self):
@@ -1040,10 +804,13 @@ class ImportName(Import):
 
             import foo.bar
         """
-        return [1 for path, alias in self._dotted_as_names()
-                if alias is None and len(path) > 1]
+        return bool([1 for path, alias in self._dotted_as_names()
+                    if alias is None and len(path) > 1])
 
-    def aliases(self):
+    def _aliases(self):
+        """
+        :return list of Name: Returns all the alias
+        """
         return dict((alias, path[-1]) for path, alias in self._dotted_as_names()
                     if alias is not None)
 
@@ -1070,16 +837,11 @@ class KeywordStatement(PythonBaseNode):
     def keyword(self):
         return self.children[0].value
 
-    def nodes_to_execute(self, last_added=False):
-        result = []
-        for child in self.children:
-            result += child.nodes_to_execute()
-        return result
-
 
 class AssertStmt(KeywordStatement):
     __slots__ = ()
 
+    @property
     def assertion(self):
         return self.children[1]
 
@@ -1087,18 +849,8 @@ class AssertStmt(KeywordStatement):
 class GlobalStmt(KeywordStatement):
     __slots__ = ()
 
-    def get_defined_names(self):
-        return []
-
     def get_global_names(self):
         return self.children[1::2]
-
-    def nodes_to_execute(self, last_added=False):
-        """
-        The global keyword allows to define any name. Even if it doesn't
-        exist.
-        """
-        return []
 
 
 class ReturnStmt(KeywordStatement):
@@ -1106,17 +858,8 @@ class ReturnStmt(KeywordStatement):
 
 
 class YieldExpr(PythonBaseNode):
+    type = 'yield_expr'
     __slots__ = ()
-
-    @property
-    def type(self):
-        return 'yield_expr'
-
-    def nodes_to_execute(self, last_added=False):
-        if len(self.children) > 1:
-            return self.children[1].nodes_to_execute()
-        else:
-            return []
 
 
 def _defined_names(current):
@@ -1145,35 +888,37 @@ class ExprStmt(PythonBaseNode, DocstringMixin):
     __slots__ = ()
 
     def get_defined_names(self):
+        """
+        Returns a list of `Name` defined before the `=` sign.
+        """
         names = []
         if self.children[1].type == 'annassign':
             names = _defined_names(self.children[0])
-        return list(chain.from_iterable(
-            _defined_names(self.children[i])
+        return [
+            name
             for i in range(0, len(self.children) - 2, 2)
-            if '=' in self.children[i + 1].value)
-        ) + names
+            if '=' in self.children[i + 1].value
+            for name in _defined_names(self.children[i])
+        ] + names
 
     def get_rhs(self):
         """Returns the right-hand-side of the equals."""
         return self.children[-1]
 
-    def first_operation(self):
+    def yield_operators(self):
         """
-        Returns `+=`, `=`, etc or None if there is no operation.
+        Returns a generator of `+=`, `=`, etc. or None if there is no operation.
         """
-        try:
-            return self.children[1]
-        except IndexError:
-            return None
+        first = self.children[1]
+        if first.type == 'annassign':
+            if len(first.children) <= 2:
+                return  # No operator is available, it's just PEP 484.
 
-    def nodes_to_execute(self, last_added=False):
-        # I think evaluating the statement (and possibly returned arrays),
-        # should be enough for static analysis.
-        result = [self]
-        for child in self.children:
-            result += child.nodes_to_execute(last_added=True)
-        return result
+            first = first.children[2]
+        yield first
+
+        for operator in self.children[3::2]:
+            yield operator
 
 
 class Param(PythonBaseNode):
@@ -1191,7 +936,11 @@ class Param(PythonBaseNode):
             child.parent = self
 
     @property
-    def stars(self):
+    def star_count(self):
+        """
+        Is `0` in case of `foo`, `1` in case of `*foo` or `2` in case of
+        `**foo`.
+        """
         first = self.children[0]
         if first in ('*', '**'):
             return len(first.value)
@@ -1199,12 +948,21 @@ class Param(PythonBaseNode):
 
     @property
     def default(self):
+        """
+        The default is the test node that appears after the `=`. Is `None` in
+        case no default is present.
+        """
         try:
             return self.children[int(self.children[0] in ('*', '**')) + 2]
         except IndexError:
             return None
 
+    @property
     def annotation(self):
+        """
+        The default is the test node that appears after `->`. Is `None` in case
+        no annotation is present.
+        """
         tfpdef = self._tfpdef()
         if tfpdef.type == 'tfpdef':
             assert tfpdef.children[1] == ":"
@@ -1223,13 +981,19 @@ class Param(PythonBaseNode):
 
     @property
     def name(self):
+        """
+        The `Name` leaf of the param.
+        """
         if self._tfpdef().type == 'tfpdef':
             return self._tfpdef().children[0]
         else:
             return self._tfpdef()
 
     @property
-    def position_nr(self):
+    def position_index(self):
+        """
+        Property for the positional index of a paramter.
+        """
         index = self.parent.children.index(self)
         try:
             keyword_only_index = self.parent.children.index('*')
@@ -1241,48 +1005,41 @@ class Param(PythonBaseNode):
         return index - 1
 
     def get_parent_function(self):
-        return search_ancestor(self, ('funcdef', 'lambda'))
+        """
+        Returns the function/lambda of a parameter.
+        """
+        return search_ancestor(self, 'funcdef', 'lambdef')
+
+    def get_code(self, normalized=False, include_prefix=True, include_comma=True):
+        """
+        Like all the other get_code functions, but includes the param
+        `include_comma`.
+
+        :param include_comma bool: If enabled includes the comma in the string output.
+        """
+        if include_comma:
+            return super(Param, self).get_code(normalized, include_prefix)
+
+        children = self.children
+        if children[-1] == ',':
+            children = children[:-1]
+        return self._get_code_for_children(
+            children,
+            normalized=False,
+            include_prefix=include_prefix
+        )
 
     def __repr__(self):
         default = '' if self.default is None else '=%s' % self.default.get_code()
         return '<%s: %s>' % (type(self).__name__, str(self._tfpdef()) + default)
-
-    def get_description(self):
-        children = self.children
-        if children[-1] == ',':
-            children = children[:-1]
-        return self._get_code_for_children(children, False, False)
 
 
 class CompFor(PythonBaseNode):
     type = 'comp_for'
     __slots__ = ()
 
-    def get_comp_fors(self):
-        yield self
-        last = self.children[-1]
-        while True:
-            if isinstance(last, CompFor):
-                yield last
-            elif not last.type == 'comp_if':
-                break
-            last = last.children[-1]
-
-    def is_scope(self):
-        return True
-
     def get_defined_names(self):
+        """
+        Returns the a list of `Name` that the comprehension defines.
+        """
         return _defined_names(self.children[1])
-
-    def nodes_to_execute(self, last_added=False):
-        last = self.children[-1]
-        if last.type == 'comp_if':
-            for node in last.children[-1].nodes_to_execute():
-                yield node
-            last = self.children[-2]
-        elif last.type == 'comp_for':
-            for node in last.nodes_to_execute():
-                yield node
-            last = self.children[-2]
-        for node in last.nodes_to_execute():
-            yield node

@@ -2,7 +2,6 @@
 Tests of ``jedi.api.Interpreter``.
 """
 
-from ..helpers import TestCase
 import jedi
 from jedi._compatibility import is_py33
 from jedi.evaluate.compiled import mixed
@@ -39,6 +38,36 @@ def test_builtin_details():
     assert var.type == 'instance'
     assert f.type == 'function'
     assert m.type == 'module'
+
+
+def test_numpy_like_non_zero():
+    """
+    Numpy-like array can't be caster to bool and need to be compacre with
+    `is`/`is not` and not `==`/`!=`
+    """
+
+    class NumpyNonZero:
+
+        def __zero__(self):
+            raise ValueError('Numpy arrays would raise and tell you to use .any() or all()')
+        def __bool__(self):
+            raise ValueError('Numpy arrays would raise and tell you to use .any() or all()')
+
+    class NumpyLike:
+
+        def __eq__(self, other):
+            return NumpyNonZero()
+
+        def something(self):
+            pass
+
+    x = NumpyLike()
+    d = {'a': x}
+
+    # just assert these do not raise. They (strangely) trigger different
+    # codepath
+    get_completion('d["a"].some', {'d':d})
+    get_completion('x.some', {'x':x})
 
 
 def test_nested_resolve():
@@ -148,15 +177,36 @@ def test_getitem_side_effects():
     _assert_interpreter_complete('foo[0].', locals(), [])
 
 
-def test_property_error():
+def test_property_error_oldstyle():
+    lst = []
     class Foo3():
         @property
         def bar(self):
+            lst.append(1)
             raise ValueError
 
     foo = Foo3()
     _assert_interpreter_complete('foo.bar', locals(), ['bar'])
     _assert_interpreter_complete('foo.bar.baz', locals(), [])
+
+    # There should not be side effects
+    assert lst == []
+
+
+def test_property_error_newstyle():
+    lst = []
+    class Foo3(object):
+        @property
+        def bar(self):
+            lst.append(1)
+            raise ValueError
+
+    foo = Foo3()
+    _assert_interpreter_complete('foo.bar', locals(), ['bar'])
+    _assert_interpreter_complete('foo.bar.baz', locals(), [])
+
+    # There should not be side effects
+    assert lst == []
 
 
 def test_param_completion():
