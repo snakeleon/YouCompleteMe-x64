@@ -108,7 +108,7 @@ def RunNotifyUserIfServerCrashed( ycm, test, post_vim_message ):
   ycm._server_popen = MagicMock( autospec = True )
   ycm._server_popen.poll.return_value = test[ 'return_code' ]
 
-  ycm._NotifyUserIfServerCrashed()
+  ycm.OnFileReadyToParse()
 
   assert_that( ycm._logger.error.call_args[ 0 ][ 0 ],
                test[ 'expected_message' ] )
@@ -551,6 +551,11 @@ def YouCompleteMe_UpdateDiagnosticInterface_PrioritizeErrorsOverWarnings_test(
       ycm.OnFileReadyToParse()
       ycm.HandleFileParseRequest( block = True )
 
+    # The error on the current line is echoed, not the warning.
+    post_vim_message.assert_called_once_with(
+      "expected ';' after expression (FixIt)",
+      truncate = True, warning = False )
+
     # Error match is added after warning matches.
     assert_that(
       test_utils.VIM_MATCHES,
@@ -566,13 +571,25 @@ def YouCompleteMe_UpdateDiagnosticInterface_PrioritizeErrorsOverWarnings_test(
       call( 'sign place 1 name=YcmError line=3 buffer=5' ),
     ] )
 
-    # When moving the cursor on the diagnostics, the error is displayed to the
-    # user, not the warning.
+  # The error is not echoed again when moving the cursor along the line.
+  with MockVimBuffers( [ current_buffer ], current_buffer, ( 3, 2 ) ):
+    post_vim_message.reset_mock()
     ycm.OnCursorMoved()
-    post_vim_message.assert_has_exact_calls( [
-      call( "expected ';' after expression (FixIt)",
-            truncate = True, warning = False )
-    ] )
+    post_vim_message.assert_not_called()
+
+  # The error is cleared when moving the cursor to another line.
+  with MockVimBuffers( [ current_buffer ], current_buffer, ( 2, 2 ) ):
+    post_vim_message.reset_mock()
+    ycm.OnCursorMoved()
+    post_vim_message.assert_called_once_with( "", warning = False )
+
+  # The error is echoed when moving the cursor back.
+  with MockVimBuffers( [ current_buffer ], current_buffer, ( 3, 2 ) ):
+    post_vim_message.reset_mock()
+    ycm.OnCursorMoved()
+    post_vim_message.assert_called_once_with(
+      "expected ';' after expression (FixIt)",
+      truncate = True, warning = False )
 
     vim_command.reset_mock()
     with patch( 'ycm.client.event_notification.EventNotification.Response',
