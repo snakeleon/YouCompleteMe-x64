@@ -27,7 +27,7 @@ import os
 
 from nose.tools import eq_, ok_
 from ycmd.completers.cpp import flags
-from mock import patch, MagicMock, Mock
+from mock import patch, MagicMock
 from types import ModuleType
 from ycmd.tests.test_utils import MacOnly
 from ycmd.responses import NoExtraConfDetected
@@ -59,7 +59,6 @@ def FlagsForFile_FlagsNotReady_test():
     eq_( list( flags_list ), [] )
 
 
-@patch( 'ycmd.extra_conf_store.ModuleForSourceFile', return_value = Mock() )
 def FlagsForFile_BadNonUnicodeFlagsAreAlsoRemoved_test( *args ):
   flags_object = flags.Flags()
 
@@ -170,6 +169,56 @@ def FlagsForFile_MakeRelativePathsAbsoluteIfOptionSpecified_test():
     assert_that( flags_list,
                  contains( '-x', 'c',
                            '-I', os.path.normpath( '/working_dir/header' ) ) )
+
+
+@MacOnly
+@patch( 'ycmd.completers.cpp.flags.MAC_INCLUDE_PATHS',
+        [ 'sentinel_value_for_testing' ] )
+def FlagsForFile_AddMacIncludePathsWithoutSysroot_test():
+  flags_object = flags.Flags()
+
+  def FlagsForFile( filename ):
+    return {
+      'flags': [ '-test', '--test1', '--test2=test' ]
+    }
+
+  with MockExtraConfModule( FlagsForFile ):
+    flags_list = flags_object.FlagsForFile( '/foo' )
+    assert_that( flags_list, has_item( 'sentinel_value_for_testing' ) )
+
+
+@MacOnly
+@patch( 'ycmd.completers.cpp.flags.MAC_INCLUDE_PATHS',
+        [ 'sentinel_value_for_testing' ] )
+def FlagsForFile_DoNotAddMacIncludePathsWithSysroot_test():
+  flags_object = flags.Flags()
+
+  def FlagsForFile( filename ):
+    return {
+      'flags': [ '-isysroot', 'test1', '--test2=test' ]
+    }
+
+  with MockExtraConfModule( FlagsForFile ):
+    flags_list = flags_object.FlagsForFile( '/foo' )
+    assert_that( flags_list, not_( has_item( 'sentinel_value_for_testing' ) ) )
+
+  def FlagsForFile( filename ):
+    return {
+      'flags': [ '-test', '--sysroot', 'test1' ]
+    }
+
+  with MockExtraConfModule( FlagsForFile ):
+    flags_list = flags_object.FlagsForFile( '/foo' )
+    assert_that( flags_list, not_( has_item( 'sentinel_value_for_testing' ) ) )
+
+  def FlagsForFile( filename ):
+    return {
+      'flags': [ '-test', 'test1', '--sysroot=test' ]
+    }
+
+  with MockExtraConfModule( FlagsForFile ):
+    flags_list = flags_object.FlagsForFile( '/foo' )
+    assert_that( flags_list, not_( has_item( 'sentinel_value_for_testing' ) ) )
 
 
 def RemoveUnusedFlags_Passthrough_test():
@@ -407,9 +456,8 @@ def ExtraClangFlags_test():
 @patch( 'ycmd.completers.cpp.flags._MacClangIncludeDirExists',
         side_effect = [ False, True, True, True ] )
 def Mac_LatestMacClangIncludes_test( *args ):
-  eq_( flags._LatestMacClangIncludes(),
-       [ '/Applications/Xcode.app/Contents/Developer/Toolchains/'
-         'XcodeDefault.xctoolchain/usr/lib/clang/7.0.2/include' ] )
+  eq_( flags._LatestMacClangIncludes( '/tmp' ),
+       [ '/tmp/usr/lib/clang/7.0.2/include' ] )
 
 
 @MacOnly
@@ -418,15 +466,30 @@ def Mac_LatestMacClangIncludes_NoSuchDirectory_test():
     raise OSError( x )
 
   with patch( 'os.listdir', side_effect = RaiseOSError ):
-    eq_( flags._LatestMacClangIncludes(), [] )
+    eq_( flags._LatestMacClangIncludes( '/tmp' ), [] )
 
 
 @MacOnly
-def Mac_PathsForAllMacToolchains_test():
-  eq_( flags._PathsForAllMacToolchains( 'test' ),
-       [ '/Applications/Xcode.app/Contents/Developer/Toolchains/'
-         'XcodeDefault.xctoolchain/test',
-         '/Library/Developer/CommandLineTools/test' ] )
+@patch( 'ycmd.completers.cpp.flags._MacClangIncludeDirExists',
+        side_effect = [ False, False ] )
+def Mac_SelectMacToolchain_None_test( *args ):
+  eq_( flags._SelectMacToolchain(), None )
+
+
+@MacOnly
+@patch( 'ycmd.completers.cpp.flags._MacClangIncludeDirExists',
+        side_effect = [ True, False ] )
+def Mac_SelectMacToolchain_XCode_test( *args ):
+  eq_( flags._SelectMacToolchain(),
+       '/Applications/Xcode.app/Contents/Developer/Toolchains/'
+       'XcodeDefault.xctoolchain' )
+
+
+@MacOnly
+@patch( 'ycmd.completers.cpp.flags._MacClangIncludeDirExists',
+        side_effect = [ False, True ] )
+def Mac_SelectMacToolchain_CommandLineTools_test( *args ):
+  eq_( flags._SelectMacToolchain(), '/Library/Developer/CommandLineTools' )
 
 
 def CompilationDatabase_NoDatabase_test():
@@ -435,40 +498,6 @@ def CompilationDatabase_NoDatabase_test():
       calling( flags.Flags().FlagsForFile ).with_args(
         os.path.join( tmp_dir, 'test.cc' ) ),
       raises( NoExtraConfDetected ) )
-
-
-@MacOnly
-@patch( 'ycmd.completers.cpp.flags._MacIncludePaths',
-        return_value = [ 'sentinel_value_for_testing' ] )
-def PrepareFlagsForClang_NoSysroot_test( *args ):
-  assert_that(
-    list( flags.PrepareFlagsForClang( [ '-test', '--test1', '--test2=test' ],
-                                      'test.cc',
-                                      True ) ),
-    has_item( 'sentinel_value_for_testing' ) )
-
-
-@MacOnly
-@patch( 'ycmd.completers.cpp.flags._MacIncludePaths',
-        return_value = [ 'sentinel_value_for_testing' ] )
-def PrepareFlagsForClang_Sysroot_test( *args ):
-  assert_that(
-    list( flags.PrepareFlagsForClang( [ '-isysroot', 'test1', '--test2=test' ],
-                                      'test.cc',
-                                      True ) ),
-    not_( has_item( 'sentinel_value_for_testing' ) ) )
-
-  assert_that(
-    list( flags.PrepareFlagsForClang( [ '-test', '--sysroot', 'test1' ],
-                                      'test.cc',
-                                      True ) ),
-    not_( has_item( 'sentinel_value_for_testing' ) ) )
-
-  assert_that(
-    list( flags.PrepareFlagsForClang( [ '-test', 'test1', '--sysroot=test' ],
-                                      'test.cc',
-                                      True ) ),
-    not_( has_item( 'sentinel_value_for_testing' ) ) )
 
 
 def CompilationDatabase_FileNotInDatabase_test():
@@ -602,6 +631,34 @@ def CompilationDatabase_HeaderFileHeuristicNotFound_test():
           os.path.join( tmp_dir, 'not_in_the_db.h' ),
           add_extra_clang_flags = False ),
         [] )
+
+
+def CompilationDatabase_ExplicitHeaderFileEntry_test():
+  with TemporaryClangTestDir() as tmp_dir:
+    # Have an explicit header file entry which should take priority over the
+    # corresponding source file
+    compile_commands = [
+      {
+        'directory': tmp_dir,
+        'command': 'clang++ -x c++ -I. -I/absolute/path -Wall',
+        'file': os.path.join( tmp_dir, 'test.cc' ),
+      },
+      {
+        'directory': tmp_dir,
+        'command': 'clang++ -I/absolute/path -Wall',
+        'file': os.path.join( tmp_dir, 'test.h' ),
+      },
+    ]
+    with TemporaryClangProject( tmp_dir, compile_commands ):
+      assert_that(
+        flags.Flags().FlagsForFile(
+          os.path.join( tmp_dir, 'test.h' ),
+          add_extra_clang_flags = False ),
+        contains( 'clang++',
+                  '-x',
+                  'c++',
+                  '-I' + os.path.normpath( '/absolute/path' ),
+                  '-Wall' ) )
 
 
 def _MakeRelativePathsInFlagsAbsoluteTest( test ):

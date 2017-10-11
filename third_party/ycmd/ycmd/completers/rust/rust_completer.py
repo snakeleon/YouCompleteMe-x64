@@ -22,7 +22,8 @@ from __future__ import absolute_import
 # Not installing aliases from python-future; it's unreliable and slow.
 from builtins import *  # noqa
 
-from ycmd.utils import ToBytes, SetEnviron, ProcessIsRunning, urljoin
+from ycmd.utils import ( FindExecutable, ToUnicode, ToBytes, SetEnviron,
+                         ProcessIsRunning, urljoin )
 from ycmd.completers.completer import Completer
 from ycmd import responses, utils, hmac_utils
 
@@ -35,6 +36,7 @@ import base64
 import binascii
 import threading
 import os
+import subprocess
 
 from os import path as p
 
@@ -54,7 +56,7 @@ HMAC_SECRET_LENGTH = 16
 
 BINARY_NOT_FOUND_MESSAGE = (
   'racerd binary not found. Did you build it? '
-  'You can do so by running "./build.py --racer-completer".' )
+  'You can do so by running "./build.py --rust-completer".' )
 NON_EXISTING_RUST_SOURCES_PATH_MESSAGE = (
   'Rust sources path does not exist. Check the value of the rust_src_path '
   'option or the RUST_SRC_PATH environment variable.' )
@@ -64,6 +66,16 @@ ERROR_FROM_RACERD_MESSAGE = (
   'See YCM docs for details.' )
 
 LOGFILE_FORMAT = 'racerd_{port}_{std}_'
+
+
+def _GetRustSysroot( rustc_exec ):
+  return ToUnicode( utils.SafePopen( [ rustc_exec,
+                                        '--print',
+                                        'sysroot' ],
+                                      stdin_windows = subprocess.PIPE,
+                                      stdout = subprocess.PIPE,
+                                      stderr = subprocess.PIPE )
+                              .communicate()[ 0 ].rstrip() )
 
 
 def FindRacerdBinary( user_options ):
@@ -127,13 +139,28 @@ class RustCompleter( Completer ):
     """
     Attempt to read user option for rust_src_path. Fallback to environment
     variable if it's not provided.
+    Finally try to be smart and figure out the path assuming the user set up
+    rust by the means of rustup.
     """
     rust_src_path = ( self.user_options[ 'rust_src_path' ] or
                       os.environ.get( 'RUST_SRC_PATH' ) )
 
     if rust_src_path:
       return os.path.expanduser( os.path.expandvars( rust_src_path ) )
-    return None
+
+    # Try to figure out the src path using rustup
+    rustc_executable = FindExecutable( 'rustc' )
+    if not rustc_executable:
+      return None
+
+    rust_sysroot = _GetRustSysroot( rustc_executable )
+    rust_src_path = p.join( rust_sysroot,
+                            'lib',
+                            'rustlib',
+                            'src',
+                            'rust',
+                            'src' )
+    return rust_src_path if p.isdir( rust_src_path ) else None
 
 
   def SupportedFiletypes( self ):

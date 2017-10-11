@@ -141,6 +141,7 @@ class Flags( object ):
 
     if add_extra_clang_flags:
       flags += self.extra_clang_flags
+      flags = _AddMacIncludePaths( flags )
 
     sanitized_flags = PrepareFlagsForClang( flags,
                                             filename,
@@ -156,43 +157,6 @@ class Flags( object ):
       return self._GetFlagsFromCompilationDatabase( filename )
 
     return _CallExtraConfFlagsForFile( module, filename, client_data )
-
-
-  def UserIncludePaths( self, filename, client_data ):
-    flags = [ ToUnicode( x ) for x in
-              self.FlagsForFile( filename, client_data = client_data ) ]
-
-    quoted_include_paths = [ os.path.dirname( filename ) ]
-    include_paths = []
-
-    if flags:
-      quote_flag = '-iquote'
-      path_flags = [ '-isystem', '-I' ]
-
-      try:
-        it = iter( flags )
-        for flag in it:
-          flag_len = len( flag )
-          if flag.startswith( quote_flag ):
-            quote_flag_len = len( quote_flag )
-            # Add next flag to the include paths if current flag equals to
-            # '-iquote', or add remaining string otherwise.
-            quoted_include_paths.append( next( it )
-                                         if flag_len == quote_flag_len
-                                         else flag[ quote_flag_len: ] )
-          else:
-            for path_flag in path_flags:
-              if flag.startswith( path_flag ):
-                path_flag_len = len( path_flag )
-                include_paths.append( next( it )
-                                      if flag_len == path_flag_len
-                                      else flag[ path_flag_len: ] )
-                break
-      except StopIteration:
-        pass
-
-    return ( [ x for x in quoted_include_paths if x ],
-             [ x for x in include_paths if x ] )
 
 
   def Clear( self ):
@@ -314,9 +278,6 @@ def PrepareFlagsForClang( flags, filename, add_extra_clang_flags = True ):
   flags = _RemoveXclangFlags( flags )
   flags = _RemoveUnusedFlags( flags, filename )
   if add_extra_clang_flags:
-    if OnMac() and not _SysRootSpecifedIn( flags ):
-      for path in _MacIncludePaths():
-        flags.extend( [ '-isystem', path ] )
     flags = _EnableTypoCorrection( flags )
 
   vector = ycm_core.StringVector()
@@ -432,23 +393,26 @@ def _RemoveUnusedFlags( flags, filename ):
   return new_flags
 
 
-# There are 2 ways to get a development enviornment (as standard) on OS X:
-#  - install XCode.app, or
-#  - install the command-line tools (xcode-select --install)
-#
-# Most users have xcode installed, but in order to be as compatible as
-# possible we consider both possible installation locations
-MAC_CLANG_TOOLCHAIN_DIRS = [
-  '/Applications/Xcode.app/Contents/Developer/Toolchains/'
-    'XcodeDefault.xctoolchain',
-  '/Library/Developer/CommandLineTools'
-]
+# Return the path to the macOS toolchain root directory to use for system
+# includes. If no toolchain is found, returns None.
+def _SelectMacToolchain():
+  # There are 2 ways to get a development enviornment (as standard) on OS X:
+  #  - install XCode.app, or
+  #  - install the command-line tools (xcode-select --install)
+  #
+  # Most users have xcode installed, but in order to be as compatible as
+  # possible we consider both possible installation locations
+  MAC_CLANG_TOOLCHAIN_DIRS = [
+    '/Applications/Xcode.app/Contents/Developer/Toolchains/'
+      'XcodeDefault.xctoolchain',
+    '/Library/Developer/CommandLineTools'
+  ]
 
+  for toolchain in MAC_CLANG_TOOLCHAIN_DIRS:
+    if _MacClangIncludeDirExists( toolchain ):
+      return toolchain
 
-# Returns a list containing the supplied path as a suffix of each of the known
-# Mac toolchains
-def _PathsForAllMacToolchains( path ):
-  return [ os.path.join( x, path ) for x in MAC_CLANG_TOOLCHAIN_DIRS ]
+  return None
 
 
 # Ultimately, this method exists only for testability
@@ -465,25 +429,24 @@ def _MacClangIncludeDirExists( candidate_include ):
   return os.path.exists( candidate_include )
 
 
-# Add in any clang headers found in the installed toolchains. These are
+# Add in any clang headers found in the supplied toolchain. These are
 # required for the same reasons as described below, but unfortuantely, these
 # are in versioned directories and there is no easy way to find the "correct"
 # version. We simply pick the highest version in the first toolchain that we
 # find, as this is the most likely to be correct.
-def _LatestMacClangIncludes():
-  for path in MAC_CLANG_TOOLCHAIN_DIRS:
-    # we use the first toolchain which actually contains any versions, rather
-    # than trying all of the toolchains and picking the highest. We
-    # favour Xcode over CommandLineTools as using Xcode is more common.
-    # It might be possible to extrace this information from xcode-select, though
-    # xcode-select -p does not point at the toolchain directly
-    candidates_dir = os.path.join( path, 'usr', 'lib', 'clang' )
-    versions = _GetMacClangVersionList( candidates_dir )
+def _LatestMacClangIncludes( toolchain ):
+  # we use the first toolchain which actually contains any versions, rather
+  # than trying all of the toolchains and picking the highest. We
+  # favour Xcode over CommandLineTools as using Xcode is more common.
+  # It might be possible to extrace this information from xcode-select, though
+  # xcode-select -p does not point at the toolchain directly
+  candidates_dir = os.path.join( toolchain, 'usr', 'lib', 'clang' )
+  versions = _GetMacClangVersionList( candidates_dir )
 
-    for version in reversed( sorted( versions ) ):
-      candidate_include = os.path.join( candidates_dir, version, 'include' )
-      if _MacClangIncludeDirExists( candidate_include ):
-        return [ candidate_include ]
+  for version in reversed( sorted( versions ) ):
+    candidate_include = os.path.join( candidates_dir, version, 'include' )
+    if _MacClangIncludeDirExists( candidate_include ):
+      return [ candidate_include ]
 
   return []
 
@@ -499,23 +462,29 @@ if OnMac():
   # See the following for details:
   #  - Valloric/YouCompleteMe#303
   #  - Valloric/YouCompleteMe#2268
-  MAC_INCLUDE_PATHS = (
-    _PathsForAllMacToolchains( 'usr/include/c++/v1' ) +
-    [ '/usr/local/include' ] +
-    _PathsForAllMacToolchains( 'usr/include' ) +
-    [ '/usr/include', '/System/Library/Frameworks', '/Library/Frameworks' ] +
-    _LatestMacClangIncludes() +
-    # We include the MacOS platform SDK because some meaningful parts of the
-    # standard library are located there. If users are compiling for (say)
-    # iPhone.platform, etc. they should appear earlier in the include path.
-    [ '/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/'
-      'Developer/SDKs/MacOSX.sdk/usr/include' ]
-  )
+  toolchain = _SelectMacToolchain()
+  if toolchain:
+    MAC_INCLUDE_PATHS = (
+      [ os.path.join( toolchain, 'usr/include/c++/v1' ),
+        '/usr/local/include',
+        os.path.join( toolchain, 'usr/include' ),
+        '/usr/include',
+        '/System/Library/Frameworks',
+        '/Library/Frameworks' ] +
+      _LatestMacClangIncludes( toolchain ) +
+      # We include the MacOS platform SDK because some meaningful parts of the
+      # standard library are located there. If users are compiling for (say)
+      # iPhone.platform, etc. they should appear earlier in the include path.
+      [ '/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/'
+        'Developer/SDKs/MacOSX.sdk/usr/include' ]
+    )
 
 
-def _MacIncludePaths():
-  # This method exists for testing only
-  return MAC_INCLUDE_PATHS
+def _AddMacIncludePaths( flags ):
+  if OnMac() and not _SysRootSpecifedIn( flags ):
+    for path in MAC_INCLUDE_PATHS:
+      flags.extend( [ '-isystem', path ] )
+  return flags
 
 
 def _ExtraClangFlags():
@@ -598,6 +567,11 @@ def _MakeRelativePathsInFlagsAbsolute( flags, working_directory ):
 # supplied file. If the source file is a header, try and find an appropriate
 # source file and return the compilation_info for that.
 def _GetCompilationInfoForFile( database, file_name, file_extension ):
+  # Ask the database for the flags.
+  compilation_info = database.GetCompilationInfoForFile( file_name )
+  if compilation_info.compiler_flags_:
+    return compilation_info
+
   # The compilation_commands.json file generated by CMake does not have entries
   # for header files. So we do our best by asking the db for flags for a
   # corresponding source file, if any. If one exists, the flags for that file
@@ -610,13 +584,41 @@ def _GetCompilationInfoForFile( database, file_name, file_extension ):
       if compilation_info and compilation_info.compiler_flags_:
         return compilation_info
 
-    # No corresponding source file was found, so we can't generate any flags for
-    # this header file.
-    return None
-
-  # It's a source file. Just ask the database for the flags.
-  compilation_info = database.GetCompilationInfoForFile( file_name )
-  if compilation_info.compiler_flags_:
-    return compilation_info
-
+  # No corresponding source file was found, so we can't generate any flags for
+  # this source file.
   return None
+
+
+def UserIncludePaths( flags, filename ):
+  quoted_include_paths = [ os.path.dirname( filename ) ]
+  include_paths = []
+
+  if flags:
+    quote_flag = '-iquote'
+    path_flags = [ '-isystem', '-I' ]
+
+    try:
+      it = iter( flags )
+      for flag in it:
+        flag_len = len( flag )
+        if flag.startswith( quote_flag ):
+          quote_flag_len = len( quote_flag )
+          # Add next flag to the include paths if current flag equals to
+          # '-iquote', or add remaining string otherwise.
+          quoted_include_path = ( next( it ) if flag_len == quote_flag_len else
+                                  flag[ quote_flag_len: ] )
+          if quoted_include_path:
+            quoted_include_paths.append( ToUnicode( quoted_include_path ) )
+        else:
+          for path_flag in path_flags:
+            if flag.startswith( path_flag ):
+              path_flag_len = len( path_flag )
+              include_path = ( next( it ) if flag_len == path_flag_len else
+                               flag[ path_flag_len: ] )
+              if include_path:
+                include_paths.append( ToUnicode( include_path ) )
+              break
+    except StopIteration:
+      pass
+
+  return quoted_include_paths, include_paths
