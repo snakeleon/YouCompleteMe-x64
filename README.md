@@ -389,14 +389,22 @@ process.
 Download and install the following software:
 
 - [Python 2 or Python 3][python-win-download]. Be sure to pick the version
-corresponding to your Vim architecture. It is _Windows x86_ for a 32-bit Vim and
-_Windows x86-64_ for a 64-bit Vim. We recommend installing Python 3.
+  corresponding to your Vim architecture. It is _Windows x86_ for a 32-bit Vim
+  and _Windows x86-64_ for a 64-bit Vim. We recommend installing Python 3.
+  Additionally, the version of Python you install must match up exactly with
+  the version of Python that Vim is looking for. Type `:version` and look at the
+  bottom of the page at the list of compiler flags. Look for flags that look
+  similar to `-DDYNAMIC_PYTHON_DLL=\"python27.dll\"` and
+  `-DDYNAMIC_PYTHON3_DLL=\"python35.dll\"`. The former indicates that Vim is
+  looking for Python 2.7 and the latter indicates that Vim is looking for
+  Python 3.5. You'll need one or the other installed, matching the version
+  number exactly.
 - [CMake][cmake-download]. Add CMake executable to the PATH environment
 variable.
 - [Visual Studio][visual-studio-download]. Download the community edition.
 During setup, select _Desktop development with C++_ in _Workloads_.
-- [7-zip][7z-download]. Required to build YCM with semantic support for
-C-family languages.
+- [7-zip 16.04 or later][7z-download]. Required to build YCM with semantic
+support for C-family languages.
 
 Compiling YCM **with** semantic support for C-family languages:
 
@@ -1323,7 +1331,7 @@ maps the `<leader>jd` sequence to the longer subcommand invocation.
 
 These commands are useful for jumping around and exploring code. When moving
 the cursor, the subcommands add entries to Vim's `jumplist` so you can use
-`CTRL-O` to jump back to where you where before invoking the command (and
+`CTRL-O` to jump back to where you were before invoking the command (and
 `CTRL-I` to jump forward; see `:h jumplist` for details). If there is more
 than one destination, the quickfix list (see `:h quickfix`) is populated with
 the available locations and opened to full width at the bottom of the screen.
@@ -2672,9 +2680,12 @@ cache.
 
 ### YCM auto-inserts completion strings I don't want!
 
-This means you probably have some mappings that interfere with YCM's internal
-ones. Make sure you don't have something mapped to `<C-p>`, `<C-x>` or `<C-u>`
-(in insert mode).
+If this happens when Vim automatically wraps text then it's a Vim bug that has
+been fixed in version 8.0.0127. Update your Vim to this version or later.
+
+This could also be some mappings that interfere with YCM's internal ones. Make
+sure you don't have something mapped to `<C-p>`, `<C-x>` or `<C-u>` (in insert
+mode).
 
 YCM _never_ selects something for you; it just shows you a menu and the user has
 to explicitly select something. If something is being selected automatically,
@@ -2827,11 +2838,10 @@ details. If you want to see which tag files YCM will read for a given buffer,
 run `:echo tagfiles()` with the relevant buffer active. Note that that function
 will only list tag files that already exist.
 
-### `CTRL-U` in insert mode does not work
+### `CTRL-U` in insert mode does not work while the completion menu is visible
 
-YCM keeps you in a `completefunc` completion mode when you're typing in insert
-mode and Vim disables `<C-U>` in completion mode as a "feature." Sadly there's
-nothing I can do about this.
+YCM uses `completefunc` completion mode to show suggestions and Vim disables
+`<C-U>` in that mode as a "feature." Sadly there's nothing I can do about this.
 
 ### YCM conflicts with UltiSnips TAB key usage
 
