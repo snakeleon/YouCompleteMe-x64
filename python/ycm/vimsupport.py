@@ -158,7 +158,7 @@ def BufferIsVisible( buffer_number ):
 
 def GetBufferFilepath( buffer_object ):
   if buffer_object.name:
-    return ToUnicode( buffer_object.name )
+    return os.path.normpath( ToUnicode( buffer_object.name ) )
   # Buffers that have just been created by a command like :enew don't have any
   # buffer name so we use the buffer number for that.
   return os.path.join( GetCurrentDirectory(), str( buffer_object.number ) )
@@ -371,8 +371,9 @@ def BufferIsUsable( buffer_object ):
   return not BufferModified( buffer_object ) or HiddenEnabled( buffer_object )
 
 
-def EscapedFilepath( filepath ):
-  return filepath.replace( ' ' , r'\ ' )
+def EscapeFilepathForVimCommand( filepath ):
+  to_eval = "fnameescape('{0}')".format( EscapeForVim( filepath ) )
+  return GetVariableValue( to_eval )
 
 
 # Both |line| and |column| need to be 1-based
@@ -422,8 +423,8 @@ def JumpToLocation( filename, line, column ):
 
     vim_command = GetVimCommand( user_command )
     try:
-      vim.command( 'keepjumps {0} {1}'.format( vim_command,
-                                               EscapedFilepath( filename ) ) )
+      escaped_filename = EscapeFilepathForVimCommand( filename )
+      vim.command( 'keepjumps {0} {1}'.format( vim_command, escaped_filename ) )
     # When the file we are trying to jump to has a swap file
     # Vim opens swap-exists-choices dialog and throws vim.error with E325 error,
     # or KeyboardInterrupt after user selects one of the options.
