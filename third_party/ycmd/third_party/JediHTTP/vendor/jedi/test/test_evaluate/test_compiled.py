@@ -1,7 +1,8 @@
 from textwrap import dedent
 
+import parso
+
 from jedi._compatibility import builtins, is_py3
-from jedi.parser.python import load_grammar
 from jedi.evaluate import compiled, instance
 from jedi.evaluate.representation import FunctionContext
 from jedi.evaluate import Evaluator
@@ -10,7 +11,7 @@ from jedi import Script
 
 
 def _evaluator():
-    return Evaluator(load_grammar())
+    return Evaluator(parso.load_grammar())
 
 
 def test_simple():
@@ -91,3 +92,7 @@ def test_time_docstring():
     import time
     comp, = Script('import time\ntime.sleep').completions()
     assert comp.docstring() == time.sleep.__doc__
+
+
+def test_dict_values():
+    assert Script('import sys/sys.modules["alshdb;lasdhf"]').goto_definitions()

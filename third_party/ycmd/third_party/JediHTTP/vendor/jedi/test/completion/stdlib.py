@@ -65,6 +65,11 @@ class X(): pass
 #? type
 type(X)
 
+
+with open('foo') as f:
+    for line in f.readlines():
+        #? str()
+        line
 # -----------------
 # enumerate
 # -----------------
@@ -222,3 +227,23 @@ z = zipfile.ZipFile("foo")
 # It's too slow. So we don't run it at the moment.
 ##? ['upper']
 z.read('name').upper
+
+# -----------------
+# contextlib
+# -----------------
+
+import contextlib
+with contextlib.closing('asd') as string:
+    #? str()
+    string
+
+# -----------------
+# shlex
+# -----------------
+
+# Github issue #929
+import shlex
+qsplit = shlex.split("foo, ferwerwerw werw werw e")
+for part in qsplit:
+    #? str() None
+    part

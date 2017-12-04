@@ -2,30 +2,33 @@
 Test all things related to the ``jedi.api`` module.
 """
 
+import os
 from textwrap import dedent
 
 from jedi import api
 from jedi._compatibility import is_py3
 from pytest import raises
-from jedi.parser import cache
+from parso import cache
 
 
 def test_preload_modules():
     def check_loaded(*modules):
         # +1 for None module (currently used)
-        assert len(parser_cache) == len(modules) + 1
+        grammar_cache = next(iter(cache.parser_cache.values()))
+        assert len(grammar_cache) == len(modules) + 1
         for i in modules:
-            assert [i in k for k in parser_cache.keys() if k is not None]
+            assert [i in k for k in grammar_cache.keys() if k is not None]
 
-    temp_cache, cache.parser_cache = cache.parser_cache, {}
-    parser_cache = cache.parser_cache
+    old_cache = cache.parser_cache.copy()
+    cache.parser_cache.clear()
 
-    api.preload_module('sys')
-    check_loaded()  # compiled (c_builtin) modules shouldn't be in the cache.
-    api.preload_module('types', 'token')
-    check_loaded('types', 'token')
-
-    cache.parser_cache = temp_cache
+    try:
+        api.preload_module('sys')
+        check_loaded()  # compiled (c_builtin) modules shouldn't be in the cache.
+        api.preload_module('types', 'token')
+        check_loaded('types', 'token')
+    finally:
+        cache.parser_cache.update(old_cache)
 
 
 def test_empty_script():
@@ -160,15 +163,19 @@ def test_get_line_code():
     assert get_line_code('') == ''
 
     # On custom code
+    first_line = 'def foo():\n'
     line = '    foo'
-    assert get_line_code('def foo():\n%s' % line) == line
+    code = '%s%s' % (first_line, line)
+    assert get_line_code(code) == first_line
 
     # With before/after
-    line = '    foo'
-    source = 'def foo():\n%s\nother_line' % line
-    assert get_line_code(source, line=2) == line + '\n'
-    assert get_line_code(source, line=2, after=1) == line + '\nother_line'
-    assert get_line_code(source, line=2, after=1, before=1) == source
+    code = code + '\nother_line'
+    assert get_line_code(code, line=2) == first_line
+    assert get_line_code(code, line=2, after=1) == first_line + line + '\n'
+    assert get_line_code(code, line=2, after=2, before=1) == code
+    # Should just be the whole thing, since there are no more lines on both
+    # sides.
+    assert get_line_code(code, line=2, after=3, before=3) == code
 
 
 def test_goto_assignments_follow_imports():
@@ -199,3 +206,19 @@ def test_goto_assignments_follow_imports():
 
     definition, = script.goto_assignments()
     assert (definition.line, definition.column) == start_pos
+
+    d, = api.Script('a = 1\na').goto_assignments(follow_imports=True)
+    assert d.name == 'a'
+
+
+def test_goto_module():
+    def check(line, expected):
+        script = api.Script(path=path, line=line)
+        module, = script.goto_assignments()
+        assert module.module_path == expected
+
+    base_path = os.path.join(os.path.dirname(__file__), 'simple_import')
+    path = os.path.join(base_path, '__init__.py')
+
+    check(1, os.path.join(base_path, 'module.py'))
+    check(5, os.path.join(base_path, 'module2.py'))

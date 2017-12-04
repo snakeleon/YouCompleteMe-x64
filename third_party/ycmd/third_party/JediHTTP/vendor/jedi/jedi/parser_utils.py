@@ -2,7 +2,7 @@ import textwrap
 from inspect import cleandoc
 
 from jedi._compatibility import literal_eval, is_py3
-from jedi.parser.python import tree
+from parso.python import tree
 
 _EXECUTE_NODES = set([
     'funcdef', 'classdef', 'import_from', 'import_name', 'test', 'or_test',
@@ -155,7 +155,7 @@ def get_call_signature(funcdef, width=72, call_string=None):
         else:
             call_string = funcdef.name.value
     if funcdef.type == 'lambdef':
-        p = '(' + ''.join(param.get_code() for param in funcdef.params).strip() + ')'
+        p = '(' + ''.join(param.get_code() for param in funcdef.get_params()).strip() + ')'
     else:
         p = funcdef.children[2].get_code()
     code = call_string + p
@@ -239,4 +239,3 @@ def get_parent_scope(node, include_flows=False):
             break
         scope = scope.parent
     return scope
-

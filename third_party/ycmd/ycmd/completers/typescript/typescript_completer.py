@@ -258,9 +258,10 @@ class TypeScriptCompleter( Completer ):
 
       try:
         message = self._ReadMessage()
-      except RuntimeError:
-        _logger.exception( SERVER_NOT_RUNNING_MESSAGE )
-        self._tsserver_is_running.clear()
+      except ( RuntimeError, ValueError ):
+        _logger.exception( 'Error while reading message from server' )
+        if not self._ServerIsRunning():
+          self._tsserver_is_running.clear()
         continue
 
       # We ignore events for now since we don't have a use for them.
@@ -298,12 +299,12 @@ class TypeScriptCompleter( Completer ):
     # header.
     if 'Content-Length' not in headers:
       raise RuntimeError( "Missing 'Content-Length' header" )
-    contentlength = int( headers[ 'Content-Length' ] )
+    content_length = int( headers[ 'Content-Length' ] )
     # TSServer adds a newline at the end of the response message and counts it
     # as one character (\n) towards the content length. However, newlines are
     # two characters on Windows (\r\n), so we need to take care of that. See
     # issue https://github.com/Microsoft/TypeScript/issues/3403
-    content = self._tsserver_handle.stdout.read( contentlength )
+    content = self._tsserver_handle.stdout.read( content_length )
     if utils.OnWindows() and content.endswith( b'\r' ):
       content += self._tsserver_handle.stdout.read( 1 )
     return json.loads( utils.ToUnicode( content ) )
@@ -548,16 +549,19 @@ class TypeScriptCompleter( Completer ):
         'line':   request_data[ 'line_num' ],
         'offset': request_data[ 'column_codepoint' ]
       } )
-
-      span = filespans[ 0 ]
-      return responses.BuildGoToResponseFromLocation(
-        _BuildLocation( utils.SplitLines( GetFileContents( request_data,
-                                                           span[ 'file' ] ) ),
-                        span[ 'file' ],
-                        span[ 'start' ][ 'line' ],
-                        span[ 'start' ][ 'offset' ] ) )
     except RuntimeError:
-      raise RuntimeError( 'Could not find definition' )
+      raise RuntimeError( 'Could not find definition.' )
+
+    if not filespans:
+      raise RuntimeError( 'Could not find definition.' )
+
+    span = filespans[ 0 ]
+    return responses.BuildGoToResponseFromLocation(
+      _BuildLocation( utils.SplitLines( GetFileContents( request_data,
+                                                         span[ 'file' ] ) ),
+                      span[ 'file' ],
+                      span[ 'start' ][ 'line' ],
+                      span[ 'start' ][ 'offset' ] ) )
 
 
   def _GoToReferences( self, request_data ):
@@ -587,15 +591,18 @@ class TypeScriptCompleter( Completer ):
         'line':   request_data[ 'line_num' ],
         'offset': request_data[ 'column_num' ]
       } )
-
-      span = filespans[ 0 ]
-      return responses.BuildGoToResponse(
-        filepath   = span[ 'file' ],
-        line_num   = span[ 'start' ][ 'line' ],
-        column_num = span[ 'start' ][ 'offset' ]
-      )
     except RuntimeError:
-      raise RuntimeError( 'Could not find type definition' )
+      raise RuntimeError( 'Could not find type definition.' )
+
+    if not filespans:
+      raise RuntimeError( 'Could not find type definition.' )
+
+    span = filespans[ 0 ]
+    return responses.BuildGoToResponse(
+      filepath   = span[ 'file' ],
+      line_num   = span[ 'start' ][ 'line' ],
+      column_num = span[ 'start' ][ 'offset' ]
+    )
 
 
   def _GetType( self, request_data ):
@@ -699,12 +706,12 @@ class TypeScriptCompleter( Completer ):
       if self._ServerIsRunning():
         _logger.info( 'Stopping TSServer with PID {0}'.format(
                           self._tsserver_handle.pid ) )
-        self._SendCommand( 'exit' )
         try:
+          self._SendCommand( 'exit' )
           utils.WaitUntilProcessIsTerminated( self._tsserver_handle,
                                               timeout = 5 )
           _logger.info( 'TSServer stopped' )
-        except RuntimeError:
+        except Exception:
           _logger.exception( 'Error while stopping TSServer' )
 
       self._CleanUp()
@@ -713,7 +720,7 @@ class TypeScriptCompleter( Completer ):
   def _CleanUp( self ):
     utils.CloseStandardStreams( self._tsserver_handle )
     self._tsserver_handle = None
-    if not self.user_options[ 'server_keep_logfiles' ]:
+    if not self.user_options[ 'server_keep_logfiles' ] and self._logfile:
       utils.RemoveIfExists( self._logfile )
       self._logfile = None
 

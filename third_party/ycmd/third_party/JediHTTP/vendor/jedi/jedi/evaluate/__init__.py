@@ -63,14 +63,16 @@ that are not used are just being ignored.
 import copy
 import sys
 
-from jedi.parser.python import tree
+from parso.python import tree
+import parso
+
 from jedi import debug
 from jedi.common import unite
 from jedi.evaluate import representation as er
 from jedi.evaluate import imports
 from jedi.evaluate import recursion
 from jedi.evaluate import iterable
-from jedi.evaluate.cache import memoize_default
+from jedi.evaluate.cache import evaluator_function_cache
 from jedi.evaluate import stdlib
 from jedi.evaluate import finder
 from jedi.evaluate import compiled
@@ -84,14 +86,39 @@ from jedi.evaluate.context import ContextualizedName, ContextualizedNode
 from jedi import parser_utils
 
 
+def _limit_context_infers(func):
+    """
+    This is for now the way how we limit type inference going wild. There are
+    other ways to ensure recursion limits as well. This is mostly necessary
+    because of instance (self) access that can be quite tricky to limit.
+
+    I'm still not sure this is the way to go, but it looks okay for now and we
+    can still go anther way in the future. Tests are there. ~ dave
+    """
+    def wrapper(evaluator, context, *args, **kwargs):
+        n = context.tree_node
+        try:
+            evaluator.inferred_element_counts[n] += 1
+            if evaluator.inferred_element_counts[n] > 300:
+                debug.warning('In context %s there were too many inferences.', n)
+                return set()
+        except KeyError:
+            evaluator.inferred_element_counts[n] = 1
+        return func(evaluator, context, *args, **kwargs)
+
+    return wrapper
+
+
 class Evaluator(object):
     def __init__(self, grammar, sys_path=None):
         self.grammar = grammar
+        self.latest_grammar = parso.load_grammar(version='3.6')
         self.memoize_cache = {}  # for memoize decorators
         # To memorize modules -> equals `sys.modules`.
         self.modules = {}  # like `sys.modules`.
         self.compiled_cache = {}  # see `evaluate.compiled.create()`
-        self.mixed_cache = {}  # see `evaluate.compiled.mixed.create()`
+        self.inferred_element_counts = {}
+        self.mixed_cache = {}  # see `evaluate.compiled.mixed._create()`
         self.analysis = []
         self.dynamic_params_depth = 0
         self.is_analysis = False
@@ -115,7 +142,7 @@ class Evaluator(object):
         self.execution_recursion_detector = recursion.ExecutionRecursionDetector(self)
 
     def find_types(self, context, name_or_str, name_context, position=None,
-                   search_global=False, is_goto=False):
+                   search_global=False, is_goto=False, analysis_errors=True):
         """
         This is the search function. The most important part to debug.
         `remove_statements` and `filter_statements` really are the core part of
@@ -124,19 +151,21 @@ class Evaluator(object):
         :param position: Position of the last statement -> tuple of line, column
         :return: List of Names. Their parents are the types.
         """
-        f = finder.NameFinder(self, context, name_context, name_or_str, position)
+        f = finder.NameFinder(self, context, name_context, name_or_str,
+                              position, analysis_errors=analysis_errors)
         filters = f.get_filters(search_global)
         if is_goto:
             return f.filter_name(filters)
         return f.find(filters, attribute_lookup=not search_global)
 
+    @_limit_context_infers
     def eval_statement(self, context, stmt, seek_name=None):
         with recursion.execution_allowed(self, stmt) as allowed:
             if allowed or context.get_root_context() == self.BUILTINS:
                 return self._eval_stmt(context, stmt, seek_name)
         return set()
 
-    #@memoize_default(default=[], evaluator_is_first_arg=True)
+    #@evaluator_function_cache(default=[])
     @debug.increase_indent
     def _eval_stmt(self, context, stmt, seek_name=None):
         """
@@ -264,11 +293,12 @@ class Evaluator(object):
                 return self._eval_element_not_cached(context, element)
         return self._eval_element_cached(context, element)
 
-    @memoize_default(default=set(), evaluator_is_first_arg=True)
+    @evaluator_function_cache(default=set())
     def _eval_element_cached(self, context, element):
         return self._eval_element_not_cached(context, element)
 
     @debug.increase_indent
+    @_limit_context_infers
     def _eval_element_not_cached(self, context, element):
         debug.dbg('eval_element %s@%s', element, element.start_pos)
         types = set()
@@ -307,7 +337,9 @@ class Evaluator(object):
                      self.eval_element(context, element.children[-1]))
         elif typ == 'operator':
             # Must be an ellipsis, other operators are not evaluated.
-            assert element.value == '...'
+            # In Python 2 ellipsis is coded as three single dot tokens, not
+            # as one token 3 dot token.
+            assert element.value in ('.', '...')
             types = set([compiled.create(self, Ellipsis)])
         elif typ == 'dotted_name':
             types = self.eval_atom(context, element.children[0])
@@ -335,12 +367,10 @@ class Evaluator(object):
         """
         if atom.type == 'name':
             # This is the first global lookup.
-            stmt = atom.get_definition()
-            if stmt.type == 'comp_for':
-                stmt = tree.search_ancestor(stmt, 'expr_stmt', 'lambdef', 'funcdef', 'classdef')
-            if stmt is None or stmt.type != 'expr_stmt':
-                # We only need to adjust the start_pos for statements, because
-                # there the name cannot be used.
+            stmt = tree.search_ancestor(
+                atom, 'expr_stmt', 'lambdef'
+            ) or atom
+            if stmt.type == 'lambdef':
                 stmt = atom
             return context.py__getattribute__(
                 name_or_str=atom,
@@ -415,10 +445,6 @@ class Evaluator(object):
 
     @debug.increase_indent
     def execute(self, obj, arguments):
-        if not isinstance(arguments, param.AbstractArguments):
-            raise NotImplementedError
-            arguments = param.Arguments(self, arguments)
-
         if self.is_analysis:
             arguments.eval_all()
 
@@ -441,31 +467,47 @@ class Evaluator(object):
             return types
 
     def goto_definitions(self, context, name):
-        def_ = name.get_definition()
-        is_simple_name = name.parent.type not in ('power', 'trailer')
-        if is_simple_name:
-            if name.parent.type == 'classdef' and name.parent.name == name:
+        def_ = name.get_definition(import_name_always=True)
+        if def_ is not None:
+            type_ = def_.type
+            if type_ == 'classdef':
                 return [er.ClassContext(self, name.parent, context)]
-            elif name.parent.type == 'funcdef':
+            elif type_ == 'funcdef':
                 return [er.FunctionContext(self, context, name.parent)]
-            elif name.parent.type == 'file_input':
-                raise NotImplementedError
-            if def_.type == 'expr_stmt' and name in def_.get_defined_names():
-                return self.eval_statement(context, def_, name)
-            elif def_.type == 'for_stmt' and \
-                    name.start_pos < def_.children[1].end_pos:
+
+            if type_ == 'expr_stmt':
+                is_simple_name = name.parent.type not in ('power', 'trailer')
+                if is_simple_name:
+                    return self.eval_statement(context, def_, name)
+            if type_ == 'for_stmt':
                 container_types = self.eval_element(context, def_.children[3])
                 cn = ContextualizedNode(context, def_.children[3])
                 for_types = iterable.py__iter__types(self, container_types, cn)
                 c_node = ContextualizedName(context, name)
                 return finder.check_tuple_assignments(self, c_node, for_types)
-            elif def_.type in ('import_from', 'import_name'):
+            if type_ in ('import_from', 'import_name'):
                 return imports.infer_import(context, name)
 
         return helpers.evaluate_call_of_leaf(context, name)
 
     def goto(self, context, name):
-        stmt = name.get_definition()
+        definition = name.get_definition(import_name_always=True)
+        if definition is not None:
+            type_ = definition.type
+            if type_ == 'expr_stmt':
+                # Only take the parent, because if it's more complicated than just
+                # a name it's something you can "goto" again.
+                is_simple_name = name.parent.type not in ('power', 'trailer')
+                if is_simple_name:
+                    return [TreeNameDefinition(context, name)]
+            elif type_ == 'param':
+                return [ParamName(context, name)]
+            elif type_ in ('funcdef', 'classdef'):
+                return [TreeNameDefinition(context, name)]
+            elif type_ in ('import_from', 'import_name'):
+                module_names = imports.infer_import(context, name, is_goto=True)
+                return module_names
+
         par = name.parent
         typ = par.type
         if typ == 'argument' and par.children[1] == '=' and par.children[0] == name:
@@ -493,17 +535,6 @@ class Evaluator(object):
                             if param_name.string_name == name.value:
                                 param_names.append(param_name)
                 return param_names
-        elif typ == 'expr_stmt' and name in par.get_defined_names():
-            # Only take the parent, because if it's more complicated than just
-            # a name it's something you can "goto" again.
-            return [TreeNameDefinition(context, name)]
-        elif typ == 'param' and par.name:
-            return [ParamName(context, name)]
-        elif typ in ('param', 'funcdef', 'classdef') and par.name is name:
-            return [TreeNameDefinition(context, name)]
-        elif isinstance(stmt, tree.Import):
-            module_names = imports.infer_import(context, name, is_goto=True)
-            return module_names
         elif typ == 'dotted_name':  # Is a decorator.
             index = par.children.index(name)
             if index > 0:
@@ -522,9 +553,10 @@ class Evaluator(object):
                 for value in values
             )
         else:
-            if stmt.type != 'expr_stmt':
-                # We only need to adjust the start_pos for statements, because
-                # there the name cannot be used.
+            stmt = tree.search_ancestor(
+                name, 'expr_stmt', 'lambdef'
+            ) or name
+            if stmt.type == 'lambdef':
                 stmt = name
             return context.py__getattribute__(
                 name,
@@ -589,7 +621,7 @@ class Evaluator(object):
         if node_is_context and parser_utils.is_scope(node):
             scope_node = node
         else:
-            if node.parent.type in ('funcdef', 'classdef'):
+            if node.parent.type in ('funcdef', 'classdef') and node.parent.name == node:
                 # When we're on class/function names/leafs that define the
                 # object itself and not its contents.
                 node = node.parent

@@ -61,7 +61,7 @@ class TestFullDefinedName(TestCase):
     """
 
     def check(self, source, desired):
-        definitions = jedi.defined_names(textwrap.dedent(source))
+        definitions = jedi.names(textwrap.dedent(source))
         full_names = [d.full_name for d in definitions]
         self.assertEqual(full_names, desired)
 
@@ -96,3 +96,9 @@ def test_os_path():
     assert d.full_name == 'os.path.join'
     d, = jedi.Script('import os.p').completions()
     assert d.full_name == 'os.path'
+
+
+def test_os_issues():
+    """Issue #873"""
+    c, = jedi.Script('import os\nos.nt''').completions()
+    assert c.full_name == 'nt'

@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-from jedi._compatibility import u, is_py3
+from jedi._compatibility import is_py3
 from jedi import parser_utils
-from jedi.parser.python import parse
-from jedi.parser.python import tree
+from parso import parse
+from parso.python import tree
 
 import pytest
 
@@ -10,8 +10,10 @@ import pytest
 class TestCallAndName():
     def get_call(self, source):
         # Get the simple_stmt and then the first one.
-        simple_stmt = parse(source).children[0]
-        return simple_stmt.children[0]
+        node = parse(source).children[0]
+        if node.type == 'simple_stmt':
+            return node.children[0]
+        return node
 
     def test_name_and_call_positions(self):
         name = self.get_call('name\nsomething_else')
@@ -68,7 +70,7 @@ def test_hex_values_in_docstring():
     if is_py3:
         assert doc == '\xff'
     else:
-        assert doc == u('�')
+        assert doc == u'�'
 
 
 @pytest.mark.parametrize(
@@ -77,7 +79,7 @@ def test_hex_values_in_docstring():
         ('lambda x, y, z: x + y * z\n', '<lambda>(x, y, z)')
     ])
 def test_get_call_signature(code, call_signature):
-    node = parse(code).children[0]
+    node = parse(code, version='3.5').children[0]
     if node.type == 'simple_stmt':
         node = node.children[0]
     assert parser_utils.get_call_signature(node) == call_signature

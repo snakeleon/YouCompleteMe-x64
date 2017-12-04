@@ -3,13 +3,14 @@ The :mod:`jedi.api.classes` module contains the return classes of the API.
 These classes are the much bigger part of the whole API, because they contain
 the interesting information about completion and goto operations.
 """
-import warnings
 import re
+
+from parso.cache import parser_cache
+from parso.python.tree import search_ancestor
 
 from jedi._compatibility import u
 from jedi import settings
 from jedi import common
-from jedi.parser.cache import parser_cache
 from jedi.cache import memoize_method
 from jedi.evaluate import representation as er
 from jedi.evaluate import instance
@@ -60,7 +61,7 @@ class BaseDefinition(object):
         self._evaluator = evaluator
         self._name = name
         """
-        An instance of :class:`jedi.parser.reprsentation.Name` subclass.
+        An instance of :class:`parso.reprsentation.Name` subclass.
         """
         self.is_keyword = isinstance(self._name, KeywordName)
 
@@ -139,8 +140,8 @@ class BaseDefinition(object):
         if tree_name is not None:
             # TODO move this to their respective names.
             definition = tree_name.get_definition()
-            if definition.type == 'import_from' and \
-                    tree_name in definition.get_defined_names():
+            if definition is not None and definition.type == 'import_from' and \
+                    tree_name.is_definition():
                 resolve = True
 
         if isinstance(self._name, imports.SubModuleName) or resolve:
@@ -159,9 +160,17 @@ class BaseDefinition(object):
                     pass
 
             if name.api_type == 'module':
-                module_context, = name.infer()
-                for n in reversed(module_context.py__name__().split('.')):
-                    yield n
+                module_contexts = name.infer()
+                if module_contexts:
+                    module_context, = module_contexts
+                    for n in reversed(module_context.py__name__().split('.')):
+                        yield n
+                else:
+                    # We don't really know anything about the path here. This
+                    # module is just an import that would lead in an
+                    # ImportError. So simply return the name.
+                    yield name.string_name
+                    return
             else:
                 yield name.string_name
 
@@ -246,26 +255,6 @@ class BaseDefinition(object):
             parses all libraries starting with ``a``.
         """
         return _Help(self._name).docstring(fast=fast, raw=raw)
-
-    @property
-    def doc(self):
-        """
-        .. deprecated:: 0.8.0
-           Use :meth:`.docstring` instead.
-        .. todo:: Remove!
-        """
-        warnings.warn("Deprecated since Jedi 0.8. Use docstring() instead.", DeprecationWarning, stacklevel=2)
-        return self.docstring(raw=False)
-
-    @property
-    def raw_doc(self):
-        """
-        .. deprecated:: 0.8.0
-           Use :meth:`.docstring` instead.
-        .. todo:: Remove!
-        """
-        warnings.warn("Deprecated since Jedi 0.8. Use docstring() instead.", DeprecationWarning, stacklevel=2)
-        return self.docstring(raw=True)
 
     @property
     def description(self):
@@ -358,7 +347,7 @@ class BaseDefinition(object):
             raise AttributeError()
         context = followed[0]  # only check the first one.
 
-        return [_Param(self._evaluator, n) for n in get_param_names(context)]
+        return [Definition(self._evaluator, n) for n in get_param_names(context)]
 
     def parent(self):
         context = self._name.parent_context
@@ -389,11 +378,11 @@ class BaseDefinition(object):
             return ''
 
         path = self._name.get_root_context().py__file__()
-        lines = parser_cache[path].lines
+        lines = parser_cache[self._evaluator.grammar._hashed][path].lines
 
-        line_nr = self._name.start_pos[0]
-        start_line_nr = line_nr - before
-        return ''.join(lines[start_line_nr:line_nr + after + 1])
+        index = self._name.start_pos[0] - 1
+        start_index = max(index - before, 0)
+        return ''.join(lines[start_index:index + after + 1])
 
 
 class Completion(BaseDefinition):
@@ -418,7 +407,7 @@ class Completion(BaseDefinition):
             append = '('
 
         if isinstance(self._name, ParamName) and self._stack is not None:
-            node_names = list(self._stack.get_node_names(self._evaluator.grammar))
+            node_names = list(self._stack.get_node_names(self._evaluator.grammar._pgen_grammar))
             if 'trailer' in node_names and 'argument' not in node_names:
                 append += '='
 
@@ -538,14 +527,14 @@ class Definition(BaseDefinition):
                 typ = 'def'
             return typ + ' ' + u(self._name.string_name)
         elif typ == 'param':
-            code = tree_name.get_definition().get_code(
+            code = search_ancestor(tree_name, 'param').get_code(
                 include_prefix=False,
                 include_comma=False
             )
             return typ + ' ' + code
 
 
-        definition = tree_name.get_definition()
+        definition = tree_name.get_definition() or tree_name
         # Remove the prefix, because that's not what we want for get_code
         # here.
         txt = definition.get_code(include_prefix=False)
@@ -652,46 +641,9 @@ class CallSignature(Definition):
         """
         return self._bracket_start_pos
 
-    @property
-    def call_name(self):
-        """
-        .. deprecated:: 0.8.0
-           Use :attr:`.name` instead.
-        .. todo:: Remove!
-
-        The name (e.g. 'isinstance') as a string.
-        """
-        warnings.warn("Deprecated since Jedi 0.8. Use name instead.", DeprecationWarning, stacklevel=2)
-        return self.name
-
-    @property
-    def module(self):
-        """
-        .. deprecated:: 0.8.0
-           Use :attr:`.module_name` for the module name.
-        .. todo:: Remove!
-        """
-        return self._executable.get_root_node()
-
     def __repr__(self):
         return '<%s: %s index %s>' % \
             (type(self).__name__, self._name.string_name, self.index)
-
-
-class _Param(Definition):
-    """
-    Just here for backwards compatibility.
-    """
-    def get_code(self):
-        """
-        .. deprecated:: 0.8.0
-           Use :attr:`.description` and :attr:`.name` instead.
-        .. todo:: Remove!
-
-        A function to get the whole code of the param.
-        """
-        warnings.warn("Deprecated since version 0.8. Use description instead.", DeprecationWarning, stacklevel=2)
-        return self.description
 
 
 class _Help(object):

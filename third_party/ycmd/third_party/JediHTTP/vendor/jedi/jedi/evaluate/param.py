@@ -3,7 +3,7 @@ from collections import defaultdict
 from jedi._compatibility import zip_longest
 from jedi import debug
 from jedi import common
-from jedi.parser.python import tree
+from parso.python import tree
 from jedi.evaluate import iterable
 from jedi.evaluate import analysis
 from jedi.evaluate import context
@@ -69,6 +69,25 @@ class AbstractArguments():
         for key, lazy_context in self.unpack():
             types = lazy_context.infer()
             try_iter_content(types)
+
+    def get_calling_nodes(self):
+        raise NotImplementedError
+
+    def unpack(self, funcdef=None):
+        raise NotImplementedError
+
+    def get_params(self, execution_context):
+        return get_params(execution_context, self)
+
+
+class AnonymousArguments(AbstractArguments):
+    def get_params(self, execution_context):
+        from jedi.evaluate.dynamic import search_params
+        return search_params(
+            execution_context.evaluator,
+            execution_context,
+            execution_context.tree_node
+        )
 
 
 class TreeArguments(AbstractArguments):
@@ -236,7 +255,7 @@ def get_params(execution_context, var_args):
     funcdef = execution_context.tree_node
     parent_context = execution_context.parent_context
 
-    for param in funcdef.params:
+    for param in funcdef.get_params():
         param_dict[param.name.value] = param
     unpacked_va = list(var_args.unpack(funcdef))
     var_arg_iterator = common.PushBackIterator(iter(unpacked_va))
@@ -245,7 +264,7 @@ def get_params(execution_context, var_args):
     keys_used = {}
     keys_only = False
     had_multiple_value_error = False
-    for param in funcdef.params:
+    for param in funcdef.get_params():
         # The value and key can both be null. There, the defaults apply.
         # args / kwargs will just be empty arrays / dicts, respectively.
         # Wrong value count is just ignored. If you try to test cases that are
@@ -381,17 +400,18 @@ def _star_star_dict(context, array, input_node, funcdef):
 
 
 def _error_argument_count(funcdef, actual_count):
-    default_arguments = sum(1 for p in funcdef.params if p.default or p.star_count)
+    params = funcdef.get_params()
+    default_arguments = sum(1 for p in params if p.default or p.star_count)
 
     if default_arguments == 0:
         before = 'exactly '
     else:
-        before = 'from %s to ' % (len(funcdef.params) - default_arguments)
+        before = 'from %s to ' % (len(params) - default_arguments)
     return ('TypeError: %s() takes %s%s arguments (%s given).'
-            % (funcdef.name, before, len(funcdef.params), actual_count))
+            % (funcdef.name, before, len(params), actual_count))
 
 
-def create_default_param(execution_context, param):
+def _create_default_param(execution_context, param):
     if param.star_count == 1:
         result_arg = context.LazyKnownContext(
             iterable.FakeSequence(execution_context.evaluator, 'tuple', [])
@@ -405,3 +425,9 @@ def create_default_param(execution_context, param):
     else:
         result_arg = context.LazyTreeContext(execution_context.parent_context, param.default)
     return ExecutedParam(execution_context, param, result_arg)
+
+
+def create_default_params(execution_context, funcdef):
+    return [_create_default_param(execution_context, p)
+            for p in funcdef.get_params()]
+

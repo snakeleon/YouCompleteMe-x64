@@ -11,9 +11,7 @@ import pytest
 
 from jedi import Script
 from jedi import api
-from jedi import common
 from jedi.evaluate import imports
-from jedi.parser.python import parse
 from .helpers import TestCase, cwd_at
 
 #jedi.set_debug_function()
@@ -98,14 +96,6 @@ class TestRegression(TestCase):
         self.assertEqual([d.description for d in defs],
                          ['def f', 'class C'])
 
-    def test_end_pos_line(self):
-        # jedi issue #150
-        s = "x()\nx( )\nx(  )\nx (  )"
-        module = parse(s)
-        for i, simple_stmt in enumerate(module.children[:-1]):
-            expr_stmt = simple_stmt.children[0]
-            assert expr_stmt.end_pos == (i + 1, i + 3)
-
     def check_definition_by_marker(self, source, after_cursor, names):
         r"""
         Find definitions specified by `after_cursor` and check what found
@@ -178,15 +168,6 @@ class TestRegression(TestCase):
                 limit = n
             else:
                 assert n == limit
-
-    def test_source_to_unicode_unicode_text(self):
-        source = (
-            b"# vim: fileencoding=utf-8\n"
-            b"# \xe3\x81\x82\xe3\x81\x84\xe3\x81\x86\xe3\x81\x88\xe3\x81\x8a\n"
-        )
-        actual = common.source_to_unicode(source)
-        expected = source.decode('utf-8')
-        assert actual == expected
 
 
 def test_loading_unicode_files_with_bad_global_charset(monkeypatch, tmpdir):

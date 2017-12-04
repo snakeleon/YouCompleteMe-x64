@@ -15,8 +15,8 @@ Unfortunately every other thing is being ignored (e.g. a == '' would be easy to
 check for -> a is a string). There's big potential in these checks.
 """
 
-from jedi.parser.python import tree
-from jedi.parser.tree import search_ancestor
+from parso.python import tree
+from parso.tree import search_ancestor
 from jedi import debug
 from jedi.common import unite
 from jedi import settings
@@ -30,13 +30,14 @@ from jedi.evaluate import analysis
 from jedi.evaluate import flow_analysis
 from jedi.evaluate import param
 from jedi.evaluate import helpers
-from jedi.evaluate.filters import get_global_filters
+from jedi.evaluate.filters import get_global_filters, TreeNameDefinition
 from jedi.evaluate.context import ContextualizedName, ContextualizedNode
 from jedi.parser_utils import is_scope, get_parent_scope
 
 
 class NameFinder(object):
-    def __init__(self, evaluator, context, name_context, name_or_str, position=None):
+    def __init__(self, evaluator, context, name_context, name_or_str,
+                 position=None, analysis_errors=True):
         self._evaluator = evaluator
         # Make sure that it's not just a syntax tree node.
         self._context = context
@@ -48,6 +49,7 @@ class NameFinder(object):
             self._string_name = name_or_str
         self._position = position
         self._found_predefined_types = None
+        self._analysis_errors = analysis_errors
 
     @debug.increase_indent
     def find(self, filters, attribute_lookup):
@@ -65,7 +67,7 @@ class NameFinder(object):
 
         types = self._names_to_types(names, attribute_lookup)
 
-        if not names and not types \
+        if not names and self._analysis_errors and not types \
                 and not (isinstance(self._name, tree.Name) and
                          isinstance(self._name.parent.parent, tree.Param)):
             if isinstance(self._name, tree.Name):
@@ -122,7 +124,19 @@ class NameFinder(object):
         for filter in filters:
             names = filter.get(self._string_name)
             if names:
+                if len(names) == 1:
+                    n, = names
+                    if isinstance(n, TreeNameDefinition):
+                        # Something somewhere went terribly wrong. This
+                        # typically happens when using goto on an import in an
+                        # __init__ file. I think we need a better solution, but
+                        # it's kind of hard, because for Jedi it's not clear
+                        # that that name has not been defined, yet.
+                        if n.tree_name == self._name:
+                            if self._name.get_definition().type == 'import_from':
+                                continue
                 break
+
         debug.dbg('finder.filter_name "%s" in (%s): %s@%s', self._string_name,
                   self._context, names, self._position)
         return list(names)
@@ -173,7 +187,20 @@ class NameFinder(object):
 
 def _name_to_types(evaluator, context, tree_name):
     types = []
-    node = tree_name.get_definition()
+    node = tree_name.get_definition(import_name_always=True)
+    if node is None:
+        node = tree_name.parent
+        if node.type == 'global_stmt':
+            context = evaluator.create_context(context, tree_name)
+            finder = NameFinder(evaluator, context, context, tree_name.value)
+            filters = finder.get_filters(search_global=True)
+            # For global_stmt lookups, we only need the first possible scope,
+            # which means the function itself.
+            filters = [next(filters)]
+            return finder.find(filters, attribute_lookup=False)
+        elif node.type not in ('import_from', 'import_name'):
+            raise ValueError("Should not happen.")
+
     typ = node.type
     if typ == 'for_stmt':
         types = pep0484.find_type_from_comment_hint_for(context, node, tree_name)
@@ -194,19 +221,16 @@ def _name_to_types(evaluator, context, tree_name):
     elif typ == 'expr_stmt':
         types = _remove_statements(evaluator, context, node, tree_name)
     elif typ == 'with_stmt':
-        types = context.eval_node(node.get_context_manager_from_name(tree_name))
+        context_managers = context.eval_node(node.get_test_node_from_name(tree_name))
+        enter_methods = unite(
+            context_manager.py__getattribute__('__enter__')
+            for context_manager in context_managers
+        )
+        types = unite(method.execute_evaluated() for method in enter_methods)
     elif typ in ('import_from', 'import_name'):
         types = imports.infer_import(context, tree_name)
     elif typ in ('funcdef', 'classdef'):
         types = _apply_decorators(evaluator, context, node)
-    elif typ == 'global_stmt':
-        context = evaluator.create_context(context, tree_name)
-        finder = NameFinder(evaluator, context, context, tree_name.value)
-        filters = finder.get_filters(search_global=True)
-        # For global_stmt lookups, we only need the first possible scope,
-        # which means the function itself.
-        filters = [next(filters)]
-        types += finder.find(filters, attribute_lookup=False)
     elif typ == 'try_stmt':
         # TODO an exception can also be a tuple. Check for those.
         # TODO check for types that are not classes and add it to
@@ -348,7 +372,8 @@ def _check_isinstance_type(context, element, search_name):
         is_instance_call = helpers.call_of_leaf(lazy_context_object.data)
         # Do a simple get_code comparison. They should just have the same code,
         # and everything will be all right.
-        assert is_instance_call.get_code(normalized=True) == call.get_code(normalized=True)
+        normalize = context.evaluator.grammar._normalize
+        assert normalize(is_instance_call) == normalize(call)
     except AssertionError:
         return None
 

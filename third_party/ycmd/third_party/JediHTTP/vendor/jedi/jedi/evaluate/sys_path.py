@@ -1,16 +1,16 @@
 import glob
 import os
 import sys
+import imp
 from jedi.evaluate.site import addsitedir
 
 from jedi._compatibility import exec_function, unicode
-from jedi.parser.python import tree
-from jedi.parser.python import parse
-from jedi.evaluate.cache import memoize_default
-from jedi import debug
-from jedi import common
+from jedi.evaluate.cache import evaluator_function_cache
 from jedi.evaluate.compiled import CompiledObject
 from jedi.evaluate.context import ContextualizedNode
+from jedi import settings
+from jedi import debug
+from jedi import common
 
 
 def get_venv_path(venv):
@@ -156,10 +156,10 @@ def _check_module(module_context):
             power = name.parent.parent
             if power.type in ('power', 'atom_expr'):
                 c = power.children
-                if isinstance(c[0], tree.Name) and c[0].value == 'sys' \
+                if c[0].type == 'name' and c[0].value == 'sys' \
                         and c[1].type == 'trailer':
                     n = c[1].children[1]
-                    if isinstance(n, tree.Name) and n.value == 'path':
+                    if n.type == 'name' and n.value == 'path':
                         yield name, power
 
     sys_path = list(module_context.evaluator.sys_path)  # copy
@@ -172,19 +172,19 @@ def _check_module(module_context):
         pass
     else:
         for name, power in get_sys_path_powers(possible_names):
-            stmt = name.get_definition()
+            expr_stmt = power.parent
             if len(power.children) >= 4:
                 sys_path.extend(
                     _paths_from_list_modifications(
                         module_context.py__file__(), *power.children[2:4]
                     )
                 )
-            elif name.get_definition().type == 'expr_stmt':
-                sys_path.extend(_paths_from_assignment(module_context, stmt))
+            elif expr_stmt is not None and expr_stmt.type == 'expr_stmt':
+                sys_path.extend(_paths_from_assignment(module_context, expr_stmt))
     return sys_path
 
 
-@memoize_default(evaluator_is_first_arg=True, default=[])
+@evaluator_function_cache(default=[])
 def sys_path_with_modifications(evaluator, module_context):
     path = module_context.py__file__()
     if path is None:
@@ -211,10 +211,10 @@ def sys_path_with_modifications(evaluator, module_context):
 
 def _get_paths_from_buildout_script(evaluator, buildout_script_path):
     try:
-        module_node = parse(
+        module_node = evaluator.grammar.parse(
             path=buildout_script_path,
-            grammar=evaluator.grammar,
-            cache=True
+            cache=True,
+            cache_path=settings.cache_directory
         )
     except IOError:
         debug.warning('Error trying to read buildout_script: %s', buildout_script_path)
@@ -282,3 +282,33 @@ def _get_buildout_script_paths(module_path):
             debug.warning(unicode(e))
             continue
     return extra_module_paths
+
+
+def dotted_path_in_sys_path(sys_path, module_path):
+    """
+    Returns the dotted path inside a sys.path.
+    """
+    # First remove the suffix.
+    for suffix, _, _ in imp.get_suffixes():
+        if module_path.endswith(suffix):
+            module_path = module_path[:-len(suffix)]
+        break
+    else:
+        # There should always be a suffix in a valid Python file on the path.
+        return None
+
+    if module_path.startswith(os.path.sep):
+        # The paths in sys.path most of the times don't end with a slash.
+        module_path = module_path[1:]
+
+    for p in sys_path:
+        if module_path.startswith(p):
+            rest = module_path[len(p):]
+            if rest:
+                split = rest.split(os.path.sep)
+                for string in split:
+                    if not string or '.' in string:
+                        return None
+                return '.'.join(split)
+
+    return None

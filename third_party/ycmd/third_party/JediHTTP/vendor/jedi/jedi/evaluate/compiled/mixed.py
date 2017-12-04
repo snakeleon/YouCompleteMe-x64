@@ -5,12 +5,13 @@ Used only for REPL Completion.
 import inspect
 import os
 
-from jedi.parser.python import parse
+from jedi import settings
 from jedi.evaluate import compiled
 from jedi.cache import underscore_memoization
 from jedi.evaluate import imports
 from jedi.evaluate.context import Context
-from jedi.evaluate.cache import memoize_default
+from jedi.evaluate.cache import evaluator_function_cache
+from jedi.evaluate.compiled.getattr_static import getattr_static
 
 
 class MixedObject(object):
@@ -77,13 +78,14 @@ class MixedName(compiled.CompiledName):
     def infer(self):
         obj = self.parent_context.obj
         try:
+            # TODO use logic from compiled.CompiledObjectFilter
             obj = getattr(obj, self.string_name)
         except AttributeError:
             # Happens e.g. in properties of
             # PyQt4.QtGui.QStyleOptionComboBox.currentText
             # -> just set it to None
             obj = None
-        return [create(self._evaluator, obj, parent_context=self.parent_context)]
+        return [_create(self._evaluator, obj, parent_context=self.parent_context)]
 
     @property
     def api_type(self):
@@ -102,13 +104,13 @@ class MixedObjectFilter(compiled.CompiledObjectFilter):
         #return MixedName(self._evaluator, self._compiled_object, name)
 
 
-@memoize_default(evaluator_is_first_arg=True)
+@evaluator_function_cache()
 def _load_module(evaluator, path, python_object):
-    module = parse(
-        grammar=evaluator.grammar,
+    module = evaluator.grammar.parse(
         path=path,
         cache=True,
-        diff_cache=True
+        diff_cache=True,
+        cache_path=settings.cache_directory
     ).get_root_node()
     python_module = inspect.getmodule(python_object)
 
@@ -116,21 +118,26 @@ def _load_module(evaluator, path, python_object):
     return module
 
 
-def source_findable(python_object):
+def _get_object_to_check(python_object):
     """Check if inspect.getfile has a chance to find the source."""
-    return (inspect.ismodule(python_object) or
+    if (inspect.ismodule(python_object) or
             inspect.isclass(python_object) or
             inspect.ismethod(python_object) or
             inspect.isfunction(python_object) or
             inspect.istraceback(python_object) or
             inspect.isframe(python_object) or
-            inspect.iscode(python_object))
+            inspect.iscode(python_object)):
+        return python_object
+
+    try:
+        return python_object.__class__
+    except AttributeError:
+        raise TypeError  # Prevents computation of `repr` within inspect.
 
 
 def find_syntax_node_name(evaluator, python_object):
     try:
-        if not source_findable(python_object):
-            raise TypeError  # Prevents computation of `repr` within inspect.
+        python_object = _get_object_to_check(python_object)
         path = inspect.getsourcefile(python_object)
     except TypeError:
         # The type might not be known (e.g. class_with_dict.__weakref__)
@@ -188,7 +195,7 @@ def find_syntax_node_name(evaluator, python_object):
 
 
 @compiled.compiled_objects_cache('mixed_cache')
-def create(evaluator, obj, parent_context=None, *args):
+def _create(evaluator, obj, parent_context=None, *args):
     tree_node, path = find_syntax_node_name(evaluator, obj)
 
     compiled_object = compiled.create(
@@ -202,6 +209,7 @@ def create(evaluator, obj, parent_context=None, *args):
     else:
         from jedi.evaluate.representation import ModuleContext
         module_context = ModuleContext(evaluator, module_node, path=path)
+        # TODO this __name__ is probably wrong.
         name = compiled_object.get_root_context().py__name__()
         imports.add_module(evaluator, name, module_context)
 
@@ -210,6 +218,10 @@ def create(evaluator, obj, parent_context=None, *args):
         node_is_context=True,
         node_is_object=True
     )
+    if tree_node.type == 'classdef':
+        if not inspect.isclass(obj):
+            # Is an instance, not a class.
+            tree_context, = tree_context.execute_evaluated()
 
     return MixedObject(
         evaluator,

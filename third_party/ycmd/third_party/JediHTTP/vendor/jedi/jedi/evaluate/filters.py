@@ -4,7 +4,7 @@ are needed for name resolution.
 """
 from abc import abstractmethod
 
-from jedi.parser.tree import search_ancestor
+from parso.tree import search_ancestor
 from jedi.evaluate import flow_analysis
 from jedi.common import to_list, unite
 from jedi.parser_utils import get_parent_scope
@@ -19,6 +19,12 @@ class AbstractNameDefinition(object):
     @abstractmethod
     def infer(self):
         raise NotImplementedError
+
+    @abstractmethod
+    def goto(self):
+        # Typically names are already definitions and therefore a goto on that
+        # name will always result on itself.
+        return set([self])
 
     def get_root_context(self):
         return self.parent_context.get_root_context()
@@ -43,6 +49,9 @@ class AbstractTreeName(AbstractNameDefinition):
     def __init__(self, parent_context, tree_name):
         self.parent_context = parent_context
         self.tree_name = tree_name
+
+    def goto(self):
+        return self.parent_context.evaluator.goto(self.parent_context, self.tree_name)
 
     @property
     def string_name(self):
@@ -74,6 +83,14 @@ class ContextName(ContextNameMixin, AbstractTreeName):
 
 
 class TreeNameDefinition(AbstractTreeName):
+    _API_TYPES = dict(
+        import_name='module',
+        import_from='module',
+        funcdef='function',
+        param='param',
+        classdef='class',
+    )
+
     def infer(self):
         # Refactor this, should probably be here.
         from jedi.evaluate.finder import _name_to_types
@@ -81,14 +98,10 @@ class TreeNameDefinition(AbstractTreeName):
 
     @property
     def api_type(self):
-        definition = self.tree_name.get_definition()
-        return dict(
-            import_name='module',
-            import_from='module',
-            funcdef='function',
-            param='param',
-            classdef='class',
-        ).get(definition.type, 'statement')
+        definition = self.tree_name.get_definition(import_name_always=True)
+        if definition is None:
+            return 'statement'
+        return self._API_TYPES.get(definition.type, 'statement')
 
 
 class ParamName(AbstractTreeName):
@@ -110,6 +123,8 @@ class ParamName(AbstractTreeName):
 class AnonymousInstanceParamName(ParamName):
     def infer(self):
         param_node = search_ancestor(self.tree_name, 'param')
+        # TODO I think this should not belong here. It's not even really true,
+        #      because classmethod and other descriptors can change it.
         if param_node.position_index == 0:
             # This is a speed optimization, to return the self param (because
             # it's known). This only affects anonymous instances.

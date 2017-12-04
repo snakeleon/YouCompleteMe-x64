@@ -1,23 +1,25 @@
 #!/usr/bin/env python
 
-from __future__ import with_statement
-try:
-    from setuptools import setup
-except ImportError:
-    # Distribute is not actually required to install
-    from distutils.core import setup
+from setuptools import setup
+
+import ast
+
 
 __AUTHOR__ = 'David Halter'
 __AUTHOR_EMAIL__ = 'davidhalter88@gmail.com'
 
-readme = open('README.rst').read() + '\n\n' + open('CHANGELOG.rst').read()
-packages = ['jedi', 'jedi.parser', 'jedi.parser.pgen2', 'jedi.parser.python',
-            'jedi.evaluate', 'jedi.evaluate.compiled', 'jedi.api']
+# Get the version from within jedi. It's defined in exactly one place now.
+with open('jedi/__init__.py') as f:
+    tree = ast.parse(f.read())
+version = tree.body[1].value.s
 
-import jedi
+readme = open('README.rst').read() + '\n\n' + open('CHANGELOG.rst').read()
+packages = ['jedi', 'jedi.evaluate', 'jedi.evaluate.compiled', 'jedi.api']
+with open('requirements.txt') as f:
+    install_requires = f.read().splitlines()
 
 setup(name='jedi',
-      version=jedi.__version__,
+      version=version,
       description='An autocompletion tool for Python that can be used for text editors.',
       author=__AUTHOR__,
       author_email=__AUTHOR_EMAIL__,
@@ -29,7 +31,8 @@ setup(name='jedi',
       keywords='python completion refactoring vim',
       long_description=readme,
       packages=packages,
-      package_data={'jedi': ['evaluate/compiled/fake/*.pym', 'parser/grammar*.txt']},
+      install_requires=install_requires,
+      package_data={'jedi': ['evaluate/compiled/fake/*.pym']},
       platforms=['any'],
       classifiers=[
           'Development Status :: 4 - Beta',

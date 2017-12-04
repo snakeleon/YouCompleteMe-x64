@@ -6,7 +6,7 @@ from inspect import cleandoc
 
 import pytest
 
-from jedi import Script, defined_names, __doc__ as jedi_doc, names
+from jedi import Script, __doc__ as jedi_doc, names
 from ..helpers import cwd_at
 from ..helpers import TestCase
 
@@ -42,7 +42,7 @@ def make_definitions():
     """)
 
     definitions = []
-    definitions += defined_names(source)
+    definitions += names(source)
 
     source += dedent("""
     variable = sys or C or x or f or g or g() or h""")
@@ -94,7 +94,7 @@ def test_function_call_signature_in_doc():
     def f(x, y=1, z='a'):
         pass
     f""").goto_definitions()
-    doc = defs[0].doc
+    doc = defs[0].docstring()
     assert "f(x, y=1, z='a')" in str(doc)
 
 
@@ -104,7 +104,7 @@ def test_class_call_signature():
         def __init__(self, x, y=1, z='a'):
             pass
     Foo""").goto_definitions()
-    doc = defs[0].doc
+    doc = defs[0].docstring()
     assert "Foo(self, x, y=1, z='a')" in str(doc)
 
 
@@ -358,7 +358,7 @@ class TestGotoAssignments(TestCase):
         nms = names('import json as foo', references=True)
         assert nms[0].name == 'json'
         assert nms[0].type == 'module'
-        assert nms[0]._name.tree_name.get_definition().type == 'import_name'
+        assert nms[0]._name.tree_name.parent.type == 'dotted_as_name'
         n = nms[0].goto_assignments()[0]
         assert n.name == 'json'
         assert n.type == 'module'
@@ -366,7 +366,7 @@ class TestGotoAssignments(TestCase):
 
         assert nms[1].name == 'foo'
         assert nms[1].type == 'module'
-        assert nms[1]._name.tree_name.get_definition().type == 'import_name'
+        assert nms[1]._name.tree_name.parent.type == 'dotted_as_name'
         ass = nms[1].goto_assignments()
         assert len(ass) == 1
         assert ass[0].name == 'json'

@@ -32,7 +32,7 @@ from jedi.evaluate import pep0484
 from jedi.evaluate import context
 from jedi.evaluate import precedence
 from jedi.evaluate import recursion
-from jedi.evaluate.cache import memoize_default
+from jedi.evaluate.cache import evaluator_method_cache
 from jedi.evaluate.filters import DictFilter, AbstractNameDefinition, \
     ParserTreeFilter
 from jedi.parser_utils import get_comp_fors
@@ -165,7 +165,6 @@ class GeneratorMixin(object):
 
 class Generator(GeneratorMixin, context.Context):
     """Handling of `yield` functions."""
-
     def __init__(self, evaluator, func_execution_context):
         super(Generator, self).__init__(evaluator, parent_context=evaluator.BUILTINS)
         self._func_execution_context = func_execution_context
@@ -229,7 +228,7 @@ class Comprehension(AbstractSequence):
         """
         return self._get_comprehension().children[index]
 
-    @memoize_default()
+    @evaluator_method_cache()
     def _get_comp_for_context(self, parent_context, comp_for):
         # TODO shouldn't this be part of create_context?
         return CompForContext.from_comp_for(parent_context, comp_for)
@@ -262,7 +261,7 @@ class Comprehension(AbstractSequence):
                     else:
                         yield iterated
 
-    @memoize_default(default=[])
+    @evaluator_method_cache(default=[])
     @common.to_list
     def _iterate(self):
         comp_fors = tuple(get_comp_fors(self._get_comp_for()))
@@ -502,15 +501,14 @@ class FakeSequence(_FakeArray):
         super(FakeSequence, self).__init__(evaluator, None, array_type)
         self._lazy_context_list = lazy_context_list
 
-    def _items(self):
-        raise DeprecationWarning
-        return self._context_list
-
     def py__getitem__(self, index):
         return set(self._lazy_context_list[index].infer())
 
     def py__iter__(self):
         return self._lazy_context_list
+
+    def py__bool__(self):
+        return bool(len(self._lazy_context_list))
 
     def __repr__(self):
         return "<%s of %s>" % (type(self).__name__, self._lazy_context_list)
@@ -530,12 +528,6 @@ class FakeDict(_FakeArray):
 
     def dict_values(self):
         return unite(lazy_context.infer() for lazy_context in self._dct.values())
-
-    def _items(self):
-        raise DeprecationWarning
-        for key, values in self._dct.items():
-            # TODO this is not proper. The values could be multiple values?!
-            yield key, values[0]
 
     def exact_key_items(self):
         return self._dct.items()
@@ -662,7 +654,7 @@ def py__getitem__(evaluator, context, types, trailer):
         if isinstance(index, (compiled.CompiledObject, Slice)):
             index = index.obj
 
-        if type(index) not in (float, int, str, unicode, slice):
+        if type(index) not in (float, int, str, unicode, slice, type(Ellipsis)):
             # If the index is not clearly defined, we have to get all the
             # possiblities.
             for typ in list(types):
@@ -699,7 +691,7 @@ def check_array_additions(context, sequence):
     return _check_array_additions(context, sequence)
 
 
-@memoize_default(default=set())
+@evaluator_method_cache(default=set())
 @debug.increase_indent
 def _check_array_additions(context, sequence):
     """
@@ -869,8 +861,11 @@ def create_index_types(evaluator, context, index):
     if index == ':':
         # Like array[:]
         return set([Slice(context, None, None, None)])
-    elif index.type == 'subscript':  # subscript is a slice operation.
-        # Like array[:3]
+
+    elif index.type == 'subscript' and not index.children[0] == '.':
+        # subscript basically implies a slice operation, except for Python 2's
+        # Ellipsis.
+        # e.g. array[:3]
         result = []
         for el in index.children:
             if el == ':':

@@ -16,25 +16,26 @@ import os
 import pkgutil
 import sys
 
+from parso.python import tree
+from parso.tree import search_ancestor
+from parso.cache import parser_cache
+from parso import python_bytes_to_unicode
+
 from jedi._compatibility import find_module, unicode, ImplicitNSInfo
 from jedi import debug
 from jedi import settings
-from jedi.common import source_to_unicode, unite
-from jedi.parser.python import parse
-from jedi.parser.python import tree
-from jedi.parser.tree import search_ancestor
-from jedi.parser.cache import parser_cache
+from jedi.common import unite
 from jedi.evaluate import sys_path
 from jedi.evaluate import helpers
 from jedi.evaluate import compiled
 from jedi.evaluate import analysis
-from jedi.evaluate.cache import memoize_default
+from jedi.evaluate.cache import evaluator_method_cache
 from jedi.evaluate.filters import AbstractNameDefinition
 
 
 # This memoization is needed, because otherwise we will infinitely loop on
 # certain imports.
-@memoize_default(default=set())
+@evaluator_method_cache(default=set())
 def infer_import(context, tree_name, is_goto=False):
     module_context = context.get_root_context()
     import_node = search_ancestor(tree_name, 'import_name', 'import_from')
@@ -61,12 +62,16 @@ def infer_import(context, tree_name, is_goto=False):
     #if import_node.is_nested() and not self.nested_resolve:
     #    scopes = [NestedImportModule(module, import_node)]
 
+    if not types:
+        return set()
+
     if from_import_name is not None:
         types = unite(
             t.py__getattribute__(
-                from_import_name.value if isinstance(from_import_name, tree.Name) else from_import_name,
+                from_import_name,
                 name_context=context,
-                is_goto=is_goto
+                is_goto=is_goto,
+                analysis_errors=False
             ) for t in types
         )
 
@@ -139,6 +144,7 @@ def get_init_path(directory_path):
 
 class ImportName(AbstractNameDefinition):
     start_pos = (1, 0)
+    _level = 0
 
     def __init__(self, parent_context, string_name):
         self.parent_context = parent_context
@@ -149,7 +155,11 @@ class ImportName(AbstractNameDefinition):
             self.parent_context.evaluator,
             [self.string_name],
             self.parent_context,
+            level=self._level,
         ).follow()
+
+    def goto(self):
+        return [m.name for m in self.infer()]
 
     def get_root_context(self):
         # Not sure if this is correct.
@@ -161,13 +171,7 @@ class ImportName(AbstractNameDefinition):
 
 
 class SubModuleName(ImportName):
-    def infer(self):
-        return Importer(
-            self.parent_context.evaluator,
-            [self.string_name],
-            self.parent_context,
-            level=1
-        ).follow()
+    _level = 1
 
 
 class Importer(object):
@@ -222,9 +226,17 @@ class Importer(object):
                         import_path = []
                         # TODO add import error.
                         debug.warning('Attempted relative import beyond top-level package.')
+                # If no path is defined in the module we have no ideas where we
+                # are in the file system. Therefore we cannot know what to do.
+                # In this case we just let the path there and ignore that it's
+                # a relative path. Not sure if that's a good idea.
             else:
                 # Here we basically rewrite the level to 0.
-                import_path = tuple(base) + tuple(import_path)
+                base = tuple(base)
+                if level > 1:
+                    base = base[:-level + 1]
+
+                import_path = base + tuple(import_path)
         self.import_path = import_path
 
     @property
@@ -469,7 +481,9 @@ def _load_module(evaluator, path=None, code=None, sys_path=None, parent_module=N
     if path is not None and path.endswith(('.py', '.zip', '.egg')) \
             and dotted_path not in settings.auto_import_modules:
 
-        module_node = parse(code=code, path=path, cache=True, diff_cache=True)
+        module_node = evaluator.grammar.parse(
+            code=code, path=path, cache=True, diff_cache=True,
+            cache_path=settings.cache_directory)
 
         from jedi.evaluate.representation import ModuleContext
         return ModuleContext(evaluator, module_node, path=path)
@@ -494,7 +508,8 @@ def get_modules_containing_name(evaluator, modules, name):
 
     def check_python_file(path):
         try:
-            node_cache_item = parser_cache[path]
+            # TODO I don't think we should use the cache here?!
+            node_cache_item = parser_cache[evaluator.grammar._hashed][path]
         except KeyError:
             try:
                 return check_fs(path)
@@ -506,11 +521,13 @@ def get_modules_containing_name(evaluator, modules, name):
 
     def check_fs(path):
         with open(path, 'rb') as f:
-            code = source_to_unicode(f.read())
+            code = python_bytes_to_unicode(f.read(), errors='replace')
             if name in code:
-                module_name = os.path.basename(path)[:-3]  # Remove `.py`.
                 module = _load_module(evaluator, path, code)
-                add_module(evaluator, module_name, module)
+
+                module_name = sys_path.dotted_path_in_sys_path(evaluator.sys_path, path)
+                if module_name is not None:
+                    add_module(evaluator, module_name, module)
                 return module
 
     # skip non python modules

@@ -20,18 +20,19 @@ x support for type hint comments for functions, `# type: (int, str) -> int`.
 """
 
 import itertools
-
 import os
-from jedi.parser import ParserSyntaxError
-from jedi.parser.python import parse, tree
+import re
+
+from parso import ParserSyntaxError
+from parso.python import tree
+
 from jedi.common import unite
-from jedi.evaluate.cache import memoize_default
+from jedi.evaluate.cache import evaluator_method_cache
 from jedi.evaluate import compiled
 from jedi.evaluate.context import LazyTreeContext
 from jedi import debug
 from jedi import _compatibility
 from jedi import parser_utils
-import re
 
 
 def _evaluate_for_annotation(context, annotation, index=None):
@@ -63,7 +64,7 @@ def _fix_forward_reference(context, node):
     if isinstance(evaled_node, compiled.CompiledObject) and \
             isinstance(evaled_node.obj, str):
         try:
-            new_node = parse(
+            new_node = context.evaluator.grammar.parse(
                 _compatibility.unicode(evaled_node.obj),
                 start_symbol='eval_input',
                 error_recovery=False
@@ -80,7 +81,7 @@ def _fix_forward_reference(context, node):
         return node
 
 
-@memoize_default()
+@evaluator_method_cache()
 def infer_param(execution_context, param):
     annotation = param.annotation
     module_context = execution_context.get_root_context()
@@ -93,14 +94,14 @@ def py__annotations__(funcdef):
         dct = {'return': return_annotation}
     else:
         dct = {}
-    for function_param in funcdef.params:
+    for function_param in funcdef.get_params():
         param_annotation = function_param.annotation
         if param_annotation is not None:
             dct[function_param.name.value] = param_annotation
     return dct
 
 
-@memoize_default()
+@evaluator_method_cache()
 def infer_return_types(function_context):
     annotation = py__annotations__(function_context.tree_node).get("return", None)
     module_context = function_context.get_root_context()
@@ -110,7 +111,7 @@ def infer_return_types(function_context):
 _typing_module = None
 
 
-def _get_typing_replacement_module():
+def _get_typing_replacement_module(grammar):
     """
     The idea is to return our jedi replacement for the PEP-0484 typing module
     as discussed at https://github.com/davidhalter/jedi/issues/663
@@ -121,7 +122,7 @@ def _get_typing_replacement_module():
             os.path.abspath(os.path.join(__file__, "../jedi_typing.py"))
         with open(typing_path) as f:
             code = _compatibility.unicode(f.read())
-        _typing_module = parse(code)
+        _typing_module = grammar.parse(code)
     return _typing_module
 
 
@@ -155,7 +156,7 @@ def py__getitem__(context, typ, node):
     from jedi.evaluate.representation import ModuleContext
     typing = ModuleContext(
         context.evaluator,
-        module_node=_get_typing_replacement_module(),
+        module_node=_get_typing_replacement_module(context.evaluator.latest_grammar),
         path=None
     )
     factories = typing.py__getattribute__("factory")
@@ -198,7 +199,7 @@ def find_type_from_comment_hint_assign(context, node, name):
 
 def _find_type_from_comment_hint(context, node, varlist, name):
     index = None
-    if varlist.type in ("testlist_star_expr", "exprlist"):
+    if varlist.type in ("testlist_star_expr", "exprlist", "testlist"):
         # something like "a, b = 1, 2"
         index = 0
         for child in varlist.children:

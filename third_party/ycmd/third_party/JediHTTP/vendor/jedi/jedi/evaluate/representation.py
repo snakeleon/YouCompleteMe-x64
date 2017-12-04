@@ -1,5 +1,5 @@
 """
-Like described in the :mod:`jedi.parser.python.tree` module,
+Like described in the :mod:`parso.python.tree` module,
 there's a need for an ast like module to represent the states of parsed
 modules.
 
@@ -43,11 +43,12 @@ import imp
 import re
 from itertools import chain
 
+from parso.python import tree
+from parso import python_bytes_to_unicode
+
 from jedi._compatibility import use_metaclass
-from jedi.parser.python import tree
 from jedi import debug
-from jedi import common
-from jedi.evaluate.cache import memoize_default, CachedMetaClass, NO_DEFAULT
+from jedi.evaluate.cache import evaluator_method_cache, CachedMetaClass
 from jedi.evaluate import compiled
 from jedi.evaluate import recursion
 from jedi.evaluate import iterable
@@ -61,10 +62,10 @@ from jedi.evaluate.filters import ParserTreeFilter, FunctionExecutionFilter, \
     GlobalNameFilter, DictFilter, ContextName, AbstractNameDefinition, \
     ParamName, AnonymousInstanceParamName, TreeNameDefinition, \
     ContextNameMixin
-from jedi.evaluate.dynamic import search_params
 from jedi.evaluate import context
 from jedi.evaluate.context import ContextualizedNode
 from jedi import parser_utils
+from jedi.evaluate.parser_cache import get_yield_exprs
 
 
 def apply_py__get__(context, base_context):
@@ -114,7 +115,7 @@ class ClassContext(use_metaclass(CachedMetaClass, context.TreeContext)):
         super(ClassContext, self).__init__(evaluator, parent_context=parent_context)
         self.tree_node = classdef
 
-    @memoize_default(default=())
+    @evaluator_method_cache(default=())
     def py__mro__(self):
         def add(cls):
             if cls not in mro:
@@ -150,7 +151,7 @@ class ClassContext(use_metaclass(CachedMetaClass, context.TreeContext)):
                         add(cls_new)
         return tuple(mro)
 
-    @memoize_default(default=())
+    @evaluator_method_cache(default=())
     def py__bases__(self):
         arglist = self.tree_node.get_super_arglist()
         if arglist:
@@ -169,7 +170,7 @@ class ClassContext(use_metaclass(CachedMetaClass, context.TreeContext)):
     def get_params(self):
         from jedi.evaluate.instance import AnonymousInstance
         anon = AnonymousInstance(self.evaluator, self.parent_context, self)
-        return [AnonymousInstanceParamName(anon, param.name) for param in self.funcdef.params]
+        return [AnonymousInstanceParamName(anon, param.name) for param in self.funcdef.get_params()]
 
     def get_filters(self, search_global, until_position=None, origin_scope=None, is_instance=False):
         if search_global:
@@ -257,17 +258,17 @@ class FunctionContext(use_metaclass(CachedMetaClass, context.TreeContext)):
         """
         Created to be used by inheritance.
         """
-        if self.tree_node.is_generator():
+        yield_exprs = get_yield_exprs(self.evaluator, self.tree_node)
+        if yield_exprs:
             return set([iterable.Generator(self.evaluator, function_execution)])
         else:
             return function_execution.get_return_values()
 
     def get_function_execution(self, arguments=None):
-        e = self.evaluator
         if arguments is None:
-            return AnonymousFunctionExecution(e, self.parent_context, self)
-        else:
-            return FunctionExecutionContext(e, self.parent_context, self, arguments)
+            arguments = param.AnonymousArguments()
+
+        return FunctionExecutionContext(self.evaluator, self.parent_context, self, arguments)
 
     def py__call__(self, arguments):
         function_execution = self.get_function_execution(arguments)
@@ -290,7 +291,8 @@ class FunctionContext(use_metaclass(CachedMetaClass, context.TreeContext)):
 
     def get_param_names(self):
         function_execution = self.get_function_execution()
-        return [ParamName(function_execution, param.name) for param in self.tree_node.params]
+        return [ParamName(function_execution, param.name)
+                for param in self.tree_node.get_params()]
 
 
 class FunctionExecutionContext(context.TreeContext):
@@ -310,7 +312,7 @@ class FunctionExecutionContext(context.TreeContext):
         self.tree_node = function_context.tree_node
         self.var_args = var_args
 
-    @memoize_default(default=set())
+    @evaluator_method_cache(default=set())
     @recursion.execution_recursion_decorator()
     def get_return_values(self, check_yields=False):
         funcdef = self.tree_node
@@ -319,7 +321,7 @@ class FunctionExecutionContext(context.TreeContext):
 
         if check_yields:
             types = set()
-            returns = funcdef.iter_yield_exprs()
+            returns = get_yield_exprs(self.evaluator, funcdef)
         else:
             returns = funcdef.iter_return_stmts()
             types = set(docstrings.infer_return_types(self.function_context))
@@ -333,13 +335,23 @@ class FunctionExecutionContext(context.TreeContext):
                 if check_yields:
                     types |= set(self._eval_yield(r))
                 else:
-                    types |= self.eval_node(r.children[1])
+                    try:
+                        children = r.children
+                    except AttributeError:
+                        types.add(compiled.create(self.evaluator, None))
+                    else:
+                        types |= self.eval_node(children[1])
             if check is flow_analysis.REACHABLE:
                 debug.dbg('Return reachable: %s', r)
                 break
         return types
 
     def _eval_yield(self, yield_expr):
+        if yield_expr.type == 'keyword':
+            # `yield` just yields None.
+            yield context.LazyKnownContext(compiled.create(self.evaluator, None))
+            return
+
         node = yield_expr.children[1]
         if node.type == 'yield_arg':  # It must be a yield from.
             cn = ContextualizedNode(self, node.children[1])
@@ -352,7 +364,7 @@ class FunctionExecutionContext(context.TreeContext):
     def get_yield_values(self):
         for_parents = [(y, tree.search_ancestor(y, 'for_stmt', 'funcdef',
                                                 'while_stmt', 'if_stmt'))
-                       for y in self.tree_node.iter_yield_exprs()]
+                       for y in get_yield_exprs(self.evaluator, self.tree_node)]
 
         # Calculate if the yields are placed within the same for loop.
         yields_order = []
@@ -402,20 +414,9 @@ class FunctionExecutionContext(context.TreeContext):
                                              until_position=until_position,
                                              origin_scope=origin_scope)
 
-    @memoize_default(default=NO_DEFAULT)
+    @evaluator_method_cache()
     def get_params(self):
-        return param.get_params(self, self.var_args)
-
-
-class AnonymousFunctionExecution(FunctionExecutionContext):
-    def __init__(self, evaluator, parent_context, function_context):
-        super(AnonymousFunctionExecution, self).__init__(
-            evaluator, parent_context, function_context, var_args=None)
-
-    @memoize_default(default=NO_DEFAULT)
-    def get_params(self):
-        # We need to do a dynamic search here.
-        return search_params(self.evaluator, self, self.tree_node)
+        return self.var_args.get_params(self)
 
 
 class ModuleAttributeName(AbstractNameDefinition):
@@ -471,7 +472,7 @@ class ModuleContext(use_metaclass(CachedMetaClass, context.TreeContext)):
     # I'm not sure if the star import cache is really that effective anymore
     # with all the other really fast import caches. Recheck. Also we would need
     # to push the star imports into Evaluator.modules, if we reenable this.
-    @memoize_default([])
+    @evaluator_method_cache([])
     def star_imports(self):
         modules = []
         for i in self.tree_node.iter_imports():
@@ -484,7 +485,7 @@ class ModuleContext(use_metaclass(CachedMetaClass, context.TreeContext)):
                 modules += new
         return modules
 
-    @memoize_default()
+    @evaluator_method_cache()
     def _module_attributes_dict(self):
         names = ['__file__', '__package__', '__doc__', '__name__']
         # All the additional module attributes are strings.
@@ -502,7 +503,7 @@ class ModuleContext(use_metaclass(CachedMetaClass, context.TreeContext)):
             return re.sub('\.[a-z]+-\d{2}[mud]{0,3}$', '', r.group(1))
 
     @property
-    @memoize_default()
+    @evaluator_method_cache()
     def name(self):
         return ModuleName(self, self._string_name)
 
@@ -546,7 +547,7 @@ class ModuleContext(use_metaclass(CachedMetaClass, context.TreeContext)):
         init_path = self.py__file__()
         if os.path.basename(init_path) == '__init__.py':
             with open(init_path, 'rb') as f:
-                content = common.source_to_unicode(f.read())
+                content = python_bytes_to_unicode(f.read(), errors='replace')
                 # these are strings that need to be used for namespace packages,
                 # the first one is ``pkgutil``, the second ``pkg_resources``.
                 options = ('declare_namespace(__name__)', 'extend_path(__path__')
@@ -585,7 +586,7 @@ class ModuleContext(use_metaclass(CachedMetaClass, context.TreeContext)):
         else:
             return self._py__path__
 
-    @memoize_default()
+    @evaluator_method_cache()
     def _sub_modules_dict(self):
         """
         Lists modules in the directory of this module (if this module is a
@@ -649,7 +650,7 @@ class ImplicitNamespaceContext(use_metaclass(CachedMetaClass, context.TreeContex
         yield DictFilter(self._sub_modules_dict())
 
     @property
-    @memoize_default()
+    @evaluator_method_cache()
     def name(self):
         string_name = self.py__package__().rpartition('.')[-1]
         return ImplicitNSName(self, string_name)
@@ -666,7 +667,7 @@ class ImplicitNamespaceContext(use_metaclass(CachedMetaClass, context.TreeContex
     def py__path__(self):
         return lambda: [self.paths]
 
-    @memoize_default()
+    @evaluator_method_cache()
     def _sub_modules_dict(self):
         names = {}
 

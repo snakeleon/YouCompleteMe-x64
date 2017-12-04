@@ -43,6 +43,8 @@ from . import some_variable
 from . import arrays
 #? []
 from . import import_tree as ren
+#? []
+import json as 
 
 import os
 #? os.path.join
@@ -63,9 +65,9 @@ import datetime.date
 
 #? 21 ['import']
 from import_tree.pkg import pkg
-#? 49 ['a', '__name__', '__doc__', '__file__', '__package__']
+#? 49 ['a', 'foobar', '__name__', '__doc__', '__file__', '__package__']
 from import_tree.pkg.mod1 import not_existant,    # whitespace before
-#? ['a', '__name__', '__doc__', '__file__', '__package__']
+#? ['a', 'foobar', '__name__', '__doc__', '__file__', '__package__']
 from import_tree.pkg.mod1 import not_existant, 
 #? 22 ['mod1']
 from import_tree.pkg. import mod1

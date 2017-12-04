@@ -1,9 +1,10 @@
 """
 Tests of ``jedi.api.Interpreter``.
 """
+import pytest
 
 import jedi
-from jedi._compatibility import is_py33
+from jedi._compatibility import is_py33, exec_function, py_version
 from jedi.evaluate.compiled import mixed
 
 
@@ -170,11 +171,13 @@ def test_slice():
 def test_getitem_side_effects():
     class Foo2():
         def __getitem__(self, index):
-            # possible side effects here, should therefore not call this.
+            # Possible side effects here, should therefore not call this.
+            if True:
+                raise NotImplementedError()
             return index
 
     foo = Foo2()
-    _assert_interpreter_complete('foo[0].', locals(), [])
+    _assert_interpreter_complete('foo["asdf"].upper', locals(), ['upper'])
 
 
 def test_property_error_oldstyle():
@@ -218,3 +221,72 @@ def test_param_completion():
     _assert_interpreter_complete('foo(bar', locals(), ['bar'])
     # TODO we're not yet using the Python3.5 inspect.signature, yet.
     assert not jedi.Interpreter('lambd(xyz', [locals()]).completions()
+
+
+def test_endless_yield():
+    lst = [1] * 10000
+    # If iterating over lists it should not be possible to take an extremely
+    # long time.
+    _assert_interpreter_complete('list(lst)[9000].rea', locals(), ['real'])
+
+
+@pytest.mark.skipif('py_version < 33', reason='inspect.signature was created in 3.3.')
+def test_completion_params():
+    foo = lambda a, b=3: None
+
+    script = jedi.Interpreter('foo', [locals()])
+    c, = script.completions()
+    assert [p.name for p in c.params] == ['a', 'b']
+    assert c.params[0]._goto_definitions() == []
+    t, = c.params[1]._goto_definitions()
+    assert t.name == 'int'
+
+
+@pytest.mark.skipif('py_version < 33', reason='inspect.signature was created in 3.3.')
+def test_completion_param_annotations():
+    # Need to define this function not directly in Python. Otherwise Jedi is to
+    # clever and uses the Python code instead of the signature object.
+    code = 'def foo(a: 1, b: str, c: int = 1.0): pass'
+    exec_function(code, locals())
+    script = jedi.Interpreter('foo', [locals()])
+    c, = script.completions()
+    a, b, c = c.params
+    assert a._goto_definitions() == []
+    assert [d.name for d in b._goto_definitions()] == ['str']
+    assert set([d.name for d in c._goto_definitions()]) == set(['int', 'float'])
+
+
+def test_more_complex_instances():
+    class Something:
+        def foo(self, other):
+            return self
+
+    class Base():
+        def wow(self):
+            return Something()
+
+    #script = jedi.Interpreter('Base().wow().foo', [locals()])
+    #c, = script.completions()
+    #assert c.name == 'foo'
+
+    x = Base()
+    script = jedi.Interpreter('x.wow().foo', [locals()])
+    c, = script.completions()
+    assert c.name == 'foo'
+
+
+def test_repr_execution_issue():
+    """
+    Anticipate inspect.getfile executing a __repr__ of all kinds of objects.
+    See also #919.
+    """
+    class ErrorRepr:
+        def __repr__(self):
+            raise Exception('xyz')
+
+    er = ErrorRepr()
+
+    script = jedi.Interpreter('er', [locals()])
+    d, = script.goto_definitions()
+    assert d.name == 'ErrorRepr'
+    assert d.type == 'instance'
