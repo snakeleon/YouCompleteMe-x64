@@ -6,6 +6,30 @@ YouCompleteMe: a code-completion engine for Vim
 [![Build status](https://ci.appveyor.com/api/projects/status/ag9uqwi8s6btwjd8/branch/master?svg=true)](https://ci.appveyor.com/project/Valloric/YouCompleteMe)
 [![Coverage Status](https://codecov.io/gh/Valloric/YouCompleteMe/branch/master/graph/badge.svg)](https://codecov.io/gh/Valloric/YouCompleteMe)
 
+Help, Advice, Support
+---------------------
+
+Looking for help, advice or support? Having problems getting YCM to work?
+
+First carefully read the [installation instructions](#installation) for your OS.
+We recommend you use the supplied `install.py`.
+
+Next check the [User Guide](#user-guide) section on the semantic completer that
+you are using. For C/C++/Objective C, you  _must_ read
+[this section](#c-family-semantic-completion).
+
+Finally, check the [FAQ](#faq).
+
+If, after reading the installation and user guides, and checking the FAQ, you're
+still having trouble, check the [contacts](#contact) section below for how to
+get in touch.
+
+Please do **NOT** go to #vim on freenode for support. Please contact the
+YouCompleteMe maintainers directly using the [contact details](#contact) below.
+
+Contents
+--------
+
 - [Intro](#intro)
 - [Installation](#installation)
     - [Mac OS X](#mac-os-x)
@@ -46,6 +70,7 @@ YouCompleteMe: a code-completion engine for Vim
 	- [脚本配置](#脚本配置)
 	- [使用技巧](#使用技巧)
     - [Visual C Runtime 问题](#Visual-C-Runtime-问题)
+
 
 Intro
 -----
@@ -3081,13 +3106,17 @@ If you have questions about the plugin or need help, please join the [Gitter
 room][gitter] or use the [ycm-users][] mailing list.
 
 If you have bug reports or feature suggestions, please use the [issue
-tracker][tracker].
+tracker][tracker]. Before you do, please carefully read
+[CONTRIBUTING.md][contributing-md] as this asks for important diagnostics which
+the team will use to help get you going.
 
 The latest version of the plugin is available at
 <http://valloric.github.io/YouCompleteMe/>.
 
 The author's homepage is <http://val.markovic.io>.
 
+Please do **NOT** go to #vim on freenode for support. Please contact the
+YouCompleteMe maintainers directly using the [contact details](#contact) below.
 
 License
 -------
@@ -3260,6 +3289,7 @@ This software is licensed under the [GPL v3 license][gpl].
 [vim-nerdtree-tabs]: https://github.com/jistr/vim-nerdtree-tabs
 [++enc]: http://vimdoc.sourceforge.net/htmldoc/editing.html#++enc
 [rustup]: https://www.rustup.rs/
+[contributing-md]: https://github.com/Valloric/YouCompleteMe/blob/master/CONTRIBUTING.md
 [YouCompleteMe-x86]: https://github.com/snakeleon/YouCompleteMe-x86
 [YouCompleteMe-x64]: https://github.com/snakeleon/YouCompleteMe-x64
 [Vim builds for Windows]: https://tuxproject.de/projects/vim/
