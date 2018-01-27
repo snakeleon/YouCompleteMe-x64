@@ -1,10 +1,11 @@
 YouCompleteMe: a code-completion engine for Vim
 ===============================================
 
-[![Gitter Room](https://img.shields.io/gitter/room/Valloric/YouCompleteMe.svg)](https://gitter.im/Valloric/YouCompleteMe)
-[![Build Status](https://travis-ci.org/Valloric/YouCompleteMe.svg?branch=master)](https://travis-ci.org/Valloric/YouCompleteMe)
-[![Build status](https://ci.appveyor.com/api/projects/status/ag9uqwi8s6btwjd8/branch/master?svg=true)](https://ci.appveyor.com/project/Valloric/YouCompleteMe)
-[![Coverage Status](https://codecov.io/gh/Valloric/YouCompleteMe/branch/master/graph/badge.svg)](https://codecov.io/gh/Valloric/YouCompleteMe)
+[![Gitter room](https://img.shields.io/gitter/room/Valloric/YouCompleteMe.svg)](https://gitter.im/Valloric/YouCompleteMe)
+[![Linux build status](https://img.shields.io/travis/Valloric/YouCompleteMe/master.svg?label=Linux)](https://travis-ci.org/Valloric/YouCompleteMe)
+[![macOS build status](https://img.shields.io/circleci/project/github/Valloric/YouCompleteMe/master.svg?label=macOS)](https://circleci.com/gh/Valloric/YouCompleteMe)
+[![Windows build status](https://img.shields.io/appveyor/ci/Valloric/YouCompleteMe/master.svg?label=Windows)](https://ci.appveyor.com/project/Valloric/YouCompleteMe)
+[![Coverage status](https://img.shields.io/codecov/c/github/Valloric/YouCompleteMe/master.svg)](https://codecov.io/gh/Valloric/YouCompleteMe)
 
 Help, Advice, Support
 ---------------------
@@ -3136,9 +3137,9 @@ This software is licensed under the [GPL v3 license][gpl].
 
 ###关于版本
 
-- ycmd  核心版本: 31 (04 December 2017) 静态编译
+- ycmd  核心版本: 31 (27 January 2018) 静态编译
 - libclang  版本: 3.9.1 (23 December 2016) [Clang][Clang]
-- Python    支持: 3.6.2 (17 July 2017) [Python][python-win-download]
+- Python    支持: 3.6.4 (19 December 2017) [Python][python-win-download]
 
 支持操作系统:
 
