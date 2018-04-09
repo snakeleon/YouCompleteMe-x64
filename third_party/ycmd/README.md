@@ -1,9 +1,10 @@
 ycmd: a code-completion & comprehension server
 ==============================================
 
-[![Build Status](https://travis-ci.org/Valloric/ycmd.svg?branch=master)](https://travis-ci.org/Valloric/ycmd)
-[![Build status](https://ci.appveyor.com/api/projects/status/6fetp5xwb0kkuv2w/branch/master?svg=true)](https://ci.appveyor.com/project/Valloric/ycmd)
-[![Coverage Status](https://codecov.io/gh/Valloric/ycmd/branch/master/graph/badge.svg)](https://codecov.io/gh/Valloric/ycmd)
+[![Linux build status](https://img.shields.io/travis/Valloric/ycmd/master.svg?label=Linux)](https://travis-ci.org/Valloric/ycmd)
+[![macOS build status](https://img.shields.io/circleci/project/github/Valloric/ycmd/master.svg?label=macOS)](https://circleci.com/gh/Valloric/ycmd)
+[![Windows build status](https://img.shields.io/appveyor/ci/Valloric/ycmd/master.svg?label=Windows)](https://ci.appveyor.com/project/Valloric/ycmd)
+[![Coverage status](https://img.shields.io/codecov/c/github/Valloric/ycmd/master.svg)](https://codecov.io/gh/Valloric/ycmd)
 
 ycmd is a server that provides APIs for code-completion and other
 code-comprehension use-cases like semantic GoTo commands (and others). For
@@ -12,8 +13,9 @@ certain filetypes, ycmd can also provide diagnostic errors and warnings.
 ycmd was originally part of [YouCompleteMe][ycm]'s codebase, but has been split
 out into a separate project so that it can be used in editors other than Vim.
 
-The best way to learn how to interact with ycmd is by reading through (and
-running) the [`example_client.py`][example-client] file. See the [README for the
+Check [the API documentation][api-docs] if you want to implement a client. A
+good way to learn how to interact with ycmd is by reading through (and running)
+the [`example_client.py`][example-client] file. See the [README for the
 examples][example-readme] folder for details on how to run the example client.
 
 Known ycmd clients:
@@ -22,7 +24,8 @@ Known ycmd clients:
 - [YouCompleteMe][ycm]: Vim client, stable and exposes all ycmd features.
 - [emacs-ycmd][]: Emacs client.
 - [you-complete-me][atom-you-complete-me]: Atom client.
-- [YcmdCompletion][sublime-ycmd]: Sublime client
+- [YcmdCompletion][sublime-ycmd-completion]: Sublime client
+- [sublime-ycmd][sublime-ycmd]: Sublime Text 3 client.
 - [kak-ycmd][]: Kakoune client.
 - [you-complete-me][vscode-you-complete-me]: VSCode client.
 - [gycm][]: Geany client.
@@ -33,22 +36,22 @@ built one.
 
 Building
 --------
-**If you're looking to develop ycmd, see the [instructions for setting up a dev
-environment][dev-setup] and for [running the tests][test-setup].**
+**If you're looking to develop ycmd, see the [instructions for running the
+tests][test-setup].**
 
-This is all for Ubuntu Linux. Details on getting ycmd running on other OS's can be
-found in [YCM's instructions][ycm-install] (ignore the Vim-specific parts). Note
-that **ycmd runs on Python 2.6, 2.7 and 3.3+.**
+This is all for Ubuntu Linux. Details on getting ycmd running on other OS's can
+be found in [YCM's instructions][ycm-install] (ignore the Vim-specific parts).
+Note that **ycmd runs on Python 2.7 and 3.4+.**
 
 First, install the minimal dependencies:
 ```
-sudo apt-get install build-essential cmake python-dev
+sudo apt install build-essential cmake python-dev
 ```
 
 Next, install the language specific dependencies you need:
-- `sudo apt-get install golang-go` for Go.
-- `sudo apt-get install npm` for JavaScript and TypeScript.
-- `sudo apt-get install mono-xbuild` for C#.
+- `sudo apt install golang-go` for Go.
+- `sudo apt install npm` for JavaScript and TypeScript.
+- `sudo apt install mono-devel` for C#.
 - Concerning Rust, install Cargo and rustc with [rustup](https://www.rustup.rs/).
 
 When you first clone the repository you'll need to update the submodules:
@@ -73,7 +76,8 @@ API notes
   header. The HMAC is computed from the shared secret passed to the server on
   startup and the request/response body. The digest algorithm is SHA-256. The
   server will also include the HMAC in its responses; you _must_ verify it
-  before using the response. See [`example_client.py`][example-client] to see how it's done.
+  before using the response. See [`example_client.py`][example-client] to see
+  how it's done.
 
 How ycmd works
 --------------
@@ -85,11 +89,12 @@ provided previously and any tags files produced by ctags. This engine is
 non-semantic.
 
 There are also several semantic engines in YCM. There's a libclang-based
-completer that provides semantic completion for C-family languages.  There's also a
-Jedi-based completer for semantic completion for Python, an OmniSharp-based
-completer for C#, a [Gocode][gocode]-based completer for Go (using [Godef][godef]
-for jumping to definitions), and a TSServer-based
-completer for TypeScript. More will be added with time.
+completer that provides semantic completion for C-family languages.  There's
+also a Jedi-based completer for semantic completion for Python, an
+OmniSharp-based completer for C#, a [Gocode][gocode]-based completer for Go
+(using [Godef][godef] for jumping to definitions), a TSServer-based completer
+for TypeScript and a [jdt.ls][jdtls]-based server for Java. More will be added
+with time.
 
 There are also other completion engines, like the filepath completer (part of
 the identifier completer).
@@ -224,6 +229,11 @@ The return value must be one of the following:
     include paths in the list of flags are relative. Defaults to ycmd working
     directory.
 
+  - `override_filename`: (optional) a string indicating the name of the file to
+    parse as the translation unit for the supplied file name. This fairly
+    advanced feature allows for projects that use a 'unity'-style build, or
+    for header files which depend on other includes in other files.
+
   - `do_cache`: (optional) a boolean indicating whether or not the result of
     this call (i.e. the list of flags) should be cached for this file name.
     Defaults to `True`. If unsure, the default is almost always correct.
@@ -311,7 +321,8 @@ This software is licensed under the [GPL v3 license][gpl].
 [ycmd-users]: https://groups.google.com/forum/?hl=en#!forum/ycmd-users
 [ycm]: http://valloric.github.io/YouCompleteMe/
 [atom-you-complete-me]: https://atom.io/packages/you-complete-me
-[sublime-ycmd]: https://packagecontrol.io/packages/YcmdCompletion
+[sublime-ycmd-completion]: https://packagecontrol.io/packages/YcmdCompletion
+[sublime-ycmd]: https://packagecontrol.io/packages/YouCompleteMe
 [semver]: http://semver.org/
 [hmac]: http://en.wikipedia.org/wiki/Hash-based_message_authentication_code
 [exploit]: https://groups.google.com/d/topic/ycm-users/NZAPrvaYgxo/discussion
@@ -337,3 +348,5 @@ This software is licensed under the [GPL v3 license][gpl].
 [vscode-you-complete-me]: https://marketplace.visualstudio.com/items?itemName=RichardHe.you-complete-me
 [gycm]: https://github.com/jakeanq/gycm
 [nano-ycmd]: https://github.com/orsonteodoro/nano-ycmd
+[jdtls]: https://github.com/eclipse/eclipse.jdt.ls
+[api-docs]: https://valloric.github.io/ycmd/

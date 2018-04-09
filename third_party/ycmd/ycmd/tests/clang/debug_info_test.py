@@ -27,8 +27,8 @@ from hamcrest import ( assert_that, contains, empty, has_entries, has_entry,
                        instance_of, matches_regexp )
 
 from ycmd.tests.clang import ( IsolatedYcmd, PathToTestFile, SharedYcmd,
-                               TemporaryClangTestDir, TemporaryClangProject )
-from ycmd.tests.test_utils import BuildRequest
+                               TemporaryClangProject )
+from ycmd.tests.test_utils import BuildRequest, TemporaryTestDir
 
 
 @SharedYcmd
@@ -50,6 +50,10 @@ def DebugInfo_FlagsWhenExtraConfLoadedAndNoCompilationDatabase_test( app ):
         has_entries( {
           'key': 'flags',
           'value': matches_regexp( "\['-x', 'c\+\+', .*\]" )
+        } ),
+        has_entries( {
+          'key': 'translation_unit',
+          'value': PathToTestFile( 'basic.cpp' )
         } )
       )
     } ) )
@@ -73,6 +77,10 @@ def DebugInfo_FlagsWhenNoExtraConfAndNoCompilationDatabase_test( app ):
         has_entries( {
           'key': 'flags',
           'value': '[]'
+        } ),
+        has_entries( {
+          'key': 'translation_unit',
+          'value': instance_of( str )
         } )
       )
     } ) )
@@ -91,6 +99,10 @@ def DebugInfo_FlagsWhenNoExtraConfAndNoCompilationDatabase_test( app ):
         has_entries( {
           'key': 'flags',
           'value': '[]'
+        } ),
+        has_entries( {
+          'key': 'translation_unit',
+          'value': instance_of( str )
         } )
       )
     } ) )
@@ -116,6 +128,10 @@ def DebugInfo_FlagsWhenExtraConfNotLoadedAndNoCompilationDatabase_test(
         has_entries( {
           'key': 'flags',
           'value': '[]'
+        } ),
+        has_entries( {
+          'key': 'translation_unit',
+          'value': PathToTestFile( 'basic.cpp' )
         } )
       )
     } ) )
@@ -124,7 +140,7 @@ def DebugInfo_FlagsWhenExtraConfNotLoadedAndNoCompilationDatabase_test(
 
 @IsolatedYcmd()
 def DebugInfo_FlagsWhenNoExtraConfAndCompilationDatabaseLoaded_test( app ):
-  with TemporaryClangTestDir() as tmp_dir:
+  with TemporaryTestDir() as tmp_dir:
     compile_commands = [
       {
         'directory': tmp_dir,
@@ -151,6 +167,10 @@ def DebugInfo_FlagsWhenNoExtraConfAndCompilationDatabaseLoaded_test( app ):
               'key': 'flags',
               'value': matches_regexp(
                   "\['clang\+\+', '-x', 'c\+\+', .*, '-Wall', .*\]" )
+            } ),
+            has_entries( {
+              'key': 'translation_unit',
+              'value': os.path.join( tmp_dir, 'test.cc' ),
             } )
           )
         } ) )
@@ -159,7 +179,7 @@ def DebugInfo_FlagsWhenNoExtraConfAndCompilationDatabaseLoaded_test( app ):
 
 @IsolatedYcmd()
 def DebugInfo_FlagsWhenNoExtraConfAndInvalidCompilationDatabase_test( app ):
-  with TemporaryClangTestDir() as tmp_dir:
+  with TemporaryTestDir() as tmp_dir:
     compile_commands = 'garbage'
     with TemporaryClangProject( tmp_dir, compile_commands ):
       request_data = BuildRequest(
@@ -179,7 +199,43 @@ def DebugInfo_FlagsWhenNoExtraConfAndInvalidCompilationDatabase_test( app ):
             has_entries( {
               'key': 'flags',
               'value': '[]'
+            } ),
+            has_entries( {
+              'key': 'translation_unit',
+              'value': os.path.join( tmp_dir, 'test.cc' )
             } )
           )
         } ) )
       )
+
+
+@SharedYcmd
+def DebugInfo_Unity( app ):
+  # Main TU
+  app.post_json( '/load_extra_conf_file',
+                 { 'filepath': PathToTestFile( '.ycm_extra_conf.py' ) } )
+
+  for filename in [ 'unity.cc', 'unity.h', 'unitya.cc' ]:
+    request_data = BuildRequest( filepath = PathToTestFile( filename ),
+                                 filetype = 'cpp' )
+    assert_that(
+      app.post_json( '/debug_info', request_data ).json,
+      has_entry( 'completer', has_entries( {
+        'name': 'C-family',
+        'servers': empty(),
+        'items': contains(
+          has_entries( {
+            'key': 'compilation database path',
+            'value': 'None'
+          } ),
+          has_entries( {
+            'key': 'flags',
+            'value': matches_regexp( "\['-x', 'c\+\+', .*\]" )
+          } ),
+          has_entries( {
+            'key': 'translation_unit',
+            'value': PathToTestFile( 'unity.cpp' )
+          } )
+        )
+      } ) )
+    )

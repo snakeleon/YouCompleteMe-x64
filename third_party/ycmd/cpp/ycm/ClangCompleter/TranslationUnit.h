@@ -18,7 +18,6 @@
 #ifndef TRANSLATIONUNIT_H_XQ7I6SVA
 #define TRANSLATIONUNIT_H_XQ7I6SVA
 
-#include "../DLLDefines.h"
 #include "UnsavedFile.h"
 #include "Diagnostic.h"
 #include "Location.h"
@@ -40,61 +39,68 @@ public:
   // This constructor creates an invalid, sentinel TU. All of it's methods
   // return empty vectors, and IsCurrentlyUpdating always returns true so that
   // no callers try to rely on the invalid TU.
-  YCM_DLL_EXPORT TranslationUnit();
+  YCM_EXPORT TranslationUnit();
   TranslationUnit( const TranslationUnit& ) = delete;
   TranslationUnit& operator=( const TranslationUnit& ) = delete;
 
-  YCM_DLL_EXPORT TranslationUnit(
+  YCM_EXPORT TranslationUnit(
     const std::string &filename,
     const std::vector< UnsavedFile > &unsaved_files,
     const std::vector< std::string > &flags,
     CXIndex clang_index );
 
-  YCM_DLL_EXPORT ~TranslationUnit();
+  YCM_EXPORT ~TranslationUnit();
 
   void Destroy();
 
-  YCM_DLL_EXPORT bool IsCurrentlyUpdating() const;
+  YCM_EXPORT bool IsCurrentlyUpdating() const;
 
-  std::vector< Diagnostic > Reparse(
+  YCM_EXPORT std::vector< Diagnostic > Reparse(
     const std::vector< UnsavedFile > &unsaved_files );
 
-  YCM_DLL_EXPORT std::vector< CompletionData > CandidatesForLocation(
+  YCM_EXPORT std::vector< CompletionData > CandidatesForLocation(
+    const std::string &filename,
     int line,
     int column,
     const std::vector< UnsavedFile > &unsaved_files );
 
-  YCM_DLL_EXPORT Location GetDeclarationLocation(
+  YCM_EXPORT Location GetDeclarationLocation(
+    const std::string &filename,
     int line,
     int column,
     const std::vector< UnsavedFile > &unsaved_files,
     bool reparse = true );
 
-  YCM_DLL_EXPORT Location GetDefinitionLocation(
+  YCM_EXPORT Location GetDefinitionLocation(
+    const std::string &filename,
     int line,
     int column,
     const std::vector< UnsavedFile > &unsaved_files,
     bool reparse = true );
 
-  YCM_DLL_EXPORT std::string GetTypeAtLocation(
+  YCM_EXPORT std::string GetTypeAtLocation(
+    const std::string &filename,
     int line,
     int column,
     const std::vector< UnsavedFile > &unsaved_files,
     bool reparse = true );
 
-  YCM_DLL_EXPORT std::string GetEnclosingFunctionAtLocation(
+  YCM_EXPORT std::string GetEnclosingFunctionAtLocation(
+    const std::string &filename,
     int line,
     int column,
     const std::vector< UnsavedFile > &unsaved_files,
     bool reparse = true );
 
   std::vector< FixIt > GetFixItsForLocationInFile(
+    const std::string &filename,
     int line,
     int column,
     const std::vector< UnsavedFile > &unsaved_files,
     bool reparse = true );
 
-  YCM_DLL_EXPORT DocumentationData GetDocsForLocationInFile(
+  YCM_EXPORT DocumentationData GetDocsForLocationInFile(
+    const std::string &filename,
     int line,
     int column,
     const std::vector< UnsavedFile > &unsaved_files,
@@ -108,13 +114,11 @@ private:
 
   void UpdateLatestDiagnostics();
 
-  CXCursor GetCursor( int line, int column );
+  CXCursor GetCursor( const std::string& filename, int line, int column );
 
   /////////////////////////////
   // PRIVATE MEMBER VARIABLES
   /////////////////////////////
-
-  std::string filename_;
 
   std::mutex diagnostics_mutex_;
   std::vector< Diagnostic > latest_diagnostics_;

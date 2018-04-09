@@ -1,4 +1,4 @@
-// Copyright (C) 2011, 2012 Google Inc.
+// Copyright (C) 2011-2018 ycmd contributors
 //
 // This file is part of ycmd.
 //
@@ -18,7 +18,6 @@
 #ifndef CANDIDATE_H_R5LZH6AC
 #define CANDIDATE_H_R5LZH6AC
 
-#include "DLLDefines.h"
 #include "LetterNode.h"
 
 #include <memory>
@@ -29,17 +28,17 @@ namespace YouCompleteMe {
 
 class Result;
 
-typedef std::bitset< NUM_LETTERS > Bitset;
+using Bitset = std::bitset< NUM_LETTERS >;
 
-YCM_DLL_EXPORT Bitset LetterBitsetFromString( const std::string &text );
+YCM_EXPORT Bitset LetterBitsetFromString( const std::string &text );
 
 // Public for tests
-YCM_DLL_EXPORT std::string GetWordBoundaryChars( const std::string &text );
+YCM_EXPORT std::string GetWordBoundaryChars( const std::string &text );
 
 class Candidate {
 public:
 
-  YCM_DLL_EXPORT explicit Candidate( const std::string &text );
+  YCM_EXPORT explicit Candidate( const std::string &text );
   // Make class noncopyable
   Candidate( const Candidate& ) = delete;
   Candidate& operator=( const Candidate& ) = delete;
@@ -54,7 +53,7 @@ public:
     return ( letters_present_ & query_bitset ) == query_bitset;
   }
 
-  YCM_DLL_EXPORT Result QueryMatchResult( const std::string &query,
+  YCM_EXPORT Result QueryMatchResult( const std::string &query,
                                           bool case_sensitive ) const;
 
 private:

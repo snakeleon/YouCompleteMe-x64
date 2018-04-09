@@ -26,17 +26,86 @@ from builtins import *  # noqa
 
 from ycm.tests import PathToTestFile
 from ycm.tests.test_utils import ( CurrentWorkingDirectory, ExtendedMock,
-                                   MockVimBuffers, MockVimCommand,
-                                   MockVimModule, VimBuffer, VimError )
+                                   MockVimBuffers, MockVimModule, VimBuffer,
+                                   VimError )
 MockVimModule()
 
 from ycm import vimsupport
 from nose.tools import eq_
-from hamcrest import assert_that, calling, contains, equal_to, has_entry, raises
+from hamcrest import ( assert_that, calling, contains, empty, equal_to,
+                       has_entry, raises )
 from mock import MagicMock, call, patch
 from ycmd.utils import ToBytes
 import os
 import json
+
+
+@patch( 'vim.eval', new_callable = ExtendedMock )
+def SetLocationListForBuffer_Current_test( vim_eval ):
+  diagnostics = [ {
+    'bufnr': 3,
+    'filename': 'some_filename',
+    'lnum': 5,
+    'col': 22,
+    'type': 'E',
+    'valid': 1
+  } ]
+  current_buffer = VimBuffer( '/test', number = 3, window = 7 )
+  with MockVimBuffers( [ current_buffer ], current_buffer, ( 1, 1 ) ):
+    vimsupport.SetLocationListForBuffer( 3, diagnostics )
+
+  # We asked for the buffer which is current, so we use winnr 0
+  vim_eval.assert_has_exact_calls( [
+    call( 'setloclist( 0, {0} )'.format( json.dumps( diagnostics ) ) )
+  ] )
+
+
+@patch( 'vim.eval', new_callable = ExtendedMock, side_effect = [ 8, 1 ] )
+def SetLocationListForBuffer_NotCurrent_test( vim_eval ):
+  diagnostics = [ {
+    'bufnr': 3,
+    'filename': 'some_filename',
+    'lnum': 5,
+    'col': 22,
+    'type': 'E',
+    'valid': 1
+  } ]
+  current_buffer = VimBuffer( '/test', number = 3, window = 7 )
+  other_buffer = VimBuffer( '/notcurrent', number = 1, window = 8 )
+  with MockVimBuffers( [ current_buffer, other_buffer ],
+                       current_buffer,
+                       ( 1, 1 ) ):
+    vimsupport.SetLocationListForBuffer( 1, diagnostics )
+
+  # We asked for a buffer which is not current, so we find the window
+  vim_eval.assert_has_exact_calls( [
+    call( 'bufwinnr(1)' ), # returns 8 due to side_effect
+    call( 'setloclist( 8, {0} )'.format( json.dumps( diagnostics ) ) )
+  ] )
+
+
+@patch( 'vim.eval', new_callable = ExtendedMock, side_effect = [ -1, 1 ] )
+def SetLocationListForBuffer_NotVisible_test( vim_eval ):
+  diagnostics = [ {
+    'bufnr': 3,
+    'filename': 'some_filename',
+    'lnum': 5,
+    'col': 22,
+    'type': 'E',
+    'valid': 1
+  } ]
+  current_buffer = VimBuffer( '/test', number = 3, window = 7 )
+  other_buffer = VimBuffer( '/notcurrent', number = 1, window = 8 )
+  with MockVimBuffers( [ current_buffer, other_buffer ],
+                       current_buffer,
+                       ( 1, 1 ) ):
+    vimsupport.SetLocationListForBuffer( 1, diagnostics )
+
+  # We asked for a buffer which is not current, so we find the window
+  vim_eval.assert_has_exact_calls( [
+    call( 'bufwinnr(1)' ), # returns -1 due to side_effect
+    call( 'setloclist( 0, {0} )'.format( json.dumps( diagnostics ) ) )
+  ] )
 
 
 @patch( 'vim.eval', new_callable = ExtendedMock )
@@ -49,9 +118,36 @@ def SetLocationList_test( vim_eval ):
     'type': 'E',
     'valid': 1
   } ]
-  vimsupport.SetLocationList( diagnostics )
-  vim_eval.assert_called_once_with(
-    'setloclist( 0, {0} )'.format( json.dumps( diagnostics ) ) )
+  current_buffer = VimBuffer( '/test', number = 3, window = 7 )
+  with MockVimBuffers( [ current_buffer ], current_buffer, ( 1, 1 ) ):
+    vimsupport.SetLocationList( diagnostics )
+
+  vim_eval.assert_has_calls( [
+    call( 'setloclist( 0, {0} )'.format( json.dumps( diagnostics ) ) ),
+  ] )
+
+
+@patch( 'vim.eval', new_callable = ExtendedMock )
+def SetLocationList_NotCurrent_test( vim_eval ):
+  diagnostics = [ {
+    'bufnr': 3,
+    'filename': 'some_filename',
+    'lnum': 5,
+    'col': 22,
+    'type': 'E',
+    'valid': 1
+  } ]
+  current_buffer = VimBuffer( '/test', number = 3, window = 7 )
+  other_buffer = VimBuffer( '/notcurrent', number = 1, window = 8 )
+  with MockVimBuffers( [ current_buffer, other_buffer ],
+                       current_buffer,
+                       ( 1, 1 ) ):
+    vimsupport.SetLocationList( diagnostics )
+
+  # This version does not check the current buffer and just sets the current win
+  vim_eval.assert_has_exact_calls( [
+    call( 'setloclist( 0, {0} )'.format( json.dumps( diagnostics ) ) ),
+  ] )
 
 
 @patch( 'ycm.vimsupport.VariableExists', return_value = True )
@@ -88,628 +184,374 @@ def AssertBuffersAreEqualAsBytes( result_buffer, expected_buffer ):
 
 def ReplaceChunk_SingleLine_Repl_1_test():
   # Replace with longer range
-  result_buffer = [ 'This is a string' ]
-  start, end = _BuildLocations( 1, 1, 1, 5 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start,
-                                                          end,
-                                                          'How long',
-                                                          0,
-                                                          0,
-                                                          result_buffer )
+  result_buffer = VimBuffer( 'buffer', contents = [ 'This is a string' ] )
+  start, end = _BuildLocations( 1, 11, 1, 17 )
+  vimsupport.ReplaceChunk( start, end, 'pie', result_buffer )
 
-  AssertBuffersAreEqualAsBytes( [ 'How long is a string' ], result_buffer )
-  eq_( line_offset, 0 )
-  eq_( char_offset, 4 )
+  AssertBuffersAreEqualAsBytes( [ 'This is a pie' ], result_buffer )
 
-  # and replace again, using delta
+  # and replace again
   start, end = _BuildLocations( 1, 10, 1, 11 )
-  ( new_line_offset, new_char_offset ) = vimsupport.ReplaceChunk(
-                                                          start,
-                                                          end,
-                                                          ' piece of ',
-                                                          line_offset,
-                                                          char_offset,
-                                                          result_buffer )
+  vimsupport.ReplaceChunk( start, end, ' piece of ', result_buffer )
 
-  line_offset += new_line_offset
-  char_offset += new_char_offset
-
-  AssertBuffersAreEqualAsBytes( [ 'How long is a piece of string' ],
-                                 result_buffer )
-  eq_( new_line_offset, 0 )
-  eq_( new_char_offset, 9 )
-  eq_( line_offset, 0 )
-  eq_( char_offset, 13 )
+  AssertBuffersAreEqualAsBytes( [ 'This is a piece of pie' ], result_buffer )
 
   # and once more, for luck
-  start, end = _BuildLocations( 1, 11, 1, 17 )
-
-  ( new_line_offset, new_char_offset ) = vimsupport.ReplaceChunk(
-                                                          start,
-                                                          end,
-                                                          'pie',
-                                                          line_offset,
-                                                          char_offset,
-                                                          result_buffer )
-
-  line_offset += new_line_offset
-  char_offset += new_char_offset
+  start, end = _BuildLocations( 1, 1, 1, 5 )
+  vimsupport.ReplaceChunk( start, end, 'How long', result_buffer )
 
   AssertBuffersAreEqualAsBytes( [ 'How long is a piece of pie' ],
-                                 result_buffer )
-  eq_( new_line_offset, 0 )
-  eq_( new_char_offset, -3 )
-  eq_( line_offset, 0 )
-  eq_( char_offset, 10 )
+                                result_buffer )
 
 
 def ReplaceChunk_SingleLine_Repl_2_test():
   # Replace with shorter range
-  result_buffer = [ 'This is a string' ]
+  result_buffer = VimBuffer( 'buffer', contents = [ 'This is a string' ] )
   start, end = _BuildLocations( 1, 11, 1, 17 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start,
-                                                          end,
-                                                          'test',
-                                                          0,
-                                                          0,
-                                                          result_buffer )
+  vimsupport.ReplaceChunk( start, end, 'test', result_buffer )
 
   AssertBuffersAreEqualAsBytes( [ 'This is a test' ], result_buffer )
-  eq_( line_offset, 0 )
-  eq_( char_offset, -2 )
 
 
 def ReplaceChunk_SingleLine_Repl_3_test():
   # Replace with equal range
-  result_buffer = [ 'This is a string' ]
+  result_buffer = VimBuffer( 'buffer', contents = [ 'This is a string' ] )
   start, end = _BuildLocations( 1, 6, 1, 8 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start,
-                                                          end,
-                                                          'be',
-                                                          0,
-                                                          0,
-                                                          result_buffer )
+  vimsupport.ReplaceChunk( start, end, 'be', result_buffer )
 
   AssertBuffersAreEqualAsBytes( [ 'This be a string' ], result_buffer )
-  eq_( line_offset, 0 )
-  eq_( char_offset, 0 )
 
 
 def ReplaceChunk_SingleLine_Add_1_test():
   # Insert at start
-  result_buffer = [ 'is a string' ]
+  result_buffer = VimBuffer( 'buffer', contents = [ 'is a string' ] )
   start, end = _BuildLocations( 1, 1, 1, 1 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start,
-                                                          end,
-                                                          'This ',
-                                                          0,
-                                                          0,
-                                                          result_buffer )
+  vimsupport.ReplaceChunk( start, end, 'This ', result_buffer )
 
   AssertBuffersAreEqualAsBytes( [ 'This is a string' ], result_buffer )
-  eq_( line_offset, 0 )
-  eq_( char_offset, 5 )
 
 
 def ReplaceChunk_SingleLine_Add_2_test():
   # Insert at end
-  result_buffer = [ 'This is a ' ]
+  result_buffer = VimBuffer( 'buffer', contents = [ 'This is a ' ] )
   start, end = _BuildLocations( 1, 11, 1, 11 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start,
-                                                          end,
-                                                          'string',
-                                                          0,
-                                                          0,
-                                                          result_buffer )
+  vimsupport.ReplaceChunk( start, end, 'string', result_buffer )
 
   AssertBuffersAreEqualAsBytes( [ 'This is a string' ], result_buffer )
-  eq_( line_offset, 0 )
-  eq_( char_offset, 6 )
 
 
 def ReplaceChunk_SingleLine_Add_3_test():
   # Insert in the middle
-  result_buffer = [ 'This is a string' ]
+  result_buffer = VimBuffer( 'buffer', contents = [ 'This is a string' ] )
   start, end = _BuildLocations( 1, 8, 1, 8 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start,
-                                                          end,
-                                                          ' not',
-                                                          0,
-                                                          0,
-                                                          result_buffer )
+  vimsupport.ReplaceChunk( start, end, ' not', result_buffer )
 
   AssertBuffersAreEqualAsBytes( [ 'This is not a string' ], result_buffer )
-  eq_( line_offset, 0 )
-  eq_( char_offset, 4 )
 
 
 def ReplaceChunk_SingleLine_Del_1_test():
   # Delete from start
-  result_buffer = [ 'This is a string' ]
+  result_buffer = VimBuffer( 'buffer', contents = [ 'This is a string' ] )
   start, end = _BuildLocations( 1, 1, 1, 6 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start,
-                                                          end,
-                                                          '',
-                                                          0,
-                                                          0,
-                                                          result_buffer )
+  vimsupport.ReplaceChunk( start, end, '', result_buffer )
 
   AssertBuffersAreEqualAsBytes( [ 'is a string' ], result_buffer )
-  eq_( line_offset, 0 )
-  eq_( char_offset, -5 )
 
 
 def ReplaceChunk_SingleLine_Del_2_test():
   # Delete from end
-  result_buffer = [ 'This is a string' ]
+  result_buffer = VimBuffer( 'buffer', contents = [ 'This is a string' ] )
   start, end = _BuildLocations( 1, 10, 1, 18 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start,
-                                                          end,
-                                                          '',
-                                                          0,
-                                                          0,
-                                                          result_buffer )
+  vimsupport.ReplaceChunk( start, end, '', result_buffer )
 
   AssertBuffersAreEqualAsBytes( [ 'This is a' ], result_buffer )
-  eq_( line_offset, 0 )
-  eq_( char_offset, -8 )
 
 
 def ReplaceChunk_SingleLine_Del_3_test():
   # Delete from middle
-  result_buffer = [ 'This is not a string' ]
+  result_buffer = VimBuffer( 'buffer', contents = [ 'This is not a string' ] )
   start, end = _BuildLocations( 1, 9, 1, 13 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start,
-                                                          end,
-                                                          '',
-                                                          0,
-                                                          0,
-                                                          result_buffer )
+  vimsupport.ReplaceChunk( start, end, '', result_buffer )
 
   AssertBuffersAreEqualAsBytes( [ 'This is a string' ], result_buffer )
-  eq_( line_offset, 0 )
-  eq_( char_offset, -4 )
 
 
 def ReplaceChunk_SingleLine_Unicode_ReplaceUnicodeChars_test():
   # Replace Unicode characters.
-  result_buffer = [ 'This Uniçø∂‰ string is in the middle' ]
+  result_buffer = VimBuffer(
+    'buffer', contents = [ 'This Uniçø∂‰ string is in the middle' ] )
   start, end = _BuildLocations( 1, 6, 1, 20 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start,
-                                                          end,
-                                                          'Unicode ',
-                                                          0,
-                                                          0,
-                                                          result_buffer )
+  vimsupport.ReplaceChunk( start, end, 'Unicode ', result_buffer )
 
   AssertBuffersAreEqualAsBytes( [ 'This Unicode string is in the middle' ],
                                  result_buffer )
-  eq_( line_offset, 0 )
-  eq_( char_offset, -6 )
 
 
 def ReplaceChunk_SingleLine_Unicode_ReplaceAfterUnicode_test():
   # Replace ASCII characters after Unicode characters in the line.
-  result_buffer = [ 'This Uniçø∂‰ string is in the middle' ]
+  result_buffer = VimBuffer(
+    'buffer', contents = [ 'This Uniçø∂‰ string is in the middle' ] )
   start, end = _BuildLocations( 1, 30, 1, 43 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start,
-                                                          end,
-                                                          'fåke',
-                                                          0,
-                                                          0,
-                                                          result_buffer )
+  vimsupport.ReplaceChunk( start, end, 'fåke', result_buffer )
 
   AssertBuffersAreEqualAsBytes( [ 'This Uniçø∂‰ string is fåke' ],
                                  result_buffer )
-  eq_( line_offset, 0 )
-  eq_( char_offset, -8 )
 
 
 def ReplaceChunk_SingleLine_Unicode_Grown_test():
   # Replace ASCII characters after Unicode characters in the line.
-  result_buffer = [ 'a' ]
+  result_buffer = VimBuffer( 'buffer', contents = [ 'a' ] )
   start, end = _BuildLocations( 1, 1, 1, 2 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start,
-                                                          end,
-                                                          'å',
-                                                          0,
-                                                          0,
-                                                          result_buffer )
+  vimsupport.ReplaceChunk( start, end, 'å', result_buffer )
 
   AssertBuffersAreEqualAsBytes( [ 'å' ], result_buffer )
-  eq_( line_offset, 0 )
-  eq_( char_offset, 1 ) # Note: byte difference (a = 1 byte, å = 2 bytes)
 
 
 def ReplaceChunk_RemoveSingleLine_test():
-  result_buffer = [ 'aAa',
-                    'aBa',
-                    'aCa' ]
+  result_buffer = VimBuffer( 'buffer', contents = [ 'aAa',
+                                                    'aBa',
+                                                    'aCa' ] )
   start, end = _BuildLocations( 2, 1, 3, 1 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start, end, '',
-                                                          0, 0, result_buffer )
+  vimsupport.ReplaceChunk( start, end, '', result_buffer )
   # First line is not affected.
-  expected_buffer = [ 'aAa',
-                      'aCa' ]
-  AssertBuffersAreEqualAsBytes( expected_buffer, result_buffer )
-  eq_( line_offset, -1 )
-  eq_( char_offset, 0 )
+  AssertBuffersAreEqualAsBytes( [ 'aAa',
+                                  'aCa' ], result_buffer )
 
 
 def ReplaceChunk_SingleToMultipleLines_test():
-  result_buffer = [ 'aAa',
-                    'aBa',
-                    'aCa' ]
-  start, end = _BuildLocations( 2, 2, 2, 2 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start, end, 'Eb\nbF',
-                                                          0, 0, result_buffer )
-  expected_buffer = [ 'aAa',
-                      'aEb',
-                      'bFBa',
-                      'aCa' ]
-  AssertBuffersAreEqualAsBytes( expected_buffer, result_buffer )
-  eq_( line_offset, 1 )
-  eq_( char_offset, 1 )
-
-  # now make another change to the "2nd" line
+  result_buffer = VimBuffer( 'buffer', contents = [ 'aAa',
+                                                    'aBa',
+                                                    'aCa' ] )
   start, end = _BuildLocations( 2, 3, 2, 4 )
-  ( new_line_offset, new_char_offset ) = vimsupport.ReplaceChunk(
-                                                           start,
-                                                           end,
-                                                           'cccc',
-                                                           line_offset,
-                                                           char_offset,
-                                                           result_buffer )
-
-  line_offset += new_line_offset
-  char_offset += new_char_offset
+  vimsupport.ReplaceChunk( start, end, 'cccc', result_buffer )
 
   AssertBuffersAreEqualAsBytes( [ 'aAa',
-                                   'aEb',
-                                   'bFBcccc',
-                                   'aCa' ], result_buffer )
-  eq_( line_offset, 1 )
-  eq_( char_offset, 4 )
+                                  'aBcccc',
+                                  'aCa' ], result_buffer )
+
+  # now make another change to the second line
+  start, end = _BuildLocations( 2, 2, 2, 2 )
+  vimsupport.ReplaceChunk( start, end, 'Eb\nbF', result_buffer )
+
+  AssertBuffersAreEqualAsBytes( [ 'aAa',
+                                  'aEb',
+                                  'bFBcccc',
+                                  'aCa' ], result_buffer )
 
 
 def ReplaceChunk_SingleToMultipleLines2_test():
-  result_buffer = [ 'aAa', 'aBa', 'aCa' ]
+  result_buffer = VimBuffer( 'buffer', contents = [ 'aAa',
+                                                    'aBa',
+                                                    'aCa' ] )
   start, end = _BuildLocations( 2, 2, 2, 2 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start,
-                                                          end,
-                                                          'Eb\nbFb\nG',
-                                                          0,
-                                                          0,
-                                                          result_buffer )
-  expected_buffer = [ 'aAa',
-                      'aEb',
-                      'bFb',
-                      'GBa',
-                      'aCa' ]
-  AssertBuffersAreEqualAsBytes( expected_buffer, result_buffer )
-  eq_( line_offset, 2 )
-  eq_( char_offset, 0 )
+  vimsupport.ReplaceChunk( start, end, 'Eb\nbFb\nG', result_buffer )
+
+  AssertBuffersAreEqualAsBytes( [ 'aAa',
+                                  'aEb',
+                                  'bFb',
+                                  'GBa',
+                                  'aCa' ], result_buffer )
 
 
 def ReplaceChunk_SingleToMultipleLines3_test():
-  result_buffer = [ 'aAa', 'aBa', 'aCa' ]
+  result_buffer = VimBuffer( 'buffer', contents = [ 'aAa',
+                                                    'aBa',
+                                                    'aCa' ] )
   start, end = _BuildLocations( 2, 2, 2, 2 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start,
-                                                          end,
-                                                          'Eb\nbFb\nbGb',
-                                                          0,
-                                                          0,
-                                                          result_buffer )
-  expected_buffer = [ 'aAa',
-                      'aEb',
-                      'bFb',
-                      'bGbBa',
-                      'aCa' ]
-  AssertBuffersAreEqualAsBytes( expected_buffer, result_buffer )
-  eq_( line_offset, 2 )
-  eq_( char_offset, 2 )
+  vimsupport.ReplaceChunk( start, end, 'Eb\nbFb\nbGb', result_buffer )
+
+  AssertBuffersAreEqualAsBytes( [ 'aAa',
+                                  'aEb',
+                                  'bFb',
+                                  'bGbBa',
+                                  'aCa' ], result_buffer )
 
 
 def ReplaceChunk_SingleToMultipleLinesReplace_test():
-  result_buffer = [ 'aAa', 'aBa', 'aCa' ]
+  result_buffer = VimBuffer( 'buffer', contents = [ 'aAa',
+                                                    'aBa',
+                                                    'aCa' ] )
   start, end = _BuildLocations( 1, 2, 1, 4 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start,
-                                                          end,
-                                                          'Eb\nbFb\nbGb',
-                                                          0,
-                                                          0,
-                                                          result_buffer )
-  expected_buffer = [ 'aEb',
-                      'bFb',
-                      'bGb',
-                      'aBa',
-                      'aCa' ]
-  AssertBuffersAreEqualAsBytes( expected_buffer, result_buffer )
-  eq_( line_offset, 2 )
-  eq_( char_offset, 0 )
+  vimsupport.ReplaceChunk( start, end, 'Eb\nbFb\nbGb', result_buffer )
+
+  AssertBuffersAreEqualAsBytes( [ 'aEb',
+                                  'bFb',
+                                  'bGb',
+                                  'aBa',
+                                  'aCa' ], result_buffer )
 
 
 def ReplaceChunk_SingleToMultipleLinesReplace_2_test():
-  result_buffer = [ 'aAa',
-                    'aBa',
-                    'aCa' ]
-  start, end = _BuildLocations( 1, 2, 1, 4 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start,
-                                                          end,
-                                                          'Eb\nbFb\nbGb',
-                                                          0,
-                                                          0,
-                                                          result_buffer )
-  expected_buffer = [ 'aEb',
-                      'bFb',
-                      'bGb',
-                      'aBa',
-                      'aCa' ]
-  AssertBuffersAreEqualAsBytes( expected_buffer, result_buffer )
-  eq_( line_offset, 2 )
-  eq_( char_offset, 0 )
-
-  # now do a subsequent change (insert at end of line "1")
+  result_buffer = VimBuffer( 'buffer', contents = [ 'aAa',
+                                                    'aBa',
+                                                    'aCa' ] )
   start, end = _BuildLocations( 1, 4, 1, 4 )
-  ( new_line_offset, new_char_offset ) = vimsupport.ReplaceChunk(
-                                                          start,
-                                                          end,
-                                                          'cccc',
-                                                          line_offset,
-                                                          char_offset,
-                                                          result_buffer )
+  vimsupport.ReplaceChunk( start, end, 'cccc', result_buffer )
 
-  line_offset += new_line_offset
-  char_offset += new_char_offset
+  AssertBuffersAreEqualAsBytes( [ 'aAacccc',
+                                  'aBa',
+                                  'aCa', ], result_buffer )
+
+  # now do a subsequent change (insert in the middle of the first line)
+  start, end = _BuildLocations( 1, 2, 1, 4 )
+  vimsupport.ReplaceChunk( start, end, 'Eb\nbFb\nbGb', result_buffer )
 
   AssertBuffersAreEqualAsBytes( [ 'aEb',
-                                   'bFb',
-                                   'bGbcccc',
-                                   'aBa',
-                                   'aCa' ], result_buffer )
-
-  eq_( line_offset, 2 )
-  eq_( char_offset, 4 )
+                                  'bFb',
+                                  'bGbcccc',
+                                  'aBa',
+                                  'aCa' ], result_buffer )
 
 
 def ReplaceChunk_MultipleLinesToSingleLine_test():
-  result_buffer = [ 'aAa', 'aBa', 'aCaaaa' ]
-  start, end = _BuildLocations( 2, 2, 3, 2 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start, end, 'E',
-                                                          0, 0, result_buffer )
-  expected_buffer = [ 'aAa', 'aECaaaa' ]
-  AssertBuffersAreEqualAsBytes( expected_buffer, result_buffer )
-  eq_( line_offset, -1 )
-  eq_( char_offset, 1 )
+  result_buffer = VimBuffer( 'buffer', contents = [ 'aAa',
+                                                    'aBa',
+                                                    'aCaaaa' ] )
+  start, end = _BuildLocations( 3, 4, 3, 5 )
+  vimsupport.ReplaceChunk( start, end, 'dd\ndd', result_buffer )
+
+  AssertBuffersAreEqualAsBytes( [ 'aAa',
+                                  'aBa',
+                                  'aCadd',
+                                  'ddaa' ], result_buffer )
 
   # make another modification applying offsets
   start, end = _BuildLocations( 3, 3, 3, 4 )
-  ( new_line_offset, new_char_offset ) = vimsupport.ReplaceChunk(
-                                                          start,
-                                                          end,
-                                                          'cccc',
-                                                          line_offset,
-                                                          char_offset,
-                                                          result_buffer )
-
-  line_offset += new_line_offset
-  char_offset += new_char_offset
+  vimsupport.ReplaceChunk( start, end, 'cccc', result_buffer )
 
   AssertBuffersAreEqualAsBytes( [ 'aAa',
-                                   'aECccccaaa' ], result_buffer )
-  eq_( line_offset, -1 )
-  eq_( char_offset, 4 )
+                                  'aBa',
+                                  'aCccccdd',
+                                  'ddaa' ], result_buffer )
 
   # and another, for luck
-  start, end = _BuildLocations( 3, 4, 3, 5 )
-  ( new_line_offset, new_char_offset ) = vimsupport.ReplaceChunk(
-                                                          start,
-                                                          end,
-                                                          'dd\ndd',
-                                                          line_offset,
-                                                          char_offset,
-                                                          result_buffer )
-
-  line_offset += new_line_offset
-  char_offset += new_char_offset
+  start, end = _BuildLocations( 2, 2, 3, 2 )
+  vimsupport.ReplaceChunk( start, end, 'E', result_buffer )
 
   AssertBuffersAreEqualAsBytes( [ 'aAa',
-                                   'aECccccdd',
-                                   'ddaa' ], result_buffer )
-  eq_( line_offset, 0 )
-  eq_( char_offset, -2 )
+                                  'aECccccdd',
+                                  'ddaa' ], result_buffer )
 
 
 def ReplaceChunk_MultipleLinesToSameMultipleLines_test():
-  result_buffer = [ 'aAa',
-                    'aBa',
-                    'aCa',
-                    'aDe' ]
+  result_buffer = VimBuffer( 'buffer', contents = [ 'aAa',
+                                                    'aBa',
+                                                    'aCa',
+                                                    'aDe' ] )
   start, end = _BuildLocations( 2, 2, 3, 2 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start, end, 'Eb\nbF',
-                                                          0, 0, result_buffer )
-  expected_buffer = [ 'aAa',
-                      'aEb',
-                      'bFCa',
-                      'aDe' ]
-  AssertBuffersAreEqualAsBytes( expected_buffer, result_buffer )
-  eq_( line_offset, 0 )
-  eq_( char_offset, 1 )
+  vimsupport.ReplaceChunk( start, end, 'Eb\nbF', result_buffer )
+
+  AssertBuffersAreEqualAsBytes( [ 'aAa',
+                                  'aEb',
+                                  'bFCa',
+                                  'aDe' ], result_buffer )
 
 
 def ReplaceChunk_MultipleLinesToMoreMultipleLines_test():
-  result_buffer = [ 'aAa',
-                    'aBa',
-                    'aCa',
-                    'aDe' ]
+  result_buffer = VimBuffer( 'buffer', contents = [ 'aAa',
+                                                    'aBa',
+                                                    'aCa',
+                                                    'aDe' ] )
   start, end = _BuildLocations( 2, 2, 3, 2 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start,
-                                                          end,
-                                                          'Eb\nbFb\nbG',
-                                                          0,
-                                                          0,
-                                                          result_buffer )
-  expected_buffer = [ 'aAa',
-                      'aEb',
-                      'bFb',
-                      'bGCa',
-                      'aDe' ]
-  AssertBuffersAreEqualAsBytes( expected_buffer, result_buffer )
-  eq_( line_offset, 1 )
-  eq_( char_offset, 1 )
+  vimsupport.ReplaceChunk( start, end, 'Eb\nbFb\nbG', result_buffer )
+
+  AssertBuffersAreEqualAsBytes( [ 'aAa',
+                                  'aEb',
+                                  'bFb',
+                                  'bGCa',
+                                  'aDe' ], result_buffer )
 
 
 def ReplaceChunk_MultipleLinesToLessMultipleLines_test():
-  result_buffer = [ 'aAa',
-                    'aBa',
-                    'aCa',
-                    'aDe' ]
+  result_buffer = VimBuffer( 'buffer', contents = [ 'aAa',
+                                                    'aBa',
+                                                    'aCa',
+                                                    'aDe' ] )
   start, end = _BuildLocations( 1, 2, 3, 2 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start, end, 'Eb\nbF',
-                                                          0, 0, result_buffer )
-  expected_buffer = [ 'aEb', 'bFCa', 'aDe' ]
-  AssertBuffersAreEqualAsBytes( expected_buffer, result_buffer )
-  eq_( line_offset, -1 )
-  eq_( char_offset, 1 )
+  vimsupport.ReplaceChunk( start, end, 'Eb\nbF', result_buffer )
+
+  AssertBuffersAreEqualAsBytes( [ 'aEb',
+                                  'bFCa',
+                                  'aDe' ], result_buffer )
 
 
 def ReplaceChunk_MultipleLinesToEvenLessMultipleLines_test():
-  result_buffer = [ 'aAa',
-                    'aBa',
-                    'aCa',
-                    'aDe' ]
+  result_buffer = VimBuffer( 'buffer', contents = [ 'aAa',
+                                                    'aBa',
+                                                    'aCa',
+                                                    'aDe' ] )
   start, end = _BuildLocations( 1, 2, 4, 2 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start, end, 'Eb\nbF',
-                                                          0, 0, result_buffer )
-  expected_buffer = [ 'aEb', 'bFDe' ]
-  AssertBuffersAreEqualAsBytes( expected_buffer, result_buffer )
-  eq_( line_offset, -2 )
-  eq_( char_offset, 1 )
+  vimsupport.ReplaceChunk( start, end, 'Eb\nbF', result_buffer )
+
+  AssertBuffersAreEqualAsBytes( [ 'aEb',
+                                  'bFDe' ], result_buffer )
 
 
 def ReplaceChunk_SpanBufferEdge_test():
-  result_buffer = [ 'aAa',
-                    'aBa',
-                    'aCa' ]
+  result_buffer = VimBuffer( 'buffer', contents = [ 'aAa',
+                                                    'aBa',
+                                                    'aCa' ] )
   start, end = _BuildLocations( 1, 1, 1, 3 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start, end, 'bDb',
-                                                          0, 0, result_buffer )
-  expected_buffer = [ 'bDba',
-                      'aBa',
-                      'aCa' ]
-  AssertBuffersAreEqualAsBytes( expected_buffer, result_buffer )
-  eq_( line_offset, 0 )
-  eq_( char_offset, 1 )
+  vimsupport.ReplaceChunk( start, end, 'bDb', result_buffer )
+
+  AssertBuffersAreEqualAsBytes( [ 'bDba',
+                                  'aBa',
+                                  'aCa' ], result_buffer )
 
 
 def ReplaceChunk_DeleteTextInLine_test():
-  result_buffer = [ 'aAa',
-                    'aBa',
-                    'aCa' ]
+  result_buffer = VimBuffer( 'buffer', contents = [ 'aAa',
+                                                    'aBa',
+                                                    'aCa' ] )
   start, end = _BuildLocations( 2, 2, 2, 3 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start, end, '',
-                                                          0, 0, result_buffer )
-  expected_buffer = [ 'aAa',
-                      'aa',
-                      'aCa' ]
-  AssertBuffersAreEqualAsBytes( expected_buffer, result_buffer )
-  eq_( line_offset, 0 )
-  eq_( char_offset, -1 )
+  vimsupport.ReplaceChunk( start, end, '', result_buffer )
+  AssertBuffersAreEqualAsBytes( [ 'aAa',
+                                  'aa',
+                                  'aCa' ], result_buffer )
 
 
 def ReplaceChunk_AddTextInLine_test():
-  result_buffer = [ 'aAa',
-                    'aBa',
-                    'aCa' ]
+  result_buffer = VimBuffer( 'buffer', contents = [ 'aAa',
+                                                    'aBa',
+                                                    'aCa' ] )
   start, end = _BuildLocations( 2, 2, 2, 2 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start, end, 'bDb',
-                                                          0, 0, result_buffer )
-  expected_buffer = [ 'aAa',
-                      'abDbBa',
-                      'aCa' ]
-  AssertBuffersAreEqualAsBytes( expected_buffer, result_buffer )
-  eq_( line_offset, 0 )
-  eq_( char_offset, 3 )
+  vimsupport.ReplaceChunk( start, end, 'bDb', result_buffer )
+
+  AssertBuffersAreEqualAsBytes( [ 'aAa',
+                                  'abDbBa',
+                                  'aCa' ], result_buffer )
 
 
 def ReplaceChunk_ReplaceTextInLine_test():
-  result_buffer = [ 'aAa',
-                    'aBa',
-                    'aCa' ]
+  result_buffer = VimBuffer( 'buffer', contents = [ 'aAa',
+                                                    'aBa',
+                                                    'aCa' ] )
   start, end = _BuildLocations( 2, 2, 2, 3 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start, end, 'bDb',
-                                                          0, 0, result_buffer )
-  expected_buffer = [ 'aAa',
-                      'abDba',
-                      'aCa' ]
-  AssertBuffersAreEqualAsBytes( expected_buffer, result_buffer )
-  eq_( line_offset, 0 )
-  eq_( char_offset, 2 )
+  vimsupport.ReplaceChunk( start, end, 'bDb', result_buffer )
+
+  AssertBuffersAreEqualAsBytes( [ 'aAa',
+                                  'abDba',
+                                  'aCa' ], result_buffer )
 
 
-def ReplaceChunk_SingleLineOffsetWorks_test():
-  result_buffer = [ 'aAa',
-                    'aBa',
-                    'aCa' ]
-  start, end = _BuildLocations( 1, 1, 1, 2 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start, end, 'bDb',
-                                                          1, 1, result_buffer )
-  expected_buffer = [ 'aAa',
-                      'abDba',
-                      'aCa' ]
-  AssertBuffersAreEqualAsBytes( expected_buffer, result_buffer )
-  eq_( line_offset, 0 )
-  eq_( char_offset, 2 )
+def ReplaceChunk_NewlineChunk_test():
+  result_buffer = VimBuffer( 'buffer', contents = [ 'first line',
+                                                    'second line' ] )
+  start, end = _BuildLocations( 1, 11, 2, 1 )
+  vimsupport.ReplaceChunk( start, end, '\n', result_buffer )
+
+  AssertBuffersAreEqualAsBytes( [ 'first line',
+                                  'second line' ], result_buffer )
 
 
-def ReplaceChunk_SingleLineToMultipleLinesOffsetWorks_test():
-  result_buffer = [ 'aAa',
-                    'aBa',
-                    'aCa' ]
-  start, end = _BuildLocations( 1, 1, 1, 2 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start, end, 'Db\nE',
-                                                          1, 1, result_buffer )
-  expected_buffer = [ 'aAa',
-                      'aDb',
-                      'Ea',
-                      'aCa' ]
-  AssertBuffersAreEqualAsBytes( expected_buffer, result_buffer )
-  eq_( line_offset, 1 )
-  eq_( char_offset, -1 )
+def ReplaceChunk_BeyondEndOfFile_test():
+  result_buffer = VimBuffer( 'buffer', contents = [ 'first line',
+                                                    'second line' ] )
 
+  start, end = _BuildLocations( 1, 11, 3, 1 )
+  vimsupport.ReplaceChunk( start, end, '\n', result_buffer )
 
-def ReplaceChunk_MultipleLinesToSingleLineOffsetWorks_test():
-  result_buffer = [ 'aAa',
-                    'aBa',
-                    'aCa' ]
-  start, end = _BuildLocations( 1, 1, 2, 2 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start, end, 'bDb',
-                                                          1, 1, result_buffer )
-  expected_buffer = [ 'aAa',
-                      'abDbCa' ]
-  AssertBuffersAreEqualAsBytes( expected_buffer, result_buffer )
-  eq_( line_offset, -1 )
-  eq_( char_offset, 3 )
-
-
-def ReplaceChunk_MultipleLineOffsetWorks_test():
-  result_buffer = [ 'aAa',
-                    'aBa',
-                    'aCa' ]
-  start, end = _BuildLocations( 3, 1, 4, 3 )
-  ( line_offset, char_offset ) = vimsupport.ReplaceChunk( start,
-                                                          end,
-                                                          'bDb\nbEb\nbFb',
-                                                          -1,
-                                                          1,
-                                                          result_buffer )
-  expected_buffer = [ 'aAa',
-                      'abDb',
-                      'bEb',
-                      'bFba' ]
-  AssertBuffersAreEqualAsBytes( expected_buffer, result_buffer )
-  eq_( line_offset, 1 )
-  eq_( char_offset, 1 )
+  AssertBuffersAreEqualAsBytes( [ 'first line' ], result_buffer )
 
 
 def _BuildLocations( start_line, start_column, end_line, end_column ):
@@ -728,11 +570,10 @@ def ReplaceChunksInBuffer_SortedChunks_test():
     _BuildChunk( 1, 11, 1, 11, ')' )
   ]
 
-  result_buffer = [ 'CT<10 >> 2> ct' ]
-  vimsupport.ReplaceChunksInBuffer( chunks, result_buffer, None )
+  result_buffer = VimBuffer( 'buffer', contents = [ 'CT<10 >> 2> ct' ] )
+  vimsupport.ReplaceChunksInBuffer( chunks, result_buffer )
 
-  expected_buffer = [ 'CT<(10 >> 2)> ct' ]
-  AssertBuffersAreEqualAsBytes( expected_buffer, result_buffer )
+  AssertBuffersAreEqualAsBytes( [ 'CT<(10 >> 2)> ct' ], result_buffer )
 
 
 def ReplaceChunksInBuffer_UnsortedChunks_test():
@@ -741,11 +582,78 @@ def ReplaceChunksInBuffer_UnsortedChunks_test():
     _BuildChunk( 1, 4, 1, 4, '(' )
   ]
 
-  result_buffer = [ 'CT<10 >> 2> ct' ]
-  vimsupport.ReplaceChunksInBuffer( chunks, result_buffer, None )
+  result_buffer = VimBuffer( 'buffer', contents = [ 'CT<10 >> 2> ct' ] )
+  vimsupport.ReplaceChunksInBuffer( chunks, result_buffer )
 
-  expected_buffer = [ 'CT<(10 >> 2)> ct' ]
-  AssertBuffersAreEqualAsBytes( expected_buffer, result_buffer )
+  AssertBuffersAreEqualAsBytes( [ 'CT<(10 >> 2)> ct' ], result_buffer )
+
+
+def ReplaceChunksInBuffer_LineOverlappingChunks_test():
+  chunks = [
+    _BuildChunk( 1, 11, 2, 1, '\n    ' ),
+    _BuildChunk( 2, 12, 3, 1, '\n    ' ),
+    _BuildChunk( 3, 11, 4, 1, '\n    ' )
+  ]
+
+  result_buffer = VimBuffer( 'buffer', contents = [ 'first line',
+                                                    'second line',
+                                                    'third line',
+                                                    'fourth line' ] )
+  vimsupport.ReplaceChunksInBuffer( chunks, result_buffer )
+
+  AssertBuffersAreEqualAsBytes( [ 'first line',
+                                  '    second line',
+                                  '    third line',
+                                  '    fourth line' ], result_buffer )
+
+
+def ReplaceChunksInBuffer_OutdentChunks_test():
+  chunks = [
+    _BuildChunk( 1,  1, 1, 5, '  ' ),
+    _BuildChunk( 1, 15, 2, 9, '\n    ' ),
+    _BuildChunk( 2, 20, 3, 3, '\n' )
+  ]
+
+  result_buffer = VimBuffer( 'buffer', contents = [ '    first line',
+                                                    '        second line',
+                                                    '    third line' ] )
+  vimsupport.ReplaceChunksInBuffer( chunks, result_buffer )
+
+  AssertBuffersAreEqualAsBytes( [ '  first line',
+                                  '    second line',
+                                  '  third line' ], result_buffer )
+
+
+def ReplaceChunksInBuffer_OneLineIndentingChunks_test():
+  chunks = [
+    _BuildChunk( 1,  8, 2,  1, '\n ' ),
+    _BuildChunk( 2,  9, 2, 10, '\n  ' ),
+    _BuildChunk( 2, 19, 2, 20, '\n ' )
+  ]
+
+  result_buffer = VimBuffer( 'buffer', contents = [ 'class {',
+                                                    'method { statement }',
+                                                    '}' ] )
+  vimsupport.ReplaceChunksInBuffer( chunks, result_buffer )
+
+  AssertBuffersAreEqualAsBytes( [ 'class {',
+                                  ' method {',
+                                  '  statement',
+                                  ' }',
+                                  '}' ], result_buffer )
+
+
+def ReplaceChunksInBuffer_SameLocation_test():
+  chunks = [
+    _BuildChunk( 1, 1, 1, 1, 'this ' ),
+    _BuildChunk( 1, 1, 1, 1, 'is ' ),
+    _BuildChunk( 1, 1, 1, 1, 'pure ' )
+  ]
+
+  result_buffer = VimBuffer( 'buffer', contents = [ 'folly' ] )
+  vimsupport.ReplaceChunksInBuffer( chunks, result_buffer )
+
+  AssertBuffersAreEqualAsBytes( [ 'this is pure folly' ], result_buffer )
 
 
 @patch( 'ycm.vimsupport.VariableExists', return_value = False )
@@ -821,11 +729,6 @@ def ReplaceChunks_SingleFile_Open_test( vim_command,
       'type': 'F'
     } ] ) ) ),
   ] )
-  vim_command.assert_has_exact_calls( [
-    call( 'botright copen' ),
-    call( 'silent! wincmd p' )
-  ] )
-  set_fitting_height.assert_called_once_with()
 
   # And it is ReplaceChunks that prints the message showing the number of
   # changes
@@ -919,10 +822,7 @@ def ReplaceChunks_SingleFile_NotOpen_test( vim_command,
   vim_command.assert_has_exact_calls( [
     call( 'lclose' ),
     call( 'hide' ),
-    call( 'botright copen' ),
-    call( 'silent! wincmd p' )
   ] )
-  set_fitting_height.assert_called_once_with()
 
   # And update the quickfix list
   vim_eval.assert_has_exact_calls( [
@@ -942,6 +842,103 @@ def ReplaceChunks_SingleFile_NotOpen_test( vim_command,
   post_vim_message.assert_has_exact_calls( [
     call( 'Applied 1 changes', warning = False ),
   ] )
+
+
+@patch( 'ycm.vimsupport.VariableExists', return_value = False )
+@patch( 'ycm.vimsupport.SetFittingHeightForCurrentWindow' )
+@patch( 'ycm.vimsupport.GetBufferNumberForFilename',
+        side_effect = [ -1, 1 ],
+        new_callable = ExtendedMock )
+@patch( 'ycm.vimsupport.BufferIsVisible',
+        side_effect = [ False, True ],
+        new_callable = ExtendedMock )
+@patch( 'ycm.vimsupport.OpenFilename',
+        new_callable = ExtendedMock )
+@patch( 'ycm.vimsupport.PostVimMessage', new_callable = ExtendedMock )
+@patch( 'ycm.vimsupport.Confirm',
+        return_value = True,
+        new_callable = ExtendedMock )
+@patch( 'vim.eval', return_value = 10, new_callable = ExtendedMock )
+@patch( 'vim.command', new_callable = ExtendedMock )
+def ReplaceChunks_SingleFile_NotOpen_Silent_test(
+  vim_command,
+  vim_eval,
+  confirm,
+  post_vim_message,
+  open_filename,
+  buffer_is_visible,
+  get_buffer_number_for_filename,
+  set_fitting_height,
+  variable_exists ):
+
+  # This test is the same as ReplaceChunks_SingleFile_NotOpen_test, but we pass
+  # the silent flag, as used by post-complete actions, and shows the stuff we
+  # _don't_ call in that case.
+
+  single_buffer_name = os.path.realpath( 'single_file' )
+
+  chunks = [
+    _BuildChunk( 1, 1, 2, 1, 'replacement', single_buffer_name )
+  ]
+
+  result_buffer = VimBuffer(
+    single_buffer_name,
+    contents = [
+      'line1',
+      'line2',
+      'line3'
+    ]
+  )
+
+  with patch( 'vim.buffers', [ None, result_buffer, None ] ):
+    vimsupport.ReplaceChunks( chunks, silent=True )
+
+  # We didn't check if it was OK to open the file (silent)
+  confirm.assert_not_called()
+
+  # Ensure that we applied the replacement correctly
+  eq_( result_buffer.GetLines(), [
+    'replacementline2',
+    'line3',
+  ] )
+
+  # GetBufferNumberForFilename is called 2 times. The return values are set in
+  # the @patch call above:
+  #  - once whilst applying the changes (-1 return)
+  #  - finally after calling OpenFilename (1 return)
+  get_buffer_number_for_filename.assert_has_exact_calls( [
+    call( single_buffer_name ),
+    call( single_buffer_name ),
+  ] )
+
+  # BufferIsVisible is called 2 times for the same reasons as above, with the
+  # return of each one
+  buffer_is_visible.assert_has_exact_calls( [
+    call( -1 ),
+    call( 1 ),
+  ] )
+
+  # We open 'single_file' as expected.
+  open_filename.assert_called_with( single_buffer_name, {
+    'focus': True,
+    'fix': True,
+    'size': 10
+  } )
+
+  # And close it again, but don't show the quickfix window
+  vim_command.assert_has_exact_calls( [
+    call( 'lclose' ),
+    call( 'hide' ),
+  ] )
+  set_fitting_height.assert_not_called()
+
+  # But we _don't_ update the QuickFix list
+  vim_eval.assert_has_exact_calls( [
+    call( '&previewheight' ),
+  ] )
+
+  # And we don't print a message either
+  post_vim_message.assert_not_called()
 
 
 @patch( 'ycm.vimsupport.GetBufferNumberForFilename',
@@ -1207,10 +1204,7 @@ def ReplaceChunks_MultiFile_Open_test( vim_command,
   vim_command.assert_has_exact_calls( [
     call( 'lclose' ),
     call( 'hide' ),
-    call( 'botright copen' ),
-    call( 'silent! wincmd p' )
   ] )
-  set_fitting_height.assert_called_once_with()
 
   # And update the quickfix list with each entry
   vim_eval.assert_has_exact_calls( [
@@ -1261,32 +1255,43 @@ def _BuildChunk( start_line,
   }
 
 
-@patch( 'vim.eval', new_callable = ExtendedMock )
-def AddDiagnosticSyntaxMatch_ErrorInMiddleOfLine_test( vim_eval ):
+def GetDiagnosticMatchPattern_ErrorInMiddleOfLine_test():
   current_buffer = VimBuffer(
     'some_file',
     contents = [ 'Highlight this error please' ]
   )
 
   with patch( 'vim.current.buffer', current_buffer ):
-    vimsupport.AddDiagnosticSyntaxMatch( 1, 16, 1, 21 )
+    assert_that(
+      vimsupport.GetDiagnosticMatchPattern( 1, 16, 1, 21 ),
+      equal_to( '\%1l\%16c\_.\{-}\%1l\%21c' )
+    )
 
-  vim_eval.assert_called_once_with(
-    r"matchadd('YcmErrorSection', '\%1l\%16c\_.\{-}\%1l\%21c')" )
 
-
-@patch( 'vim.eval', new_callable = ExtendedMock )
-def AddDiagnosticSyntaxMatch_WarningAtEndOfLine_test( vim_eval ):
+def AddDiagnosticSyntaxMatch_WarningAtEndOfLine_test():
   current_buffer = VimBuffer(
     'some_file',
     contents = [ 'Highlight this warning' ]
   )
 
   with patch( 'vim.current.buffer', current_buffer ):
-    vimsupport.AddDiagnosticSyntaxMatch( 1, 16, 1, 23, is_error = False )
+    assert_that(
+      vimsupport.GetDiagnosticMatchPattern( 1, 16, 1, 23 ),
+      equal_to( '\%1l\%16c\_.\{-}\%1l\%23c' )
+    )
 
-  vim_eval.assert_called_once_with(
-    r"matchadd('YcmWarningSection', '\%1l\%16c\_.\{-}\%1l\%23c')" )
+
+def AddDiagnosticSyntaxMatch_UnicodeAtEndOfLine_test():
+  current_buffer = VimBuffer(
+    'some_file',
+    contents = [ 'Highlight unicøde' ]
+  )
+
+  with patch( 'vim.current.buffer', current_buffer ):
+    assert_that(
+      vimsupport.GetDiagnosticMatchPattern( 1, 16, 1, 19 ),
+      equal_to( '\%1l\%16c\_.\{-}\%1l\%19c' )
+    )
 
 
 @patch( 'vim.command', new_callable=ExtendedMock )
@@ -1379,22 +1384,16 @@ def BufferIsVisibleForFilename_test():
     eq_( vimsupport.BufferIsVisibleForFilename( 'another_filename' ), False )
 
 
-@patch( 'vim.command',
-        side_effect = MockVimCommand,
-        new_callable = ExtendedMock )
-def CloseBuffersForFilename_test( vim_command, *args ):
+def CloseBuffersForFilename_test():
   vim_buffers = [
     VimBuffer( 'some_filename', number = 2 ),
     VimBuffer( 'some_filename', number = 5 )
   ]
 
-  with patch( 'vim.buffers', vim_buffers ):
+  with MockVimBuffers( vim_buffers, vim_buffers[ 0 ] ) as vim:
     vimsupport.CloseBuffersForFilename( 'some_filename' )
 
-  vim_command.assert_has_exact_calls( [
-    call( 'silent! bwipeout! 2' ),
-    call( 'silent! bwipeout! 5' )
-  ], any_order = True )
+  assert_that( vim.buffers, empty() )
 
 
 @patch( 'vim.command', new_callable = ExtendedMock )
@@ -1684,7 +1683,6 @@ def JumpToLocation_DifferentFile_SameBuffer_Modified_CanHide_test(
 
 @patch( 'ycmd.user_options_store._USER_OPTIONS',
         { 'goto_buffer_command': 'same-buffer' } )
-@patch( 'vim.error', VimError )
 @patch( 'vim.command',
         side_effect = [ None, VimError( 'Unknown code' ), None ] )
 def JumpToLocation_DifferentFile_SameBuffer_SwapFile_Unexpected_test(
@@ -1701,7 +1699,6 @@ def JumpToLocation_DifferentFile_SameBuffer_SwapFile_Unexpected_test(
 
 @patch( 'ycmd.user_options_store._USER_OPTIONS',
         { 'goto_buffer_command': 'same-buffer' } )
-@patch( 'vim.error', VimError )
 @patch( 'vim.command',
         new_callable = ExtendedMock,
         side_effect = [ None, VimError( 'E325' ), None ] )
@@ -1720,7 +1717,6 @@ def JumpToLocation_DifferentFile_SameBuffer_SwapFile_Quit_test( vim_command ):
 
 @patch( 'ycmd.user_options_store._USER_OPTIONS',
         { 'goto_buffer_command': 'same-buffer' } )
-@patch( 'vim.error', VimError )
 @patch( 'vim.command',
         new_callable = ExtendedMock,
         side_effect = [ None, KeyboardInterrupt, None ] )

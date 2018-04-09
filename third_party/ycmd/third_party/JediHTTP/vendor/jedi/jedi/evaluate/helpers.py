@@ -6,7 +6,10 @@ from itertools import chain
 from contextlib import contextmanager
 
 from parso.python import tree
+
+from jedi._compatibility import unicode
 from jedi.parser_utils import get_parent_scope
+from jedi.evaluate.compiled import CompiledObject
 
 
 def is_stdlib_path(path):
@@ -55,8 +58,11 @@ def evaluate_call_of_leaf(context, leaf, cut_own_trailer=False):
 
     If you're using the leaf, e.g. the bracket `)` it will return ``list([])``.
 
-    # TODO remove cut_own_trailer option, since its always used with it. Just
-    #      ignore it, It's not what we want anyway. Or document it better?
+    We use this function for two purposes. Given an expression ``bar.foo``,
+    we may want to
+      - infer the type of ``foo`` to offer completions after foo
+      - infer the type of ``bar`` to be able to jump to the definition of foo
+    The option ``cut_own_trailer`` must be set to true for the second purpose.
     """
     trailer = leaf.parent
     # The leaf may not be the last or first child, because there exist three
@@ -86,9 +92,14 @@ def evaluate_call_of_leaf(context, leaf, cut_own_trailer=False):
         base = power.children[0]
         trailers = power.children[1:cut]
 
+    if base == 'await':
+        base = trailers[0]
+        trailers = trailers[1:]
+
     values = context.eval_node(base)
+    from jedi.evaluate.syntax_tree import eval_trailer
     for trailer in trailers:
-        values = context.eval_trailer(values, trailer)
+        values = eval_trailer(context, values, trailer)
     return values
 
 
@@ -172,3 +183,19 @@ def predefine_names(context, flow_scope, dct):
         yield
     finally:
         del predefined[flow_scope]
+
+
+def is_compiled(context):
+    return isinstance(context, CompiledObject)
+
+
+def is_string(context):
+    return is_compiled(context) and isinstance(context.obj, (str, unicode))
+
+
+def is_literal(context):
+    return is_number(context) or is_string(context)
+
+
+def is_number(context):
+    return is_compiled(context) and isinstance(context.obj, (int, float))

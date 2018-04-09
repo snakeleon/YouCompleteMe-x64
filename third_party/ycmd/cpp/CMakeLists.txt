@@ -126,6 +126,29 @@ endif()
 
 #############################################################################
 
+# MSVC has symbols hidden by default. On GCC and Clang we need to explicitly
+# set the visibility to hidden to achieve the same result and then manually
+# expose what we need. This results in smaller ycm_core dynamic library and thus
+# a shorter loading time and higher performance.
+if( CMAKE_COMPILER_IS_GNUCXX OR COMPILER_IS_CLANG )
+  set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fvisibility=hidden" )
+endif()
+
+if ( DEFINED ENV{YCM_BENCHMARK} OR DEFINED ENV{YCM_TESTRUN})
+  if ( MSVC )
+    add_definitions( -DYCM_EXPORT=__declspec\(\ dllexport\ \) )
+  elseif( CMAKE_COMPILER_IS_GNUCXX OR COMPILER_IS_CLANG )
+    add_definitions(
+      -DYCM_EXPORT=__attribute__\(\(visibility\(\"default\"\)\)\) )
+  else()
+    add_definitions( -DYCM_EXPORT= )
+  endif()
+else()
+  add_definitions( -DYCM_EXPORT= )
+endif()
+
+#############################################################################
+
 # Force release build by default, speed is of the essence
 if ( NOT CMAKE_BUILD_TYPE )
   set( CMAKE_BUILD_TYPE Release )
@@ -229,8 +252,7 @@ endif()
 option( USE_PYTHON2 "If on, link to Python 2 instead of 3" ON )
 
 if ( USE_PYTHON2 )
-  set( Python_ADDITIONAL_VERSIONS 2.7 2.6 )
-  find_package( PythonLibs 2.6 REQUIRED )  # 2.6 is ONLY the mininum
+  find_package( PythonLibs 2.7 REQUIRED )
 
   if ( NOT PYTHONLIBS_VERSION_STRING VERSION_LESS "3.0.0" )
     message( FATAL_ERROR
@@ -239,8 +261,8 @@ if ( USE_PYTHON2 )
       "necessary python2 headers & libraries." )
   endif()
 else()
-  set( Python_ADDITIONAL_VERSIONS 3.6 3.5 3.4 3.3 )
-  find_package( PythonLibs 3.3 REQUIRED )  # 3.3 is ONLY the mininum
+  set( Python_ADDITIONAL_VERSIONS 3.6 3.5 3.4 )
+  find_package( PythonLibs 3.4 REQUIRED )  # 3.4 is ONLY the mininum
 endif()
 
 #############################################################################

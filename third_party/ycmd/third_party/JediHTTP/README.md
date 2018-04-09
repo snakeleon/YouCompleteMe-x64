@@ -2,6 +2,7 @@
 
 [![Build Status](https://travis-ci.org/vheon/JediHTTP.svg?branch=master)](https://travis-ci.org/vheon/JediHTTP)
 [![Build status](https://ci.appveyor.com/api/projects/status/28ebc35ocjk9eaew/branch/master?svg=true)](https://ci.appveyor.com/project/vheon/jedihttp/branch/master)
+[![Coverage Status](https://codecov.io/gh/vheon/JediHTTP/branch/coverage/graph/badge.svg)](https://codecov.io/gh/vheon/JediHTTP)
 
 
 A simple http/json wrapper around [jedi][].
@@ -41,6 +42,18 @@ is `info`.
 PATH is the path of a JSON file containing a key named `hmac_secret`. Its value
 will be used as the secret for HMAC Auth and the file will be deleted as soon
 as it's read.
+
+#### `--idle-suicide-seconds` SECONDS
+
+Set the number of SECONDS without any requests sent to the server before it
+shuts down. Default is `0` meaning that the server never shuts itself down.
+Setting a nonzero value to this option (e.g. `1800` for half an hour) is
+recommended in case the client dies without being able to stop the server.
+
+#### `--check-interval-seconds` SECONDS
+
+Set the interval in SECONDS to check server inactivity. Default is `600`
+seconds (10 minutes). Clients should not need to change this value.
 
 ## API
 

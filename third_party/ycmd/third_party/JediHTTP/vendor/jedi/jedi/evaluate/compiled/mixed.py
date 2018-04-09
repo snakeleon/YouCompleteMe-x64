@@ -9,7 +9,8 @@ from jedi import settings
 from jedi.evaluate import compiled
 from jedi.cache import underscore_memoization
 from jedi.evaluate import imports
-from jedi.evaluate.context import Context
+from jedi.evaluate.base_context import Context, ContextSet
+from jedi.evaluate.context import ModuleContext
 from jedi.evaluate.cache import evaluator_function_cache
 from jedi.evaluate.compiled.getattr_static import getattr_static
 
@@ -41,9 +42,6 @@ class MixedObject(object):
     # We have to overwrite everything that has to do with trailers, name
     # lookups and filters to make it possible to route name lookups towards
     # compiled objects and the rest towards tree node contexts.
-    def eval_trailer(*args, **kwags):
-        return Context.eval_trailer(*args, **kwags)
-
     def py__getattribute__(*args, **kwargs):
         return Context.py__getattribute__(*args, **kwargs)
 
@@ -85,7 +83,9 @@ class MixedName(compiled.CompiledName):
             # PyQt4.QtGui.QStyleOptionComboBox.currentText
             # -> just set it to None
             obj = None
-        return [_create(self._evaluator, obj, parent_context=self.parent_context)]
+        return ContextSet(
+            _create(self._evaluator, obj, parent_context=self.parent_context)
+        )
 
     @property
     def api_type(self):
@@ -207,7 +207,6 @@ def _create(evaluator, obj, parent_context=None, *args):
     if parent_context.tree_node.get_root_node() == module_node:
         module_context = parent_context.get_root_context()
     else:
-        from jedi.evaluate.representation import ModuleContext
         module_context = ModuleContext(evaluator, module_node, path=path)
         # TODO this __name__ is probably wrong.
         name = compiled_object.get_root_context().py__name__()

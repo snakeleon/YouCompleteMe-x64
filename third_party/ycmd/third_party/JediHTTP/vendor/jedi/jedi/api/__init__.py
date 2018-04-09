@@ -22,17 +22,20 @@ from jedi import settings
 from jedi import cache
 from jedi.api import classes
 from jedi.api import interpreter
-from jedi.api import usages
 from jedi.api import helpers
 from jedi.api.completion import Completion
 from jedi.evaluate import Evaluator
-from jedi.evaluate import representation as er
 from jedi.evaluate import imports
-from jedi.evaluate.param import try_iter_content
+from jedi.evaluate import usages
+from jedi.evaluate.project import Project
+from jedi.evaluate.arguments import try_iter_content
 from jedi.evaluate.helpers import get_module_names, evaluate_call_of_leaf
-from jedi.evaluate.sys_path import get_venv_path, dotted_path_in_sys_path
-from jedi.evaluate.iterable import unpack_tuple_to_dict
+from jedi.evaluate.sys_path import dotted_path_in_sys_path
 from jedi.evaluate.filters import TreeNameDefinition
+from jedi.evaluate.syntax_tree import tree_name_to_contexts
+from jedi.evaluate.context import ModuleContext
+from jedi.evaluate.context.module import ModuleName
+from jedi.evaluate.context.iterable import unpack_tuple_to_dict
 
 # Jedi uses lots and lots of recursion. By setting this a little bit higher, we
 # can remove some "maximum recursion depth" errors.
@@ -108,11 +111,9 @@ class Script(object):
 
         # Load the Python grammar of the current interpreter.
         self._grammar = parso.load_grammar()
-        if sys_path is None:
-            venv = os.getenv('VIRTUAL_ENV')
-            if venv:
-                sys_path = list(get_venv_path(venv))
-        self._evaluator = Evaluator(self._grammar, sys_path=sys_path)
+        project = Project(sys_path=sys_path)
+        self._evaluator = Evaluator(self._grammar, project)
+        project.add_script_path(self.path)
         debug.speed('init')
 
     @cache.memoize_method
@@ -127,13 +128,13 @@ class Script(object):
 
     @cache.memoize_method
     def _get_module(self):
-        module = er.ModuleContext(
+        module = ModuleContext(
             self._evaluator,
             self._get_module_node(),
             self.path
         )
         if self.path is not None:
-            name = dotted_path_in_sys_path(self._evaluator.sys_path, self.path)
+            name = dotted_path_in_sys_path(self._evaluator.project.sys_path, self.path)
             if name is not None:
                 imports.add_module(self._evaluator, name, module)
         return module
@@ -204,10 +205,15 @@ class Script(object):
                 else:
                     yield name
 
-        names = self._goto()
+        tree_name = self._get_module_node().get_name_of_position(self._pos)
+        if tree_name is None:
+            return []
+        context = self._evaluator.create_context(self._get_module(), tree_name)
+        names = list(self._evaluator.goto(context, tree_name))
+
         if follow_imports:
             def check(name):
-                if isinstance(name, er.ModuleName):
+                if isinstance(name, ModuleName):
                     return False
                 return name.api_type == 'module'
         else:
@@ -218,16 +224,6 @@ class Script(object):
 
         defs = [classes.Definition(self._evaluator, d) for d in set(names)]
         return helpers.sorted_definitions(defs)
-
-    def _goto(self):
-        """
-        Used for goto_assignments and usages.
-        """
-        name = self._get_module_node().get_name_of_position(self._pos)
-        if name is None:
-            return []
-        context = self._evaluator.create_context(self._get_module(), name)
-        return list(self._evaluator.goto(context, name))
 
     def usages(self, additional_module_paths=()):
         """
@@ -240,36 +236,15 @@ class Script(object):
 
         :rtype: list of :class:`classes.Definition`
         """
-        temp, settings.dynamic_flow_information = \
-            settings.dynamic_flow_information, False
-        try:
-            module_node = self._get_module_node()
-            user_stmt = get_statement_of_position(module_node, self._pos)
-            definition_names = self._goto()
-            if not definition_names and isinstance(user_stmt, tree.Import):
-                # For not defined imports (goto doesn't find something, we take
-                # the name as a definition. This is enough, because every name
-                # points to it.
-                name = user_stmt.get_name_of_position(self._pos)
-                if name is None:
-                    # Must be syntax
-                    return []
-                definition_names = [TreeNameDefinition(self._get_module(), name)]
+        tree_name = self._get_module_node().get_name_of_position(self._pos)
+        if tree_name is None:
+            # Must be syntax
+            return []
 
-            if not definition_names:
-                # Without a definition for a name we cannot find references.
-                return []
+        names = usages.usages(self._get_module(), tree_name)
 
-            definition_names = usages.resolve_potential_imports(self._evaluator,
-                                                                definition_names)
-
-            modules = set([d.get_root_context() for d in definition_names])
-            modules.add(self._get_module())
-            definitions = usages.usages(self._evaluator, definition_names, modules)
-        finally:
-            settings.dynamic_flow_information = temp
-
-        return helpers.sorted_definitions(set(definitions))
+        definitions = [classes.Definition(self._evaluator, n) for n in names]
+        return helpers.sorted_definitions(definitions)
 
     def call_signatures(self):
         """
@@ -319,10 +294,8 @@ class Script(object):
             for node in get_executable_nodes(module_node):
                 context = self._get_module().create_context(node)
                 if node.type in ('funcdef', 'classdef'):
-                    # TODO This is stupid, should be private
-                    from jedi.evaluate.finder import _name_to_types
                     # Resolve the decorators.
-                    _name_to_types(self._evaluator, context, node.children[1])
+                    tree_name_to_contexts(self._evaluator, context, node.children[1])
                 elif isinstance(node, tree.Import):
                     import_names = set(node.get_defined_names())
                     if node.is_nested():

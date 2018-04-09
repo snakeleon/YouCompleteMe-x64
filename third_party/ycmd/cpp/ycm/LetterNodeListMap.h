@@ -1,4 +1,4 @@
-// Copyright (C) 2011, 2012 Google Inc.
+// Copyright (C) 2011-2018 ycmd contributors
 //
 // This file is part of ycmd.
 //
@@ -18,7 +18,6 @@
 #ifndef LETTERNODELISTMAP_H_BRK2UMC1
 #define LETTERNODELISTMAP_H_BRK2UMC1
 
-#include "DLLDefines.h"
 #include "Utils.h"
 
 #include <vector>
@@ -31,7 +30,7 @@ namespace YouCompleteMe {
 
 class LetterNode;
 
-YCM_DLL_EXPORT int IndexForLetter( char letter );
+YCM_EXPORT int IndexForLetter( char letter );
 
 /*
  * This struct is used as part of the LetterNodeListMap structure.
@@ -53,8 +52,8 @@ YCM_DLL_EXPORT int IndexForLetter( char letter );
 struct NearestLetterNodeIndices {
   NearestLetterNodeIndices()
     : indexOfFirstOccurrence( -1 ),
-      indexOfFirstUppercaseOccurrence( -1 )
-  {}
+      indexOfFirstUppercaseOccurrence( -1 ) {
+  }
 
   short indexOfFirstOccurrence;
   short indexOfFirstUppercaseOccurrence;
@@ -67,11 +66,11 @@ public:
 
   NearestLetterNodeIndices &operator[] ( char letter );
 
-  YCM_DLL_EXPORT NearestLetterNodeIndices *ListPointerAt( char letter );
+  YCM_EXPORT NearestLetterNodeIndices *ListPointerAt( char letter );
 
 private:
-  typedef std::array<NearestLetterNodeIndices , NUM_LETTERS>
-    NearestLetterNodeArray;
+  using NearestLetterNodeArray = std::array< NearestLetterNodeIndices,
+                                             NUM_LETTERS >;
 
   std::unique_ptr< NearestLetterNodeArray > letters_;
 };

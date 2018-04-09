@@ -97,7 +97,7 @@ class PythonMixin(object):
 
     def get_name_of_position(self, position):
         """
-        Given a (line, column) tuple, returns a :class`Name` or ``None`` if
+        Given a (line, column) tuple, returns a :py:class:`Name` or ``None`` if
         there is no name at that position.
         """
         for c in self.children:
@@ -211,11 +211,6 @@ class Name(_LeafWithoutNewlines):
 
         if type_ in ('funcdef', 'classdef'):
             if self == node.name:
-                return node
-            return None
-
-        if type_ in ():
-            if self in node.get_defined_names():
                 return node
             return None
 
@@ -590,6 +585,21 @@ class Function(ClassOrFunc):
             for element in children:
                 if element.type == 'return_stmt' \
                         or element.type == 'keyword' and element.value == 'return':
+                    yield element
+                if element.type in _RETURN_STMT_CONTAINERS:
+                    for e in scan(element.children):
+                        yield e
+
+        return scan(self.children)
+
+    def iter_raise_stmts(self):
+        """
+        Returns a generator of `raise_stmt`. Includes raise statements inside try-except blocks
+        """
+        def scan(children):
+            for element in children:
+                if element.type == 'raise_stmt' \
+                        or element.type == 'keyword' and element.value == 'raise':
                     yield element
                 if element.type in _RETURN_STMT_CONTAINERS:
                     for e in scan(element.children):
@@ -1067,7 +1077,7 @@ class Param(PythonBaseNode):
     @property
     def annotation(self):
         """
-        The default is the test node that appears after `->`. Is `None` in case
+        The default is the test node that appears after `:`. Is `None` in case
         no annotation is present.
         """
         tfpdef = self._tfpdef()
@@ -1151,4 +1161,5 @@ class CompFor(PythonBaseNode):
         """
         Returns the a list of `Name` that the comprehension defines.
         """
-        return _defined_names(self.children[1])
+        # allow async for
+        return _defined_names(self.children[self.children.index('for') + 1])

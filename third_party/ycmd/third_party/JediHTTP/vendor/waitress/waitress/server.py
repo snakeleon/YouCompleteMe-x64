@@ -36,6 +36,11 @@ def create_server(application,
         server = create_server(app)
         server.run()
     """
+    if application is None:
+        raise ValueError(
+            'The "app" passed to ``create_server`` was ``None``.  You forgot '
+            'to return a WSGI app within your application.'
+            )
     adj = Adjustments(**kw)
     if adj.unix_socket and hasattr(socket, 'AF_UNIX'):
         cls = UnixWSGIServer
@@ -62,6 +67,11 @@ class BaseWSGIServer(logging_dispatcher, object):
                  ):
         if adj is None:
             adj = Adjustments(**kw)
+        if map is None:
+            # use a nonglobal socket map by default to hopefully prevent
+            # conflicts with apps and libs that use the asyncore global socket
+            # map ala https://github.com/Pylons/waitress/issues/63
+            map = {}
         self.application = application
         self.adj = adj
         self.trigger = trigger.trigger(map)

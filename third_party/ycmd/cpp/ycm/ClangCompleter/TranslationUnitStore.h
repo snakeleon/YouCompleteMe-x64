@@ -1,4 +1,4 @@
-// Copyright (C) 2013 Google Inc.
+// Copyright (C) 2013-2018 ycmd contributors
 //
 // This file is part of ycmd.
 //
@@ -27,20 +27,20 @@
 #include <memory>
 #include <unordered_map>
 
-typedef void *CXIndex;
+using CXIndex = void*;
 
 namespace YouCompleteMe {
 
 class TranslationUnitStore {
 public:
-  YCM_DLL_EXPORT TranslationUnitStore( CXIndex clang_index );
-  YCM_DLL_EXPORT ~TranslationUnitStore();
+  YCM_EXPORT TranslationUnitStore( CXIndex clang_index );
+  YCM_EXPORT ~TranslationUnitStore();
   TranslationUnitStore( const TranslationUnitStore& ) = delete;
   TranslationUnitStore& operator=( const TranslationUnitStore& ) = delete;
 
   // You can even call this function for the same filename from multiple
   // threads; the TU store will ensure only one TU is created.
-  YCM_DLL_EXPORT std::shared_ptr< TranslationUnit > GetOrCreate(
+  YCM_EXPORT std::shared_ptr< TranslationUnit > GetOrCreate(
     const std::string &filename,
     const std::vector< UnsavedFile > &unsaved_files,
     const std::vector< std::string > &flags );
@@ -67,11 +67,10 @@ private:
   std::shared_ptr< TranslationUnit > GetNoLock( const std::string &filename );
 
 
-  typedef std::unordered_map < std::string,
-          std::shared_ptr< TranslationUnit > > TranslationUnitForFilename;
+  using TranslationUnitForFilename =
+    std::unordered_map< std::string, std::shared_ptr< TranslationUnit > >;
 
-  typedef std::unordered_map < std::string,
-          std::size_t > FlagsHashForFilename;
+  using FlagsHashForFilename = std::unordered_map< std::string, std::size_t >;
 
   CXIndex clang_index_;
   TranslationUnitForFilename filename_to_translation_unit_;

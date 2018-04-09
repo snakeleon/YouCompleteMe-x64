@@ -249,6 +249,16 @@ class Test_split_uri(unittest.TestCase):
         self.assertEqual(self.proxy_scheme, 'https')
         self.assertEqual(self.proxy_netloc, 'localhost:8080')
 
+    def test_split_uri_unicode_error_raises_parsing_error(self):
+        # See https://github.com/Pylons/waitress/issues/64
+        from waitress.parser import ParsingError
+        # Either pass or throw a ParsingError, just don't throw another type of
+        # exception as that will cause the connection to close badly:
+        try:
+            self._callFUT(b'/\xd0')
+        except ParsingError:
+            pass
+
 class Test_get_header_lines(unittest.TestCase):
 
     def _callFUT(self, data):
@@ -288,15 +298,19 @@ class Test_crack_first_line(unittest.TestCase):
         return crack_first_line(line)
 
     def test_crack_first_line_matchok(self):
-        result = self._callFUT(b'get / HTTP/1.0')
+        result = self._callFUT(b'GET / HTTP/1.0')
         self.assertEqual(result, (b'GET', b'/', b'1.0'))
 
+    def test_crack_first_line_lowercase_method(self):
+        from waitress.parser import ParsingError
+        self.assertRaises(ParsingError, self._callFUT, b'get / HTTP/1.0')
+
     def test_crack_first_line_nomatch(self):
-        result = self._callFUT(b'get / bleh')
+        result = self._callFUT(b'GET / bleh')
         self.assertEqual(result, (b'', b'', b''))
 
     def test_crack_first_line_missing_version(self):
-        result = self._callFUT(b'get /')
+        result = self._callFUT(b'GET /')
         self.assertEqual(result, (b'GET', b'/', None))
 
 class TestHTTPRequestParserIntegration(unittest.TestCase):
@@ -408,8 +422,23 @@ Hello.
         self.assertEqual(self.parser.headers, {
             'CONTENT_LENGTH': '7',
             'X_FORWARDED_FOR':
-                '10.11.12.13, unknown,127.0.0.1, 255.255.255.255',
+                '10.11.12.13, unknown,127.0.0.1',
         })
+
+    def testSpoofedHeadersDropped(self):
+        data = b"""\
+GET /foobar HTTP/8.4
+x-auth_user: bob
+content-length: 7
+
+Hello.
+"""
+        self.feed(data)
+        self.assertTrue(self.parser.completed)
+        self.assertEqual(self.parser.headers, {
+            'CONTENT_LENGTH': '7',
+        })
+
 
 class DummyBodyStream(object):
 

@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 
-from setuptools import setup
+from setuptools import setup, find_packages
 
 import ast
-
+import sys
 
 __AUTHOR__ = 'David Halter'
 __AUTHOR_EMAIL__ = 'davidhalter88@gmail.com'
@@ -11,10 +11,12 @@ __AUTHOR_EMAIL__ = 'davidhalter88@gmail.com'
 # Get the version from within jedi. It's defined in exactly one place now.
 with open('jedi/__init__.py') as f:
     tree = ast.parse(f.read())
-version = tree.body[1].value.s
+if sys.version_info > (3, 7):
+    version = tree.body[0].value.s
+else:
+    version = tree.body[1].value.s
 
 readme = open('README.rst').read() + '\n\n' + open('CHANGELOG.rst').read()
-packages = ['jedi', 'jedi.evaluate', 'jedi.evaluate.compiled', 'jedi.api']
 with open('requirements.txt') as f:
     install_requires = f.read().splitlines()
 
@@ -30,8 +32,9 @@ setup(name='jedi',
       license='MIT',
       keywords='python completion refactoring vim',
       long_description=readme,
-      packages=packages,
+      packages=find_packages(exclude=['test']),
       install_requires=install_requires,
+      extras_require={'dev': ['docopt']},
       package_data={'jedi': ['evaluate/compiled/fake/*.pym']},
       platforms=['any'],
       classifiers=[
@@ -47,6 +50,8 @@ setup(name='jedi',
           'Programming Language :: Python :: 3.3',
           'Programming Language :: Python :: 3.4',
           'Programming Language :: Python :: 3.5',
+          'Programming Language :: Python :: 3.6',
+          'Programming Language :: Python :: 3.7',
           'Topic :: Software Development :: Libraries :: Python Modules',
           'Topic :: Text Editors :: Integrated Development Environments (IDE)',
           'Topic :: Utilities',

@@ -30,103 +30,92 @@ if ( USE_CLANG_COMPLETER AND
      NOT PATH_TO_LLVM_ROOT AND
      NOT EXTERNAL_LIBCLANG_PATH )
 
-  set( CLANG_VERSION 5.0.0 )
+  set( CLANG_VERSION 6.0.0 )
 
   if ( APPLE )
-    set( CLANG_DIRNAME "clang+llvm-${CLANG_VERSION}-x86_64-apple-darwin" )
-    set( CLANG_SHA256
-         "326be172ccb61210c9ae5dced27204977e249ec6589521cc30f82fd0904b0671" )
-    set( CLANG_FILENAME "${CLANG_DIRNAME}.tar.xz" )
+    set( LIBCLANG_DIRNAME "libclang-${CLANG_VERSION}-x86_64-apple-darwin" )
+    set( LIBCLANG_SHA256
+         "fd12532e3eb7b67cfede097134fc0a5b478c63759bcbe144ae6897f412ce2fe6" )
   elseif ( WIN32 )
     if( 64_BIT_PLATFORM )
-      set( CLANG_DIRNAME "LLVM-${CLANG_VERSION}-win64" )
-      set( CLANG_SHA256
-           "2b93843bd15623dc0e1bb52af85f2c0b41a89b6c1e613e6e6bd0da597c2639eb" )
+      set( LIBCLANG_DIRNAME "libclang-${CLANG_VERSION}-win64" )
+      set( LIBCLANG_SHA256
+           "48c83977d582b31b879d3ee5db200c06cec33ee8136cc72fa1e99db10572a6ca" )
     else()
-      set( CLANG_DIRNAME "LLVM-${CLANG_VERSION}-win32" )
-      set( CLANG_SHA256
-           "b7a7565680d3aad66c17f789c115b738be4af3bc16e2589923f7a940f32439f6" )
+      set( LIBCLANG_DIRNAME "libclang-${CLANG_VERSION}-win32" )
+      set( LIBCLANG_SHA256
+           "f9c50ad64405ba19b62cd8951d339cc978f306c6138512790c6e2b005084960c" )
     endif()
-    set( CLANG_FILENAME "${CLANG_DIRNAME}.exe" )
   elseif ( SYSTEM_IS_FREEBSD )
     if ( 64_BIT_PLATFORM )
-      set( CLANG_DIRNAME "clang+llvm-${CLANG_VERSION}-amd64-unknown-freebsd10" )
-      set( CLANG_SHA256
-           "e55b646390da0a24e27f9761eecf0b31936483c9a3e84c12de0bb1a0d95bab6c" )
+      set( LIBCLANG_DIRNAME
+           "libclang-${CLANG_VERSION}-amd64-unknown-freebsd-10" )
+      set( LIBCLANG_SHA256
+           "8283b3e03a820ab1411eec3ef3527e703df47732205241ae3efbe63261f300f3" )
     else()
-      set( CLANG_DIRNAME "clang+llvm-${CLANG_VERSION}-i386-unknown-freebsd10" )
-      set( CLANG_SHA256
-           "2ea32ad7cd30d8e849113747b5bfda8e6eb0fb2f9b01cbe9eb61e884c0bd69eb" )
+      set( LIBCLANG_DIRNAME
+           "libclang-${CLANG_VERSION}-i386-unknown-freebsd-10" )
+      set( LIBCLANG_SHA256
+           "e358f9ffa2356c24b61b41570abd9ad58e84a1f037c24b01d51b87dfaac422be" )
     endif()
-    set( CLANG_FILENAME "${CLANG_DIRNAME}.tar.xz" )
   elseif ( CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64.*|AARCH64.*)" )
-    set( CLANG_DIRNAME "clang+llvm-${CLANG_VERSION}-aarch64-linux-gnu" )
-    set( CLANG_SHA256
-         "28545a43b6fdfa9b287f31b5186fe8a643eb77c585da638e9847a3d09564d362" )
-    set( CLANG_FILENAME "${CLANG_DIRNAME}.tar.xz" )
+    set( LIBCLANG_DIRNAME "libclang-${CLANG_VERSION}-aarch64-linux-gnu" )
+    set( LIBCLANG_SHA256
+         "92a1c45af3ba9479cca6803594c4ba267a41e4200c4d95269e976832b9288f9d" )
+  elseif ( CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm.*|ARM.*)" )
+    set( LIBCLANG_DIRNAME "libclang-${CLANG_VERSION}-armv7a-linux-gnueabihf" )
+    set( LIBCLANG_SHA256
+         "68b14033d95be3bd74da3181145d09eeb2614aaa07f8df5dd60da8d173d3d15d" )
   else()
     if ( 64_BIT_PLATFORM )
-      set( CLANG_DIRNAME
-           "clang+llvm-${CLANG_VERSION}-linux-x86_64-ubuntu14.04" )
-      set( CLANG_SHA256
-           "58c1171f326108cfb7641441c5ede7846d58823bce3206c86a84c7ef7748860d" )
+      set( LIBCLANG_DIRNAME
+           "libclang-${CLANG_VERSION}-x86_64-linux-gnu-ubuntu-14.04" )
+      set( LIBCLANG_SHA256
+           "a2f198aec6a6ea42b7ca2712295f73e1e3f912ca7579181f6d0339c04e8f9a0e" )
     else()
       message( FATAL_ERROR
         "No prebuilt Clang ${CLANG_VERSION} binaries for 32-bit Linux. "
         "You'll have to compile Clang ${CLANG_VERSION} from source. "
         "See the YCM docs for details on how to use a user-compiled libclang." )
     endif()
-    set( CLANG_FILENAME "${CLANG_DIRNAME}.tar.xz" )
   endif()
 
-  # Check if the Clang archive is already downloaded and its checksum is correct.
-  # If this is not the case, remove it if needed and download it.
-  set( CLANG_DOWNLOAD ON )
-  set( CLANG_LOCAL_FILE
-       "${CMAKE_SOURCE_DIR}/../clang_archives/${CLANG_FILENAME}" )
+  set( LIBCLANG_FILENAME "${LIBCLANG_DIRNAME}.tar.bz2" )
 
-  if( EXISTS "${CLANG_LOCAL_FILE}" )
-    file( SHA256 "${CLANG_LOCAL_FILE}" CLANG_LOCAL_SHA256 )
+  set( LIBCLANG_DOWNLOAD ON )
+  set( LIBCLANG_URL
+       "https://dl.bintray.com/micbou/libclang/${LIBCLANG_FILENAME}" )
 
-    if( "${CLANG_LOCAL_SHA256}" STREQUAL "${CLANG_SHA256}" )
-      set( CLANG_DOWNLOAD OFF )
+  # Check if the Clang archive is already downloaded and its checksum is
+  # correct.  If this is not the case, remove it if needed and download it.
+  set( LIBCLANG_LOCAL_FILE
+       "${CMAKE_SOURCE_DIR}/../clang_archives/${LIBCLANG_FILENAME}" )
+
+  if( EXISTS "${LIBCLANG_LOCAL_FILE}" )
+    file( SHA256 "${LIBCLANG_LOCAL_FILE}" LIBCLANG_LOCAL_SHA256 )
+
+    if( "${LIBCLANG_LOCAL_SHA256}" STREQUAL "${LIBCLANG_SHA256}" )
+      set( LIBCLANG_DOWNLOAD OFF )
     else()
-      file( REMOVE "${CLANG_LOCAL_FILE}" )
+      file( REMOVE "${LIBCLANG_LOCAL_FILE}" )
     endif()
   endif()
 
-  if( CLANG_DOWNLOAD )
-    message( "Downloading Clang ${CLANG_VERSION}" )
+  if( LIBCLANG_DOWNLOAD )
+    message( STATUS
+             "Downloading libclang ${CLANG_VERSION} from ${LIBCLANG_URL}" )
 
-    set( CLANG_URL "http://releases.llvm.org/${CLANG_VERSION}" )
     file(
-      DOWNLOAD "${CLANG_URL}/${CLANG_FILENAME}" "${CLANG_LOCAL_FILE}"
-      SHOW_PROGRESS EXPECTED_HASH SHA256=${CLANG_SHA256}
+      DOWNLOAD "${LIBCLANG_URL}" "${LIBCLANG_LOCAL_FILE}"
+      SHOW_PROGRESS EXPECTED_HASH SHA256=${LIBCLANG_SHA256}
     )
   else()
-    message( "Using Clang archive: ${CLANG_LOCAL_FILE}" )
+    message( STATUS "Using libclang archive: ${LIBCLANG_LOCAL_FILE}" )
   endif()
 
   # Copy and extract the Clang archive in the building directory.
-  file( COPY "${CLANG_LOCAL_FILE}" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/../" )
-  if ( CLANG_FILENAME MATCHES ".+bz2" )
-    execute_process( COMMAND tar -xjf ${CLANG_FILENAME} )
-  elseif( CLANG_FILENAME MATCHES ".+xz" )
-    execute_process( COMMAND tar -xJf ${CLANG_FILENAME} )
-  elseif( CLANG_FILENAME MATCHES ".+exe" )
-    # Find 7-zip executable in the PATH and using the registry
-    find_program( 7Z_EXECUTABLE 7z PATHS
-      [HKEY_LOCAL_MACHINE\\SOFTWARE\\7-Zip;Path] )
-    if ( NOT 7Z_EXECUTABLE )
-      message( FATAL_ERROR
-        "7-zip is needed to extract the files from the Clang installer. "
-        "Install it and try again." )
-    endif()
-    execute_process( COMMAND
-                     ${7Z_EXECUTABLE} -y x ${CLANG_FILENAME} OUTPUT_QUIET )
-  else()
-    execute_process( COMMAND tar -xzf ${CLANG_FILENAME} )
-  endif()
+  file( COPY "${LIBCLANG_LOCAL_FILE}" DESTINATION "${CMAKE_CURRENT_BINARY_DIR}/../" )
+  execute_process( COMMAND ${CMAKE_COMMAND} -E tar -xjf ${LIBCLANG_FILENAME} )
 
   # We determine PATH_TO_LLVM_ROOT by searching the libclang library path in
   # CMake build folder.
@@ -166,13 +155,13 @@ if ( USE_CLANG_COMPLETER AND
 endif()
 
 if ( USE_CLANG_COMPLETER )
-  message( "Using libclang to provide semantic completion for C/C++/ObjC" )
+  message( STATUS "Using libclang to provide semantic completion for C/C++/ObjC" )
 else()
-  message( "NOT using libclang, no semantic completion for C/C++/ObjC will be "
-           "available" )
+  message( STATUS "NOT using libclang, no semantic completion for "
+                  "C/C++/ObjC will be available" )
 endif()
 
-if ( PATH_TO_LLVM_ROOT )
+if ( NOT LIBCLANG_FILENAME AND PATH_TO_LLVM_ROOT )
   set( CLANG_INCLUDES_DIR "${PATH_TO_LLVM_ROOT}/include" )
 else()
   set( CLANG_INCLUDES_DIR "${CMAKE_SOURCE_DIR}/llvm/include" )
@@ -278,12 +267,16 @@ if ( EXTERNAL_LIBCLANG_PATH OR USE_SYSTEM_LIBCLANG )
     else ()
       set( ENV_LIB_PATHS "" )
     endif()
+    find_program( LLVM_CONFIG_EXECUTABLE NAMES llvm-config )
+    if ( LLVM_CONFIG_EXECUTABLE )
+      execute_process( COMMAND ${LLVM_CONFIG_EXECUTABLE} --libdir
+                       OUTPUT_VARIABLE LLVM_CONFIG_PATH
+                       OUTPUT_STRIP_TRAILING_WHITESPACE )
+    endif()
     # On Debian-based systems, llvm installs into /usr/lib/llvm-x.y.
     file( GLOB SYS_LLVM_PATHS "/usr/lib/llvm*/lib" )
     # On FreeBSD , llvm install into /usr/local/llvm-xy
     file ( GLOB FREEBSD_LLVM_PATHS "/usr/local/llvm*/lib")
-    # On Gentoo, llvm installs into /usr/lib/llvm/x/
-    file ( GLOB GENTOO_LLVM_PATHS "/usr/lib*/llvm/*/lib*" )
     # Need TEMP because find_library does not work with an option variable
     # On Debian-based systems only a symlink to libclang.so.1 is created
     find_library( TEMP
@@ -292,11 +285,11 @@ if ( EXTERNAL_LIBCLANG_PATH OR USE_SYSTEM_LIBCLANG )
                   libclang.so.1
                   PATHS
                   ${ENV_LIB_PATHS}
+                  ${LLVM_CONFIG_PATH}
                   /usr/lib
                   /usr/lib/llvm
                   ${SYS_LLVM_PATHS}
                   ${FREEBSD_LLVM_PATHS}
-                  ${GENTOO_LLVM_PATHS}
                   /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib
                   /Library/Developer/CommandLineTools/usr/lib )
     set( EXTERNAL_LIBCLANG_PATH ${TEMP} )
@@ -318,7 +311,7 @@ if ( EXTERNAL_LIBCLANG_PATH OR USE_SYSTEM_LIBCLANG )
   # On Linux, the library target is a symlink of the soversion one.  Since it
   # will be copied in the project folder, we need the symlinked library.
   get_filename_component( LIBCLANG_TARGET "${EXTERNAL_LIBCLANG_PATH}" REALPATH )
-  message( "Using external libclang: ${LIBCLANG_TARGET}" )
+  message( STATUS "Using external libclang: ${LIBCLANG_TARGET}" )
 else()
   set( LIBCLANG_TARGET )
 endif()
@@ -366,7 +359,7 @@ if( LIBCLANG_TARGET )
       COMMAND ${CMAKE_COMMAND} -E copy "${LIBCLANG_TARGET}" "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
     )
 
-    if( NOT APPLE )
+    if( NOT APPLE AND NOT WIN32 )
       # When loading our library, the dynamic linker may look for
       # libclang.so.x instead of libclang.so.x.y. Create the corresponding
       # symlink.

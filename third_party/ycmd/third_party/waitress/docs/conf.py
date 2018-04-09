@@ -89,7 +89,6 @@ pygments_style = 'sphinx'
 # -----------------------
 
 # Add and use Pylons theme
-sys.path.append(os.path.abspath('_themes'))
 html_theme = 'pylons'
 html_theme_path = pylons_sphinx_themes.get_html_themes_path()
 html_theme_options = dict(github_url='http://github.com/Pylons/waitress')
@@ -181,7 +180,7 @@ latex_documents = [
 
 # The name of an image file (relative to this directory) to place at the
 # top of the title page.
-latex_logo = '.static/logo_hi.gif'
+#latex_logo = '.static/logo_hi.gif'
 
 # For "manual" documents, if this is true, then toplevel headings are
 # parts, not chapters.

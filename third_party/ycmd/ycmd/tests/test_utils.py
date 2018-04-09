@@ -36,6 +36,7 @@ import os
 import tempfile
 import time
 import stat
+import shutil
 
 from ycmd import extra_conf_store, handlers, user_options_store
 from ycmd.completers.completer import Completer
@@ -305,3 +306,35 @@ def ExpectedFailure( reason, *exception_matchers ):
     return Wrapper
 
   return decorator
+
+
+@contextlib.contextmanager
+def TemporaryTestDir():
+  """Context manager to execute a test with a temporary workspace area. The
+  workspace is deleted upon completion of the test. This is useful particularly
+  for testing project detection (e.g. compilation databases, etc.), by ensuring
+  that the directory is empty and not affected by the user's filesystem."""
+  tmp_dir = tempfile.mkdtemp()
+  try:
+    yield tmp_dir
+  finally:
+    shutil.rmtree( tmp_dir )
+
+
+def WithRetry( test ):
+  """Decorator to be applied to tests that retries the test over and over
+  until it passes or |timeout| seconds have passed."""
+
+  @functools.wraps( test )
+  def wrapper( *args, **kwargs ):
+    expiry = time.time() + 30
+    while True:
+      try:
+        test( *args, **kwargs )
+        return
+      except Exception as test_exception:
+        if time.time() > expiry:
+          raise
+        print( 'Test failed, retrying: {0}'.format( str( test_exception ) ) )
+        time.sleep( 0.25 )
+  return wrapper

@@ -1,9 +1,5 @@
 language: generic
-os:
-  - linux
-  - osx
 dist: trusty
-osx_image: xcode8
 sudo: false
 before_install:
   - git submodule update --init --recursive
@@ -21,20 +17,11 @@ env:
     - COVERAGE=true
     - USE_CLANG_COMPLETER=true
   matrix:
-    - YCMD_PYTHON_VERSION=2.6 USE_CLANG_COMPLETER=false
-    - YCMD_PYTHON_VERSION=2.6
+    - YCMD_PYTHON_VERSION=2.7 USE_CLANG_COMPLETER=false
     - YCMD_PYTHON_VERSION=2.7
-    - YCMD_PYTHON_VERSION=3.3
-    - YCMD_PYTHON_VERSION=3.3 YCM_COMPILER=clang
-    - YCMD_PYTHON_VERSION=3.3 YCM_BENCHMARK=true COVERAGE=false
-matrix:
-  exclude:
-    - os: osx
-      env: YCMD_PYTHON_VERSION=2.6 USE_CLANG_COMPLETER=false
-    - os: osx
-      env: YCMD_PYTHON_VERSION=2.6
-    - os: osx
-      env: YCMD_PYTHON_VERSION=3.3 YCM_COMPILER=clang
+    - YCMD_PYTHON_VERSION=3.4
+    - YCMD_PYTHON_VERSION=3.4 YCM_COMPILER=clang
+    - YCMD_PYTHON_VERSION=3.4 YCM_BENCHMARK=true COVERAGE=false
 addons:
   # If this doesn't make much sense to you, see the travis docs:
   #    https://docs.travis-ci.com/user/migrating-from-legacy/
@@ -76,3 +63,5 @@ cache:
     - $HOME/.pyenv  # pyenv
     - $TRAVIS_BUILD_DIR/clang_archives  # Clang downloads
     - $TRAVIS_BUILD_DIR/third_party/racerd/target  # Racerd compilation
+      # jdt.ls download
+    - $TRAVIS_BUILD_DIR/third_party/eclipse.jdt.ls/target/cache

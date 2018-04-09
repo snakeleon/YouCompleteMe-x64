@@ -1,4 +1,4 @@
-// Copyright (C) 2011, 2012 Google Inc.
+// Copyright (C) 2011-2018 ycmd contributors
 //
 // This file is part of ycmd.
 //
@@ -31,14 +31,14 @@ using std::mutex;
 
 namespace YouCompleteMe {
 
-typedef shared_ptr <
-remove_pointer< CXCompileCommands >::type > CompileCommandsWrap;
+using CompileCommandsWrap =
+  shared_ptr< remove_pointer< CXCompileCommands >::type >;
 
 
 CompilationDatabase::CompilationDatabase(
   const boost::python::object &path_to_directory )
-  : is_loaded_( false )
-  , path_to_directory_( GetUtf8String( path_to_directory ) ) {
+  : is_loaded_( false ),
+    path_to_directory_( GetUtf8String( path_to_directory ) ) {
   CXCompilationDatabase_Error status;
   compilation_database_ = clang_CompilationDatabase_fromDirectory(
                             path_to_directory_.c_str(),
@@ -67,8 +67,9 @@ CompilationInfoForFile CompilationDatabase::GetCompilationInfoForFile(
   const boost::python::object &path_to_file ) {
   CompilationInfoForFile info;
 
-  if ( !is_loaded_ )
+  if ( !is_loaded_ ) {
     return info;
+  }
 
   std::string path_to_file_string = GetUtf8String( path_to_file );
   ReleaseGil unlock;

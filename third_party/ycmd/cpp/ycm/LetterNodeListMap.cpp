@@ -1,4 +1,4 @@
-// Copyright (C) 2011, 2012 Google Inc.
+// Copyright (C) 2011-2018 ycmd contributors
 //
 // This file is part of ycmd.
 //
@@ -20,8 +20,9 @@
 namespace YouCompleteMe {
 
 int IndexForLetter( char letter ) {
-  if ( IsUppercase( letter ) )
+  if ( IsUppercase( letter ) ) {
     return letter + ( 'a' - 'A' );
+  }
 
   return letter;
 }
@@ -32,14 +33,16 @@ LetterNodeListMap::LetterNodeListMap() {
 
 
 LetterNodeListMap::LetterNodeListMap( const LetterNodeListMap &other ) {
-  if ( other.letters_ )
+  if ( other.letters_ ) {
     letters_.reset( new NearestLetterNodeArray( *other.letters_ ) );
+  }
 }
 
 
 NearestLetterNodeIndices &LetterNodeListMap::operator[] ( char letter ) {
-  if ( !letters_ )
+  if ( !letters_ ) {
     letters_.reset( new NearestLetterNodeArray() );
+  }
 
   int letter_index = IndexForLetter( letter );
 
@@ -48,8 +51,9 @@ NearestLetterNodeIndices &LetterNodeListMap::operator[] ( char letter ) {
 
 
 NearestLetterNodeIndices *LetterNodeListMap::ListPointerAt( char letter ) {
-  if ( !letters_ )
-    return NULL;
+  if ( !letters_ ) {
+    return nullptr;
+  }
 
   return &letters_->at( IndexForLetter( letter ) );
 }

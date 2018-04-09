@@ -120,3 +120,11 @@ Contributors
 - Jamie Matthews, 2013/06/19
 
 - Adam Groszer, 2013/08/15
+
+- David Glick, 2015/04/13
+
+- Shane Hathaway, 2015-04-20
+
+- Steve Piercy, 2015-04-21
+
+- Ben Warren, 2015-05-17

@@ -4,19 +4,19 @@ import sys
 import imp
 from jedi.evaluate.site import addsitedir
 
-from jedi._compatibility import exec_function, unicode
-from jedi.evaluate.cache import evaluator_function_cache
-from jedi.evaluate.compiled import CompiledObject
-from jedi.evaluate.context import ContextualizedNode
+from jedi._compatibility import unicode
+from jedi.evaluate.cache import evaluator_method_cache
+from jedi.evaluate.base_context import ContextualizedNode
+from jedi.evaluate.helpers import is_string
 from jedi import settings
 from jedi import debug
-from jedi import common
+from jedi.evaluate.utils import ignored
 
 
 def get_venv_path(venv):
     """Get sys.path for specified virtual environment."""
     sys_path = _get_venv_path_dirs(venv)
-    with common.ignored(ValueError):
+    with ignored(ValueError):
         sys_path.remove('')
     sys_path = _get_sys_path_with_egglinks(sys_path)
     # As of now, get_venv_path_dirs does not scan built-in pythonpath and
@@ -69,21 +69,18 @@ def _get_venv_sitepackages(venv):
     return p
 
 
-def _execute_code(module_path, code):
-    c = "import os; from os.path import *; result=%s"
-    variables = {'__file__': module_path}
-    try:
-        exec_function(c % code, variables)
-    except Exception:
-        debug.warning('sys.path manipulation detected, but failed to evaluate.')
-    else:
-        try:
-            res = variables['result']
-            if isinstance(res, str):
-                return [os.path.abspath(res)]
-        except KeyError:
-            pass
-    return []
+def _abs_path(module_context, path):
+    module_path = module_context.py__file__()
+    if os.path.isabs(path):
+        return path
+
+    if module_path is None:
+        # In this case we have no idea where we actually are in the file
+        # system.
+        return None
+
+    base_dir = os.path.dirname(module_path)
+    return os.path.abspath(os.path.join(base_dir, path))
 
 
 def _paths_from_assignment(module_context, expr_stmt):
@@ -108,8 +105,8 @@ def _paths_from_assignment(module_context, expr_stmt):
             assert trailer.children[0] == '.' and trailer.children[1].value == 'path'
             # TODO Essentially we're not checking details on sys.path
             # manipulation. Both assigment of the sys.path and changing/adding
-            # parts of the sys.path are the same: They get added to the current
-            # sys.path.
+            # parts of the sys.path are the same: They get added to the end of
+            # the current sys.path.
             """
             execution = c[2]
             assert execution.children[0] == '['
@@ -120,34 +117,40 @@ def _paths_from_assignment(module_context, expr_stmt):
         except AssertionError:
             continue
 
-        from jedi.evaluate.iterable import py__iter__
-        from jedi.evaluate.precedence import is_string
         cn = ContextualizedNode(module_context.create_context(expr_stmt), expr_stmt)
-        for lazy_context in py__iter__(module_context.evaluator, cn.infer(), cn):
+        for lazy_context in cn.infer().iterate(cn):
             for context in lazy_context.infer():
                 if is_string(context):
-                    yield context.obj
+                    abs_path = _abs_path(module_context, context.obj)
+                    if abs_path is not None:
+                        yield abs_path
 
 
-def _paths_from_list_modifications(module_path, trailer1, trailer2):
+def _paths_from_list_modifications(module_context, trailer1, trailer2):
     """ extract the path from either "sys.path.append" or "sys.path.insert" """
     # Guarantee that both are trailers, the first one a name and the second one
     # a function execution with at least one param.
     if not (trailer1.type == 'trailer' and trailer1.children[0] == '.'
             and trailer2.type == 'trailer' and trailer2.children[0] == '('
             and len(trailer2.children) == 3):
-        return []
+        return
 
     name = trailer1.children[1].value
     if name not in ['insert', 'append']:
-        return []
+        return
     arg = trailer2.children[1]
     if name == 'insert' and len(arg.children) in (3, 4):  # Possible trailing comma.
         arg = arg.children[2]
-    return _execute_code(module_path, arg.get_code())
+
+    for context in module_context.create_context(arg).eval_node(arg):
+        if is_string(context):
+            abs_path = _abs_path(module_context, context.obj)
+            if abs_path is not None:
+                yield abs_path
 
 
-def _check_module(module_context):
+@evaluator_method_cache(default=[])
+def check_sys_path_modifications(module_context):
     """
     Detect sys.path modifications within module.
     """
@@ -162,10 +165,10 @@ def _check_module(module_context):
                     if n.type == 'name' and n.value == 'path':
                         yield name, power
 
-    sys_path = list(module_context.evaluator.sys_path)  # copy
-    if isinstance(module_context, CompiledObject):
-        return sys_path
+    if module_context.tree_node is None:
+        return []
 
+    added = []
     try:
         possible_names = module_context.tree_node.get_used_names()['path']
     except KeyError:
@@ -174,39 +177,29 @@ def _check_module(module_context):
         for name, power in get_sys_path_powers(possible_names):
             expr_stmt = power.parent
             if len(power.children) >= 4:
-                sys_path.extend(
+                added.extend(
                     _paths_from_list_modifications(
-                        module_context.py__file__(), *power.children[2:4]
+                        module_context, *power.children[2:4]
                     )
                 )
             elif expr_stmt is not None and expr_stmt.type == 'expr_stmt':
-                sys_path.extend(_paths_from_assignment(module_context, expr_stmt))
-    return sys_path
+                added.extend(_paths_from_assignment(module_context, expr_stmt))
+    return added
 
 
-@evaluator_function_cache(default=[])
 def sys_path_with_modifications(evaluator, module_context):
-    path = module_context.py__file__()
-    if path is None:
-        # Support for modules without a path is bad, therefore return the
-        # normal path.
-        return list(evaluator.sys_path)
+    return evaluator.project.sys_path + check_sys_path_modifications(module_context)
 
-    curdir = os.path.abspath(os.curdir)
-    #TODO why do we need a chdir?
-    with common.ignored(OSError):
-        os.chdir(os.path.dirname(path))
 
+def detect_additional_paths(evaluator, script_path):
+    django_paths = _detect_django_path(script_path)
     buildout_script_paths = set()
 
-    result = _check_module(module_context)
-    result += _detect_django_path(path)
-    for buildout_script_path in _get_buildout_script_paths(path):
+    for buildout_script_path in _get_buildout_script_paths(script_path):
         for path in _get_paths_from_buildout_script(evaluator, buildout_script_path):
             buildout_script_paths.add(path)
-    # cleanup, back to old directory
-    os.chdir(curdir)
-    return list(result) + list(buildout_script_paths)
+
+    return django_paths + list(buildout_script_paths)
 
 
 def _get_paths_from_buildout_script(evaluator, buildout_script_path):
@@ -220,8 +213,9 @@ def _get_paths_from_buildout_script(evaluator, buildout_script_path):
         debug.warning('Error trying to read buildout_script: %s', buildout_script_path)
         return
 
-    from jedi.evaluate.representation import ModuleContext
-    for path in _check_module(ModuleContext(evaluator, module_node, buildout_script_path)):
+    from jedi.evaluate.context import ModuleContext
+    module = ModuleContext(evaluator, module_node, buildout_script_path)
+    for path in check_sys_path_modifications(module):
         yield path
 
 
@@ -246,7 +240,7 @@ def _detect_django_path(module_path):
     result = []
 
     for parent in traverse_parents(module_path):
-        with common.ignored(IOError):
+        with ignored(IOError):
             with open(parent + os.path.sep + 'manage.py'):
                 debug.dbg('Found django path: %s', module_path)
                 result.append(parent)

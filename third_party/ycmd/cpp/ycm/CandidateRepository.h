@@ -1,4 +1,4 @@
-// Copyright (C) 2011, 2012 Google Inc.
+// Copyright (C) 2011-2018 ycmd contributors
 //
 // This file is part of ycmd.
 //
@@ -18,8 +18,6 @@
 #ifndef CANDIDATEREPOSITORY_H_K9OVCMHG
 #define CANDIDATEREPOSITORY_H_K9OVCMHG
 
-#include "DLLDefines.h"
-
 #include <vector>
 #include <string>
 #include <unordered_map>
@@ -29,8 +27,7 @@ namespace YouCompleteMe {
 
 class Candidate;
 
-typedef std::unordered_map< std::string, const Candidate * >
-CandidateHolder;
+using CandidateHolder = std::unordered_map< std::string, const Candidate * >;
 
 
 // This singleton stores already built Candidate objects for candidate strings
@@ -43,18 +40,18 @@ CandidateHolder;
 // This class is thread-safe.
 class CandidateRepository {
 public:
-  YCM_DLL_EXPORT static CandidateRepository &Instance();
+  YCM_EXPORT static CandidateRepository &Instance();
   // Make class noncopyable
   CandidateRepository( const CandidateRepository& ) = delete;
   CandidateRepository& operator=( const CandidateRepository& ) = delete;
 
   int NumStoredCandidates();
 
-  YCM_DLL_EXPORT std::vector< const Candidate * > GetCandidatesForStrings(
+  YCM_EXPORT std::vector< const Candidate * > GetCandidatesForStrings(
     const std::vector< std::string > &strings );
 
   // This should only be used to isolate tests and benchmarks.
-  YCM_DLL_EXPORT void ClearCandidates();
+  YCM_EXPORT void ClearCandidates();
 
 private:
   CandidateRepository() {};

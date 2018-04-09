@@ -42,10 +42,7 @@ import argparse
 def RunFlake8():
   print( 'Running flake8' )
   subprocess.check_call( [
-    sys.executable,
-    # __main__ is required on Python 2.6.
-    '-m', 'flake8.__main__',
-    p.join( DIR_OF_THIS_SCRIPT, 'ycmd' )
+    sys.executable, '-m', 'flake8', p.join( DIR_OF_THIS_SCRIPT, 'ycmd' )
   ] )
 
 
@@ -84,6 +81,11 @@ COMPLETERS = {
     'build': [],
     'test': [ '--exclude-dir=ycmd/tests/python' ],
     'aliases': [ 'jedi', 'jedihttp', ]
+  },
+  'java': {
+    'build': [ '--java-completer' ],
+    'test': [ '--exclude-dir=ycmd/tests/java' ],
+    'aliases': [ 'jdt' ],
   },
 }
 
@@ -148,11 +150,11 @@ def FixupCompleters( parsed_args ):
   elif parsed_args.no_clang_completer:
     print( 'WARNING: The "--no-clang-completer" flag is deprecated. '
            'Please use "--no-completers cfamily" instead.' )
-    completers.remove( 'cfamily' )
+    completers.discard( 'cfamily' )
 
   if 'USE_CLANG_COMPLETER' in os.environ:
     if os.environ[ 'USE_CLANG_COMPLETER' ] == 'false':
-      completers.remove( 'cfamily' )
+      completers.discard( 'cfamily' )
     else:
       completers.add( 'cfamily' )
 
@@ -171,6 +173,7 @@ def BuildYcmdLibs( args ):
     build_cmd = [
       sys.executable,
       p.join( DIR_OF_THIS_SCRIPT, 'build.py' ),
+      '--quiet',
     ]
 
     for key in COMPLETERS:
@@ -217,9 +220,7 @@ def NoseTests( parsed_args, extra_nosetests_args ):
   else:
     nosetests_args.append( p.join( DIR_OF_THIS_SCRIPT, 'ycmd' ) )
 
-  subprocess.check_call( [ sys.executable,
-                           # __main__ is required on Python 2.6.
-                           '-m', 'nose.__main__' ] + nosetests_args )
+  subprocess.check_call( [ sys.executable, '-m', 'nose' ] + nosetests_args )
 
 
 def Main():
@@ -232,6 +233,7 @@ def Main():
     RunFlake8()
   BuildYcmdLibs( parsed_args )
   NoseTests( parsed_args, nosetests_args )
+
 
 if __name__ == "__main__":
   Main()

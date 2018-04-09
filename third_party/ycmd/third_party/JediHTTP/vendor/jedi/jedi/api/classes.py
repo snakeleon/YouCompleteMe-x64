@@ -10,14 +10,14 @@ from parso.python.tree import search_ancestor
 
 from jedi._compatibility import u
 from jedi import settings
-from jedi import common
+from jedi.evaluate.utils import ignored, unite
 from jedi.cache import memoize_method
-from jedi.evaluate import representation as er
-from jedi.evaluate import instance
 from jedi.evaluate import imports
 from jedi.evaluate import compiled
 from jedi.evaluate.filters import ParamName
 from jedi.evaluate.imports import ImportName
+from jedi.evaluate.context import instance
+from jedi.evaluate.context import ClassContext, FunctionContext, FunctionExecutionContext
 from jedi.api.keywords import KeywordName
 
 
@@ -290,7 +290,7 @@ class BaseDefinition(object):
         if not path:
             return None  # for keywords the path is empty
 
-        with common.ignored(KeyError):
+        with ignored(KeyError):
             path[0] = self._mapping[path[0]]
         for key, repl in self._tuple_mapping.items():
             if tuple(path[:len(key)]) == key:
@@ -322,8 +322,8 @@ class BaseDefinition(object):
                 param_names = list(context.get_param_names())
                 if isinstance(context, instance.BoundMethod):
                     param_names = param_names[1:]
-            elif isinstance(context, (instance.AbstractInstanceContext, er.ClassContext)):
-                if isinstance(context, er.ClassContext):
+            elif isinstance(context, (instance.AbstractInstanceContext, ClassContext)):
+                if isinstance(context, ClassContext):
                     search = '__init__'
                 else:
                     search = '__call__'
@@ -335,7 +335,7 @@ class BaseDefinition(object):
                 # there's no better solution.
                 inferred = names[0].infer()
                 param_names = get_param_names(next(iter(inferred)))
-                if isinstance(context, er.ClassContext):
+                if isinstance(context, ClassContext):
                     param_names = param_names[1:]
                 return param_names
             elif isinstance(context, compiled.CompiledObject):
@@ -354,10 +354,10 @@ class BaseDefinition(object):
         if context is None:
             return None
 
-        if isinstance(context, er.FunctionExecutionContext):
+        if isinstance(context, FunctionExecutionContext):
             # TODO the function context should be a part of the function
             # execution context.
-            context = er.FunctionContext(
+            context = FunctionContext(
                 self._evaluator, context.parent_context, context.tree_node)
         return Definition(self._evaluator, context.name)
 
@@ -567,7 +567,7 @@ class Definition(BaseDefinition):
         """
         defs = self._name.infer()
         return sorted(
-            common.unite(defined_names(self._evaluator, d) for d in defs),
+            unite(defined_names(self._evaluator, d) for d in defs),
             key=lambda s: s._name.start_pos or (0, 0)
         )
 

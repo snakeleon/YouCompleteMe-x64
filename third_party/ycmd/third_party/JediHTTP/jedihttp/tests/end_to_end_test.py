@@ -12,6 +12,7 @@
 #    limitations under the License.
 
 
+import os
 import requests
 import subprocess
 import sys
@@ -44,8 +45,7 @@ class HmacAuth(requests.auth.AuthBase):
 
 PORT = 50000
 SECRET = 'secret'
-PATH_TO_JEDIHTTP = path.abspath(path.join(path.dirname(__file__),
-                                          '..', '..', 'jedihttp.py'))
+PATH_TO_JEDIHTTP = path.abspath(path.join(path.dirname(__file__), '..'))
 
 
 def wait_until_jedihttp_ready(timeout=5):
@@ -63,18 +63,25 @@ def wait_until_jedihttp_ready(timeout=5):
             time.sleep(0.1)
 
 
-def setup_jedihttp():
-    hmac_file = hmaclib.temporary_hmac_secret_file(SECRET)
-    command = [utils.python(),
-               PATH_TO_JEDIHTTP,
-               '--port', str(PORT),
-               '--log', 'debug',
-               '--hmac-file-secret', hmac_file]
-    jedihttp = utils.safe_popen(command,
-                                stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT)
-    wait_until_jedihttp_ready()
-    return jedihttp
+def setup_jedihttp(args=[]):
+    def wrapper():
+        hmac_file = hmaclib.temporary_hmac_secret_file(SECRET)
+        command = [utils.python(),
+                   PATH_TO_JEDIHTTP,
+                   '--port', str(PORT),
+                   '--log', 'debug',
+                   '--hmac-file-secret', hmac_file] + args
+        # Define environment variable to enable subprocesses coverage. See:
+        # http://coverage.readthedocs.io/en/latest/subprocess.html
+        env = os.environ.copy()
+        env['COVERAGE_PROCESS_START'] = '.coveragerc'
+        jedihttp = utils.safe_popen(command,
+                                    stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT,
+                                    env=env)
+        wait_until_jedihttp_ready()
+        return jedihttp
+    return wrapper
 
 
 def teardown_jedihttp(jedihttp):
@@ -93,7 +100,7 @@ def teardown_jedihttp(jedihttp):
     sys.stdout.write(decode_string(stdout))
 
 
-@with_jedihttp(setup_jedihttp, teardown_jedihttp)
+@with_jedihttp(setup_jedihttp(), teardown_jedihttp)
 def test_client_request_without_parameters(jedihttp):
     response = requests.post('http://127.0.0.1:{0}/ready'.format(PORT),
                              auth=HmacAuth(SECRET))
@@ -105,7 +112,7 @@ def test_client_request_without_parameters(jedihttp):
                                                      response.content))
 
 
-@with_jedihttp(setup_jedihttp, teardown_jedihttp)
+@with_jedihttp(setup_jedihttp(), teardown_jedihttp)
 def test_client_request_with_parameters(jedihttp):
     filepath = utils.fixture_filepath('goto.py')
     request_data = {
@@ -127,7 +134,7 @@ def test_client_request_with_parameters(jedihttp):
                                                      response.content))
 
 
-@with_jedihttp(setup_jedihttp, teardown_jedihttp)
+@with_jedihttp(setup_jedihttp(), teardown_jedihttp)
 def test_client_bad_request_with_parameters(jedihttp):
     filepath = utils.fixture_filepath('goto.py')
     request_data = {
@@ -150,7 +157,7 @@ def test_client_bad_request_with_parameters(jedihttp):
 
 
 @py2only
-@with_jedihttp(setup_jedihttp, teardown_jedihttp)
+@with_jedihttp(setup_jedihttp(), teardown_jedihttp)
 def test_client_python3_specific_syntax_completion(jedihttp):
     filepath = utils.fixture_filepath('py3.py')
     request_data = {
@@ -171,8 +178,8 @@ def test_client_python3_specific_syntax_completion(jedihttp):
                                                      response.content))
 
 
-@with_jedihttp(setup_jedihttp, teardown_jedihttp)
-def test_client_shutdown(jedihttp):
+@with_jedihttp(setup_jedihttp(), teardown_jedihttp)
+def test_client_shutdown_from_handler(jedihttp):
     response = requests.post('http://127.0.0.1:{0}/shutdown'.format(PORT),
                              auth=HmacAuth(SECRET))
 
@@ -184,4 +191,12 @@ def test_client_shutdown(jedihttp):
                                                      response.content))
 
     wait_process_shutdown(jedihttp)
+    assert_that(process_is_running(jedihttp), equal_to(False))
+
+
+@with_jedihttp(setup_jedihttp(['--idle-suicide-seconds', '1',
+                               '--check-interval-seconds', '1']),
+               teardown_jedihttp)
+def test_client_shutdown_from_watchdog(jedihttp):
+    wait_process_shutdown(jedihttp, timeout=10)
     assert_that(process_is_running(jedihttp), equal_to(False))

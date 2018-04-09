@@ -4,12 +4,18 @@ import sys
 import hashlib
 import gc
 import shutil
-import pickle
 import platform
 import errno
 import logging
 
+try:
+    import cPickle as pickle
+except:
+    import pickle
+
 from parso._compatibility import FileNotFoundError
+
+LOG = logging.getLogger(__name__)
 
 
 _PICKLE_VERSION = 30
@@ -111,7 +117,7 @@ def _load_from_file_system(hashed_grammar, path, p_time, cache_path=None):
         return None
     else:
         parser_cache.setdefault(hashed_grammar, {})[path] = module_cache_item
-        logging.debug('pickle loaded: %s', path)
+        LOG.debug('pickle loaded: %s', path)
         return module_cache_item.node
 
 
@@ -125,7 +131,7 @@ def save_module(hashed_grammar, path, module, lines, pickling=True, cache_path=N
     item = _NodeCacheItem(module, lines, p_time)
     parser_cache.setdefault(hashed_grammar, {})[path] = item
     if pickling and path is not None:
-        _save_to_file_system(hashed_grammar, path, item)
+        _save_to_file_system(hashed_grammar, path, item, cache_path=cache_path)
 
 
 def _save_to_file_system(hashed_grammar, path, item, cache_path=None):

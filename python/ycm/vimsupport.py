@@ -27,7 +27,7 @@ import vim
 import os
 import json
 import re
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 from ycmd.utils import ( ByteOffsetToCodepointOffset, GetCurrentDirectory,
                          JoinLinesAsUnicode, ToBytes, ToUnicode )
 from ycmd import user_options_store
@@ -44,6 +44,14 @@ FIXIT_OPENING_BUFFERS_MESSAGE_FORMAT = (
     'files will be written to disk. Do you wish to continue?' )
 
 NO_SELECTION_MADE_MSG = "No valid selection was made; aborting."
+
+# This is the starting value assigned to the sign's id of each buffer. This
+# value is then incremented for each new sign. This should prevent conflicts
+# with other plugins using signs.
+SIGN_BUFFER_ID_INITIAL_VALUE = 100000000
+
+SIGN_PLACE_REGEX = re.compile(
+  r"^.*=(?P<line>\d+).*=(?P<id>\d+).*=(?P<name>Ycm\w+)$" )
 
 
 def CurrentLineAndColumn():
@@ -163,58 +171,90 @@ def GetBufferChangedTick( bufnr ):
   return GetIntValue( 'getbufvar({0}, "changedtick")'.format( bufnr ) )
 
 
-def UnplaceSignInBuffer( buffer_number, sign_id ):
-  if buffer_number < 0:
-    return
-  vim.command(
-    'try | exec "sign unplace {0} buffer={1}" | catch /E158/ | endtry'.format(
-        sign_id, buffer_number ) )
+def CaptureVimCommand( command ):
+  vim.command( 'redir => b:ycm_command' )
+  vim.command( 'silent! {}'.format( command ) )
+  vim.command( 'redir END' )
+  output = ToUnicode( vim.eval( 'b:ycm_command' ) )
+  vim.command( 'unlet b:ycm_command' )
+  return output
 
 
-def PlaceSign( sign_id, line_num, buffer_num, is_error = True ):
-  # libclang can give us diagnostics that point "outside" the file; Vim borks
-  # on these.
-  if line_num < 1:
-    line_num = 1
+class DiagnosticSign( namedtuple( 'DiagnosticSign',
+                                  [ 'id', 'line', 'name', 'buffer_number' ] ) ):
+  # We want two signs that have different ids but the same location to compare
+  # equal. ID doesn't matter.
+  def __eq__( self, other ):
+    return ( self.line == other.line and
+             self.name == other.name and
+             self.buffer_number == other.buffer_number )
 
-  sign_name = 'YcmError' if is_error else 'YcmWarning'
+
+def GetSignsInBuffer( buffer_number ):
+  sign_output = CaptureVimCommand(
+    'sign place buffer={}'.format( buffer_number ) )
+  signs = []
+  for line in sign_output.split( '\n' ):
+    match = SIGN_PLACE_REGEX.search( line )
+    if match:
+      signs.append( DiagnosticSign( int( match.group( 'id' ) ),
+                                    int( match.group( 'line' ) ),
+                                    match.group( 'name' ),
+                                    buffer_number ) )
+  return signs
+
+
+def UnplaceSign( sign ):
+  vim.command( 'sign unplace {0} buffer={1}'.format( sign.id,
+                                                     sign.buffer_number ) )
+
+
+def PlaceSign( sign ):
   vim.command( 'sign place {0} name={1} line={2} buffer={3}'.format(
-    sign_id, sign_name, line_num, buffer_num ) )
+    sign.id, sign.name, sign.line, sign.buffer_number ) )
 
 
-def ClearYcmSyntaxMatches():
-  matches = VimExpressionToPythonType( 'getmatches()' )
-  for match in matches:
-    if match[ 'group' ].startswith( 'Ycm' ):
-      vim.eval( 'matchdelete({0})'.format( match[ 'id' ] ) )
+class DiagnosticMatch( namedtuple( 'DiagnosticMatch',
+                                   [ 'id', 'group', 'pattern' ] ) ):
+  def __eq__( self, other ):
+    return ( self.group == other.group and
+             self.pattern == other.pattern )
 
 
-def AddDiagnosticSyntaxMatch( line_num,
-                              column_num,
-                              line_end_num = None,
-                              column_end_num = None,
-                              is_error = True ):
-  """Highlight a range in the current window starting from
-  (|line_num|, |column_num|) included to (|line_end_num|, |column_end_num|)
-  excluded. If |line_end_num| or |column_end_num| are not given, highlight the
-  character at (|line_num|, |column_num|). Both line and column numbers are
-  1-based. Return the ID of the newly added match."""
-  group = 'YcmErrorSection' if is_error else 'YcmWarningSection'
+def GetDiagnosticMatchesInCurrentWindow():
+  vim_matches = vim.eval( 'getmatches()' )
+  return [ DiagnosticMatch( match[ 'id' ],
+                            match[ 'group' ],
+                            match[ 'pattern' ] )
+           for match in vim_matches if match[ 'group' ].startswith( 'Ycm' ) ]
 
+
+def AddDiagnosticMatch( match ):
+  return GetIntValue( "matchadd('{}', '{}')".format( match.group,
+                                                     match.pattern ) )
+
+
+def RemoveDiagnosticMatch( match ):
+  return GetIntValue( "matchdelete({})".format( match.id ) )
+
+
+def GetDiagnosticMatchPattern( line_num,
+                               column_num,
+                               line_end_num = None,
+                               column_end_num = None ):
   line_num, column_num = LineAndColumnNumbersClamped( line_num, column_num )
 
   if not line_end_num or not column_end_num:
-    return GetIntValue(
-      "matchadd('{0}', '\%{1}l\%{2}c')".format( group, line_num, column_num ) )
+    return '\%{}l\%{}c'.format( line_num, column_num )
 
   # -1 and then +1 to account for column end not included in the range.
   line_end_num, column_end_num = LineAndColumnNumbersClamped(
       line_end_num, column_end_num - 1 )
   column_end_num += 1
-
-  return GetIntValue(
-    "matchadd('{0}', '\%{1}l\%{2}c\_.\\{{-}}\%{3}l\%{4}c')".format(
-      group, line_num, column_num, line_end_num, column_end_num ) )
+  return '\%{}l\%{}c\_.\\{{-}}\%{}l\%{}c'.format( line_num,
+                                                  column_num,
+                                                  line_end_num,
+                                                  column_end_num )
 
 
 # Clamps the line and column numbers so that they are not past the contents of
@@ -227,7 +267,9 @@ def LineAndColumnNumbersClamped( line_num, column_num ):
   if line_num and line_num > max_line:
     new_line_num = max_line
 
-  max_column = len( vim.current.buffer[ new_line_num - 1 ] )
+  # Vim buffers are a list of byte objects on Python 2 but Unicode objects on
+  # Python 3.
+  max_column = len( ToBytes( vim.current.buffer[ new_line_num - 1 ] ) )
   if column_num and column_num > max_column:
     new_column_num = max_column
 
@@ -235,9 +277,47 @@ def LineAndColumnNumbersClamped( line_num, column_num ):
 
 
 def SetLocationList( diagnostics ):
+  """Set the location list for the current window to the supplied diagnostics"""
+  SetLocationListForWindow( 0, diagnostics )
+
+
+def GetWindowNumberForBufferDiagnostics( buffer_number ):
+  """Return an appropriate window number to use for displaying diagnostics
+  associated with the buffer number supplied. Always returns a valid window
+  number or 0 meaning the current window."""
+
+  # Location lists are associated with _windows_ not _buffers_. This makes a lot
+  # of sense, but YCM associates diagnostics with _buffers_, because it is the
+  # buffer that actually gets parsed.
+  #
+  # The heuristic we use is to determine any open window for a specified buffer,
+  # and set that. If there is no such window on the current tab page, we use the
+  # current window (by passing 0 as the window number)
+
+  if buffer_number == vim.current.buffer.number:
+    return 0
+
+  window_number = GetIntValue( "bufwinnr({0})".format( buffer_number ) )
+
+  if window_number < 0:
+    return 0
+
+  return window_number
+
+
+def SetLocationListForBuffer( buffer_number, diagnostics ):
+  """Populate the location list of an apppropriate window for the supplied
+  buffer number. See SetLocationListForWindow for format of diagnostics."""
+  return SetLocationListForWindow(
+    GetWindowNumberForBufferDiagnostics( buffer_number ),
+    diagnostics )
+
+
+def SetLocationListForWindow( window_number, diagnostics ):
   """Populate the location list with diagnostics. Diagnostics should be in
   qflist format; see ":h setqflist" for details."""
-  vim.eval( 'setloclist( 0, {0} )'.format( json.dumps( diagnostics ) ) )
+  vim.eval( 'setloclist( {0}, {1} )'.format( window_number,
+                                             json.dumps( diagnostics ) ) )
 
 
 def OpenLocationList( focus = False, autoclose = False ):
@@ -697,7 +777,7 @@ def _OpenFileInSplitIfNeeded( filepath ):
   return ( buffer_num, True )
 
 
-def ReplaceChunks( chunks ):
+def ReplaceChunks( chunks, silent=False ):
   """Apply the source file deltas supplied in |chunks| to arbitrary files.
   |chunks| is a list of changes defined by ycmd.responses.FixItChunk,
   which may apply arbitrary modifications to arbitrary files.
@@ -711,32 +791,31 @@ def ReplaceChunks( chunks ):
   If for some reason a file could not be opened or changed, raises RuntimeError.
   Otherwise, returns no meaningful value."""
 
-  # We apply the edits file-wise for efficiency, and because we must track the
-  # file-wise offset deltas (caused by the modifications to the text).
+  # We apply the edits file-wise for efficiency.
   chunks_by_file = _SortChunksByFile( chunks )
 
-  # We sort the file list simply to enable repeatable testing
+  # We sort the file list simply to enable repeatable testing.
   sorted_file_list = sorted( iterkeys( chunks_by_file ) )
 
-  # Make sure the user is prepared to have her screen mutilated by the new
-  # buffers
-  num_files_to_open = _GetNumNonVisibleFiles( sorted_file_list )
+  if not silent:
+    # Make sure the user is prepared to have her screen mutilated by the new
+    # buffers.
+    num_files_to_open = _GetNumNonVisibleFiles( sorted_file_list )
 
-  if num_files_to_open > 0:
-    if not Confirm(
+    if num_files_to_open > 0:
+      if not Confirm(
             FIXIT_OPENING_BUFFERS_MESSAGE_FORMAT.format( num_files_to_open ) ):
-      return
+        return
 
   # Store the list of locations where we applied changes. We use this to display
   # the quickfix window showing the user where we applied changes.
   locations = []
 
   for filepath in sorted_file_list:
-    ( buffer_num, close_window ) = _OpenFileInSplitIfNeeded( filepath )
+    buffer_num, close_window = _OpenFileInSplitIfNeeded( filepath )
 
-    ReplaceChunksInBuffer( chunks_by_file[ filepath ],
-                           vim.buffers[ buffer_num ],
-                           locations )
+    locations.extend( ReplaceChunksInBuffer( chunks_by_file[ filepath ],
+                                             vim.buffers[ buffer_num ] ) )
 
     # When opening tons of files, we don't want to have a split for each new
     # file, as this simply does not scale, so we open the window, make the
@@ -752,109 +831,110 @@ def ReplaceChunks( chunks ):
       vim.command( 'hide' )
 
   # Open the quickfix list, populated with entries for each location we changed.
-  if locations:
-    SetQuickFixList( locations )
-    OpenQuickFixList()
+  if not silent:
+    if locations:
+      SetQuickFixList( locations )
 
-  PostVimMessage( 'Applied {0} changes'.format( len( chunks ) ),
-                  warning = False )
+    PostVimMessage( 'Applied {0} changes'.format( len( chunks ) ),
+                    warning = False )
 
 
-def ReplaceChunksInBuffer( chunks, vim_buffer, locations ):
-  """Apply changes in |chunks| to the buffer-like object |buffer|. Append each
-  chunk's start to the list |locations|"""
+def ReplaceChunksInBuffer( chunks, vim_buffer ):
+  """Apply changes in |chunks| to the buffer-like object |buffer| and return the
+  locations for that buffer."""
 
-  # We need to track the difference in length, but ensuring we apply fixes
-  # in ascending order of insertion point.
+  # We apply the chunks from the bottom to the top of the buffer so that we
+  # don't need to adjust the position of the remaining chunks due to text
+  # changes. This assumes that chunks are not overlapping. However, we still
+  # allow multiple chunks to share the same starting position (because of the
+  # language server protocol specs). These chunks must be applied in their order
+  # of appareance. Since Python sorting is stable, if we sort the whole list in
+  # reverse order of location, these chunks will be reversed. Therefore, we
+  # need to fully reverse the list then sort it on the starting position in
+  # reverse order.
+  chunks.reverse()
   chunks.sort( key = lambda chunk: (
     chunk[ 'range' ][ 'start' ][ 'line_num' ],
     chunk[ 'range' ][ 'start' ][ 'column_num' ]
-  ) )
+  ), reverse = True )
 
-  # Remember the line number we're processing. Negative line number means we
-  # haven't processed any lines yet (by nature of being not equal to any
-  # real line number).
-  last_line = -1
+  # However, we still want to display the locations from the top of the buffer
+  # to its bottom.
+  return reversed( [ ReplaceChunk( chunk[ 'range' ][ 'start' ],
+                                   chunk[ 'range' ][ 'end' ],
+                                   chunk[ 'replacement_text' ],
+                                   vim_buffer )
+                     for chunk in chunks ] )
 
-  line_delta = 0
-  for chunk in chunks:
-    if chunk[ 'range' ][ 'start' ][ 'line_num' ] != last_line:
-      # If this chunk is on a different line than the previous chunk,
-      # then ignore previous deltas (as offsets won't have changed).
-      last_line = chunk[ 'range' ][ 'end' ][ 'line_num' ]
-      char_delta = 0
 
-    ( new_line_delta, new_char_delta ) = ReplaceChunk(
-      chunk[ 'range' ][ 'start' ],
-      chunk[ 'range' ][ 'end' ],
-      chunk[ 'replacement_text' ],
-      line_delta, char_delta,
-      vim_buffer,
-      locations )
-    line_delta += new_line_delta
-    char_delta += new_char_delta
+def SplitLines( contents ):
+  """Return a list of each of the lines in the byte string |contents|.
+  Behavior is equivalent to str.splitlines with the following exceptions:
+   - empty strings are returned as [ '' ];
+   - a trailing newline is not ignored (i.e. SplitLines( '\n' )
+     returns [ '', '' ], not [ '' ] )."""
+  if contents == b'':
+    return [ b'' ]
+
+  lines = contents.splitlines()
+
+  if contents.endswith( b'\r' ) or contents.endswith( b'\n' ):
+    lines.append( b'' )
+
+  return lines
 
 
 # Replace the chunk of text specified by a contiguous range with the supplied
-# text.
+# text and return the location.
 # * start and end are objects with line_num and column_num properties
 # * the range is inclusive
 # * indices are all 1-based
-# * the returned character delta is the delta for the last line
-#
-# returns the delta (in lines and characters) that any position after the end
-# needs to be adjusted by.
 #
 # NOTE: Works exclusively with bytes() instances and byte offsets as returned
 # by ycmd and used within the Vim buffers
-def ReplaceChunk( start, end, replacement_text, line_delta, char_delta,
-                  vim_buffer, locations = None ):
+def ReplaceChunk( start, end, replacement_text, vim_buffer ):
   # ycmd's results are all 1-based, but vim's/python's are all 0-based
   # (so we do -1 on all of the values)
-  start_line = start[ 'line_num' ] - 1 + line_delta
-  end_line = end[ 'line_num' ] - 1 + line_delta
+  start_line = start[ 'line_num' ] - 1
+  end_line = end[ 'line_num' ] - 1
 
-  source_lines_count = end_line - start_line + 1
-  start_column = start[ 'column_num' ] - 1 + char_delta
+  start_column = start[ 'column_num' ] - 1
   end_column = end[ 'column_num' ] - 1
-  if source_lines_count == 1:
-    end_column += char_delta
+
+  # When sending a request to the server, a newline is added to the buffer
+  # contents to match what gets saved to disk. If the server generates a chunk
+  # containing that newline, this chunk goes past the Vim buffer contents since
+  # there is actually no new line. When this happens, recompute the end position
+  # of where the chunk is applied and remove all trailing characters in the
+  # chunk.
+  if end_line >= len( vim_buffer ):
+    end_column = len( ToBytes( vim_buffer[ -1 ] ) )
+    end_line = len( vim_buffer ) - 1
+    replacement_text = replacement_text.rstrip()
 
   # NOTE: replacement_text is unicode, but all our offsets are byte offsets,
   # so we convert to bytes
-  replacement_lines = ToBytes( replacement_text ).splitlines( False )
-  if not replacement_lines:
-    replacement_lines = [ bytes( b'' ) ]
-  replacement_lines_count = len( replacement_lines )
+  replacement_lines = SplitLines( ToBytes( replacement_text ) )
 
   # NOTE: Vim buffers are a list of byte objects on Python 2 but unicode
   # objects on Python 3.
-  end_existing_text = ToBytes( vim_buffer[ end_line ] )[ end_column : ]
   start_existing_text = ToBytes( vim_buffer[ start_line ] )[ : start_column ]
-
-  new_char_delta = ( len( replacement_lines[ -1 ] )
-                     - ( end_column - start_column ) )
-  if replacement_lines_count > 1:
-    new_char_delta -= start_column
+  end_existing_text = ToBytes( vim_buffer[ end_line ] )[ end_column : ]
 
   replacement_lines[ 0 ] = start_existing_text + replacement_lines[ 0 ]
   replacement_lines[ -1 ] = replacement_lines[ -1 ] + end_existing_text
 
   vim_buffer[ start_line : end_line + 1 ] = replacement_lines[:]
 
-  if locations is not None:
-    locations.append( {
-      'bufnr': vim_buffer.number,
-      'filename': vim_buffer.name,
-      # line and column numbers are 1-based in qflist
-      'lnum': start_line + 1,
-      'col': start_column + 1,
-      'text': replacement_text,
-      'type': 'F',
-    } )
-
-  new_line_delta = replacement_lines_count - source_lines_count
-  return ( new_line_delta, new_char_delta )
+  return {
+    'bufnr': vim_buffer.number,
+    'filename': vim_buffer.name,
+    # line and column numbers are 1-based in qflist
+    'lnum': start_line + 1,
+    'col': start_column + 1,
+    'text': replacement_text,
+    'type': 'F',
+  }
 
 
 def InsertNamespace( namespace ):
@@ -871,9 +951,9 @@ def InsertNamespace( namespace ):
   if line:
     existing_line = LineTextInCurrentBuffer( line )
     existing_indent = re.sub( r"\S.*", "", existing_line )
-  new_line = "{0}using {1};\n\n".format( existing_indent, namespace )
+  new_line = "{0}using {1};\n".format( existing_indent, namespace )
   replace_pos = { 'line_num': line + 1, 'column_num': 1 }
-  ReplaceChunk( replace_pos, replace_pos, new_line, 0, 0, vim.current.buffer )
+  ReplaceChunk( replace_pos, replace_pos, new_line, vim.current.buffer )
   PostVimMessage( 'Add namespace: {0}'.format( namespace ), warning = False )
 
 
@@ -1055,3 +1135,31 @@ def _SetUpLoadedBuffer( command, filename, fix, position, watch ):
 
   if position == 'end':
     vim.command( 'silent! normal! Gzz' )
+
+
+def BuildRange( start_line, end_line ):
+  # Vim only returns the starting and ending lines of the range of a command.
+  # Check if those lines correspond to a previous visual selection and if they
+  # do, use the columns of that selection to build the range.
+  start = vim.current.buffer.mark( '<' )
+  end = vim.current.buffer.mark( '>' )
+  if not start or not end or start_line != start[ 0 ] or end_line != end[ 0 ]:
+    start = [ start_line, 0 ]
+    end = [ end_line, len( vim.current.buffer[ end_line - 1 ] ) ]
+  # Vim Python API returns 1-based lines and 0-based columns while ycmd expects
+  # 1-based lines and columns.
+  return {
+    'range': {
+      'start': {
+        'line_num': start[ 0 ],
+        'column_num': start[ 1 ] + 1
+      },
+      'end': {
+        'line_num': end[ 0 ],
+        # Vim returns the maximum 32-bit integer value when a whole line is
+        # selected. Use the end of line instead.
+        'column_num': min( end[ 1 ],
+                           len( vim.current.buffer[ end[ 0 ] - 1 ] ) ) + 1
+      }
+    }
+  }

@@ -1,4 +1,4 @@
-// Copyright (C) 2011, 2012 Google Inc.
+// Copyright (C) 2011-2018 ycmd contributors
 //
 // This file is part of ycmd.
 //
@@ -50,8 +50,9 @@ Bitset LetterBitsetFromString( const std::string &text ) {
   for ( char letter : text ) {
     int letter_index = IndexForLetter( letter );
 
-    if ( IsAscii( letter_index ) )
+    if ( IsAscii( letter_index ) ) {
       letter_bitset.set( letter_index );
+    }
   }
 
   return letter_bitset;
@@ -59,13 +60,12 @@ Bitset LetterBitsetFromString( const std::string &text ) {
 
 
 Candidate::Candidate( const std::string &text )
-  :
-  text_( text ),
-  case_swapped_text_( SwapCase( text ) ),
-  word_boundary_chars_( GetWordBoundaryChars( text ) ),
-  text_is_lowercase_( IsLowercase( text ) ),
-  letters_present_( LetterBitsetFromString( text ) ),
-  root_node_( new LetterNode( text ) ) {
+  : text_( text ),
+    case_swapped_text_( SwapCase( text ) ),
+    word_boundary_chars_( GetWordBoundaryChars( text ) ),
+    text_is_lowercase_( IsLowercase( text ) ),
+    letters_present_( LetterBitsetFromString( text ) ),
+    root_node_( new LetterNode( text ) ) {
 }
 
 
@@ -78,24 +78,28 @@ Result Candidate::QueryMatchResult( const std::string &query,
     const NearestLetterNodeIndices *nearest =
       node->NearestLetterNodesForLetter( letter );
 
-    if ( !nearest )
+    if ( !nearest ) {
       return Result();
+    }
 
     // When the query letter is uppercase, then we force an uppercase match
     // but when the query letter is lowercase, then it can match both an
     // uppercase and a lowercase letter. This is by design and it's much
     // better than forcing lowercase letter matches.
-    node = NULL;
+    node = nullptr;
     if ( case_sensitive && IsUppercase( letter ) ) {
-      if ( nearest->indexOfFirstUppercaseOccurrence >= 0 )
+      if ( nearest->indexOfFirstUppercaseOccurrence >= 0 ) {
         node = ( *root_node_ )[ nearest->indexOfFirstUppercaseOccurrence ];
+      }
     } else {
-      if ( nearest->indexOfFirstOccurrence >= 0 )
+      if ( nearest->indexOfFirstOccurrence >= 0 ) {
         node = ( *root_node_ )[ nearest->indexOfFirstOccurrence ];
+      }
     }
 
-    if ( !node )
+    if ( !node ) {
       return Result();
+    }
 
     index_sum += node->Index();
   }

@@ -94,10 +94,7 @@ class Grammar(object):
         if error_recovery and start_symbol != 'file_input':
             raise NotImplementedError("This is currently not implemented.")
 
-        if cache and code is None and path is not None:
-            # With the current architecture we cannot load from cache if the
-            # code is given, because we just load from cache if it's not older than
-            # the latest change (file last modified).
+        if cache and path is not None:
             module_node = load_module(self._hashed, path, cache_path=cache_path)
             if module_node is not None:
                 return module_node
@@ -257,7 +254,10 @@ def load_grammar(**kwargs):
         if language == 'python':
             version_info = parse_version_string(version)
 
-            file = 'python/grammar%s%s.txt' % (version_info.major, version_info.minor)
+            file = os.path.join(
+                'python',
+                'grammar%s%s.txt' % (version_info.major, version_info.minor)
+            )
 
             global _loaded_grammars
             path = os.path.join(os.path.dirname(__file__), file)

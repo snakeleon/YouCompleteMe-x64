@@ -13,7 +13,8 @@ from jedi import debug
 from jedi.cache import underscore_memoization, memoize_method
 from jedi.evaluate.filters import AbstractFilter, AbstractNameDefinition, \
     ContextNameMixin
-from jedi.evaluate.context import Context, LazyKnownContext
+from jedi.evaluate.base_context import Context, ContextSet
+from jedi.evaluate.lazy_context import LazyKnownContext
 from jedi.evaluate.compiled.getattr_static import getattr_static
 from . import fake
 
@@ -82,10 +83,10 @@ class CompiledObject(Context):
     @CheckAttribute
     def py__call__(self, params):
         if inspect.isclass(self.obj):
-            from jedi.evaluate.instance import CompiledInstance
-            return set([CompiledInstance(self.evaluator, self.parent_context, self, params)])
+            from jedi.evaluate.context import CompiledInstance
+            return ContextSet(CompiledInstance(self.evaluator, self.parent_context, self, params))
         else:
-            return set(self._execute_function(params))
+            return ContextSet.from_iterable(self._execute_function(params))
 
     @CheckAttribute
     def py__class__(self):
@@ -221,9 +222,9 @@ class CompiledObject(Context):
     def py__getitem__(self, index):
         if type(self.obj) not in (str, list, tuple, unicode, bytes, bytearray, dict):
             # Get rid of side effects, we won't call custom `__getitem__`s.
-            return set()
+            return ContextSet()
 
-        return set([create(self.evaluator, self.obj[index])])
+        return ContextSet(create(self.evaluator, self.obj[index]))
 
     @CheckAttribute
     def py__iter__(self):
@@ -266,7 +267,7 @@ class CompiledObject(Context):
                     # TODO do we?
                     continue
                 bltn_obj = create(self.evaluator, bltn_obj)
-                for result in self.evaluator.execute(bltn_obj, params):
+                for result in bltn_obj.execute(params):
                     yield result
         for type_ in docstrings.infer_return_types(self):
             yield type_
@@ -278,7 +279,9 @@ class CompiledObject(Context):
         return []  # Builtins don't have imports
 
     def dict_values(self):
-        return set(create(self.evaluator, v) for v in self.obj.values())
+        return ContextSet.from_iterable(
+            create(self.evaluator, v) for v in self.obj.values()
+        )
 
 
 class CompiledName(AbstractNameDefinition):
@@ -301,7 +304,9 @@ class CompiledName(AbstractNameDefinition):
     @underscore_memoization
     def infer(self):
         module = self.parent_context.get_root_context()
-        return [_create_from_name(self._evaluator, module, self.parent_context, self.string_name)]
+        return ContextSet(_create_from_name(
+            self._evaluator, module, self.parent_context, self.string_name
+        ))
 
 
 class SignatureParamName(AbstractNameDefinition):
@@ -318,13 +323,13 @@ class SignatureParamName(AbstractNameDefinition):
     def infer(self):
         p = self._signature_param
         evaluator = self.parent_context.evaluator
-        types = set()
+        contexts = ContextSet()
         if p.default is not p.empty:
-            types.add(create(evaluator, p.default))
+            contexts = ContextSet(create(evaluator, p.default))
         if p.annotation is not p.empty:
             annotation = create(evaluator, p.annotation)
-            types |= annotation.execute_evaluated()
-        return types
+            contexts |= annotation.execute_evaluated()
+        return contexts
 
 
 class UnresolvableParamName(AbstractNameDefinition):
@@ -335,7 +340,7 @@ class UnresolvableParamName(AbstractNameDefinition):
         self.string_name = name
 
     def infer(self):
-        return set()
+        return ContextSet()
 
 
 class CompiledContextName(ContextNameMixin, AbstractNameDefinition):
@@ -356,7 +361,7 @@ class EmptyCompiledName(AbstractNameDefinition):
         self.string_name = name
 
     def infer(self):
-        return []
+        return ContextSet()
 
 
 class CompiledObjectFilter(AbstractFilter):
@@ -439,15 +444,11 @@ def dotted_from_fs_path(fs_path, sys_path):
 
 
 def load_module(evaluator, path=None, name=None):
-    sys_path = evaluator.sys_path
+    sys_path = list(evaluator.project.sys_path)
     if path is not None:
         dotted_path = dotted_from_fs_path(path, sys_path=sys_path)
     else:
         dotted_path = name
-
-    if dotted_path is None:
-        p, _, dotted_path = path.partition(os.path.sep)
-        sys_path.insert(0, p)
 
     temp, sys.path = sys.path, sys_path
     try:
@@ -548,7 +549,7 @@ def _create_from_name(evaluator, module, compiled_object, name):
     try:
         faked = fake.get_faked(evaluator, module, obj, parent_context=compiled_object, name=name)
         if faked.type == 'funcdef':
-            from jedi.evaluate.representation import FunctionContext
+            from jedi.evaluate.context.function import FunctionContext
             return FunctionContext(evaluator, compiled_object, faked)
     except fake.FakeDoesNotExist:
         pass
@@ -629,7 +630,7 @@ def create(evaluator, obj, parent_context=None, module=None, faked=None):
         try:
             faked = fake.get_faked(evaluator, module, obj, parent_context=parent_context)
             if faked.type == 'funcdef':
-                from jedi.evaluate.representation import FunctionContext
+                from jedi.evaluate.context.function import FunctionContext
                 return FunctionContext(evaluator, parent_context, faked)
         except fake.FakeDoesNotExist:
             pass

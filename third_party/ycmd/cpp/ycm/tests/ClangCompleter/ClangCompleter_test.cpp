@@ -22,8 +22,6 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
 
-#include <boost/filesystem.hpp>
-
 namespace YouCompleteMe {
 
 using ::testing::ElementsAre;
@@ -37,12 +35,14 @@ TEST( ClangCompleterTest, CandidatesForLocationInFile ) {
   std::vector< CompletionData > completions_class =
     completer.CandidatesForLocationInFile(
       PathToTestFile( "basic.cpp" ).string(),
+      PathToTestFile( "basic.cpp" ).string(),
       29,
       7,
       std::vector< UnsavedFile >(),
       std::vector< std::string >() );
   std::vector< CompletionData > completions_struct =
     completer.CandidatesForLocationInFile(
+      PathToTestFile( "basic.cpp" ).string(),
       PathToTestFile( "basic.cpp" ).string(),
       30,
       7,
@@ -58,6 +58,7 @@ TEST( ClangCompleterTest, BufferTextNoParens ) {
   ClangCompleter completer;
   std::vector< CompletionData > completions =
     completer.CandidatesForLocationInFile(
+      PathToTestFile( "basic.cpp" ).string(),
       PathToTestFile( "basic.cpp" ).string(),
       29,
       7,
@@ -76,6 +77,7 @@ TEST( ClangCompleterTest, MemberFunctionWithDefaults ) {
   ClangCompleter completer;
   std::vector< CompletionData > completions =
     completer.CandidatesForLocationInFile(
+      PathToTestFile( "basic.cpp" ).string(),
       PathToTestFile( "basic.cpp" ).string(),
       30,
       7,
@@ -100,6 +102,7 @@ TEST( ClangCompleterTest, CandidatesObjCForLocationInFile ) {
   std::vector< CompletionData > completions =
     completer.CandidatesForLocationInFile(
       PathToTestFile( "SWObject.m" ).string(),
+      PathToTestFile( "SWObject.m" ).string(),
       6,
       16,
       std::vector< UnsavedFile >(),
@@ -117,6 +120,7 @@ TEST( ClangCompleterTest, CandidatesObjCFuncForLocationInFile ) {
   flags.push_back( "objective-c" );
   std::vector< CompletionData > completions =
     completer.CandidatesForLocationInFile(
+      PathToTestFile( "SWObject.m" ).string(),
       PathToTestFile( "SWObject.m" ).string(),
       9,
       3,
@@ -140,6 +144,7 @@ TEST( ClangCompleterTest, GetDefinitionLocation ) {
   Location actual_location_struct =
     completer.GetDefinitionLocation(
       filename,
+      filename,
       26,
       3,
       std::vector< UnsavedFile >(),
@@ -147,6 +152,7 @@ TEST( ClangCompleterTest, GetDefinitionLocation ) {
 
   Location actual_location_class_method =
     completer.GetDefinitionLocation(
+      filename,
       filename,
       29,
       7,
@@ -156,6 +162,7 @@ TEST( ClangCompleterTest, GetDefinitionLocation ) {
   Location actual_location_class =
     completer.GetDefinitionLocation(
       filename,
+      filename,
       27,
       3,
       std::vector< UnsavedFile >(),
@@ -164,6 +171,7 @@ TEST( ClangCompleterTest, GetDefinitionLocation ) {
   Location actual_location_enum_value =
     completer.GetDefinitionLocation(
       filename,
+      filename,
       31,
       25,
       std::vector< UnsavedFile >(),
@@ -171,6 +179,7 @@ TEST( ClangCompleterTest, GetDefinitionLocation ) {
 
   Location actual_location_enum =
     completer.GetDefinitionLocation(
+      filename,
       filename,
       31,
       3,
@@ -191,6 +200,7 @@ TEST( ClangCompleterTest, GetDocString ) {
   std::vector< CompletionData > completions =
     completer.CandidatesForLocationInFile(
       PathToTestFile( "basic.cpp" ).string(),
+      PathToTestFile( "basic.cpp" ).string(),
       30,
       7,
       std::vector< UnsavedFile >(),
@@ -205,58 +215,30 @@ TEST( ClangCompleterTest, GetDocString ) {
 }
 
 
-TEST( ClangCompleterTest, NoTranslationUnit ) {
+TEST( ClangCompleterTest, ExceptionThrownOnReparseFailure ) {
   ClangCompleter completer;
 
-  const std::string filename;
-  const std::vector< UnsavedFile > unsaved_files;
-  const std::vector< std::string > flags;
+  // Create a translation unit for a C++ file that is not saved on disk.
+  std::string filename = PathToTestFile( "unsaved_file.cpp" ).string();
+  UnsavedFile unsaved_file;
+  unsaved_file.filename_ = filename;
 
-  EXPECT_EQ( std::vector< Diagnostic >(),
-             completer.UpdateTranslationUnit( filename, unsaved_files, flags) );
+  completer.UpdateTranslationUnit( filename,
+                                   std::vector< UnsavedFile >{ unsaved_file },
+                                   std::vector< std::string >() );
 
-  EXPECT_EQ( std::vector< CompletionData >(),
-             completer.CandidatesForLocationInFile( filename,
-                                                    1,
-                                                    1,
-                                                    unsaved_files,
-                                                    flags ) );
-
-  EXPECT_EQ( Location(), completer.GetDeclarationLocation( filename,
-                                                           1,
-                                                           1,
-                                                           unsaved_files,
-                                                           flags ) );
-  EXPECT_EQ( Location(), completer.GetDefinitionLocation( filename,
-                                                          1,
-                                                          1,
-                                                          unsaved_files,
-                                                          flags ) );
-  EXPECT_EQ( std::string( "no unit" ),
-             completer.GetTypeAtLocation( filename,
-                                          1,
-                                          1,
-                                          unsaved_files,
-                                          flags ) );
-  EXPECT_EQ( std::string( "no unit" ),
-             completer.GetEnclosingFunctionAtLocation( filename,
-                                                       1,
-                                                       1,
-                                                       unsaved_files,
-                                                       flags ) );
-  EXPECT_EQ( std::vector< FixIt >(),
-             completer.GetFixItsForLocationInFile( filename,
-                                                   1,
-                                                   1,
-                                                   unsaved_files,
-                                                   flags ) );
-
-  EXPECT_EQ( DocumentationData(),
-             completer.GetDocsForLocationInFile( filename,
-                                                 1,
-                                                 1,
-                                                 unsaved_files,
-                                                 flags ) );
+  try {
+    // libclang cannot reparse a file that doesn't exist and is not in the list
+    // of unsaved files.
+    completer.UpdateTranslationUnit( filename,
+                                     std::vector< UnsavedFile >(),
+                                     std::vector< std::string >() );
+    FAIL() << "Expected ClangParseError exception.";
+  } catch ( const ClangParseError &error ) {
+    EXPECT_STREQ( error.what(), "Failed to parse the translation unit." );
+  } catch ( ... ) {
+    FAIL() << "Expected ClangParseError exception.";
+  }
 }
 
 } // namespace YouCompleteMe

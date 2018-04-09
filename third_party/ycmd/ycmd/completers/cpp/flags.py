@@ -32,13 +32,13 @@ from ycmd.utils import ( ToCppStringCompatible, OnMac, OnWindows, ToUnicode,
                          ToBytes, PathsToAllParentFolders )
 from ycmd.responses import NoExtraConfDetected
 
-
 # -include-pch and --sysroot= must be listed before -include and --sysroot
 # respectively because the latter is a prefix of the former (and the algorithm
 # checks prefixes).
 INCLUDE_FLAGS = [ '-isystem', '-I', '-iquote', '-isysroot', '--sysroot',
                   '-gcc-toolchain', '-include-pch', '-include', '-iframework',
                   '-F', '-imacros', '-idirafter' ]
+INCLUDE_FLAGS_WIN_STYLE = [ '/I' ]
 PATH_FLAGS =  [ '--sysroot=' ] + INCLUDE_FLAGS
 
 # We need to remove --fcolor-diagnostics because it will cause shell escape
@@ -48,6 +48,8 @@ STATE_FLAGS_TO_SKIP = set( [ '-c',
                              '-MD',
                              '-MMD',
                              '--fcolor-diagnostics' ] )
+
+STATE_FLAGS_TO_SKIP_WIN_STYLE = set( [ '/c' ] )
 
 # The -M* flags spec:
 #   https://gcc.gnu.org/onlinedocs/gcc-4.9.0/gcc/Preprocessor-Options.html
@@ -62,6 +64,9 @@ FILE_FLAGS_TO_SKIP = set( [ '-MF',
 # (e.g., c++, g++, clang++, g++-4.9, clang++-3.7, c++-10.2 etc).
 # See Valloric/ycmd#266
 CPP_COMPILER_REGEX = re.compile( r'\+\+(-\d+(\.\d+){0,2})?$' )
+
+# Use a regex to match all the possible forms of clang-cl or cl compiler
+CL_COMPILER_REGEX = re.compile( r'(?:cl|clang-cl)(.exe)?$', re.IGNORECASE )
 
 # List of file extensions to be considered "header" files and thus not present
 # in the compilation database. The logic will try and find an associated
@@ -112,6 +117,13 @@ class Flags( object ):
                     filename,
                     add_extra_clang_flags = True,
                     client_data = None ):
+    """Returns a tuple describing the compiler invocation required to parse the
+    file |filename|. The tuple contains 2 entries:
+      1. A list of the compiler flags to use,
+      2. The name of the translation unit to parse.
+    Note that the second argument might not be the same as the |filename|
+    argument to this method in the event that the extra conf file overrides the
+    translation unit, e.g. in the case of a "unity" build."""
 
     # The try-catch here is to avoid a synchronisation primitive. This method
     # may be called from multiple threads, and python gives us
@@ -130,14 +142,26 @@ class Flags( object ):
       if not self.no_extra_conf_file_warning_posted:
         self.no_extra_conf_file_warning_posted = True
         raise NoExtraConfDetected
-      return []
+      return [], filename
 
     if not results or not results.get( 'flags_ready', True ):
-      return []
+      return [], filename
+
+    return self._ParseFlagsFromExtraConfOrDatabase( filename,
+                                                    results,
+                                                    add_extra_clang_flags )
+
+
+  def _ParseFlagsFromExtraConfOrDatabase( self,
+                                          filename,
+                                          results,
+                                          add_extra_clang_flags ):
+    if 'override_filename' in results:
+      filename = results[ 'override_filename' ] or filename
 
     flags = _ExtractFlagsList( results )
     if not flags:
-      return []
+      return [], filename
 
     if add_extra_clang_flags:
       flags += self.extra_clang_flags
@@ -145,11 +169,13 @@ class Flags( object ):
 
     sanitized_flags = PrepareFlagsForClang( flags,
                                             filename,
-                                            add_extra_clang_flags )
+                                            add_extra_clang_flags,
+                                            _ShouldAllowWinStyleFlags( flags ) )
 
     if results.get( 'do_cache', True ):
-      self.flags_for_file[ filename ] = sanitized_flags
-    return sanitized_flags
+      self.flags_for_file[ filename ] = sanitized_flags, filename
+
+    return sanitized_flags, filename
 
 
   def _GetFlagsFromExtraConfOrDatabase( self, module, filename, client_data ):
@@ -238,6 +264,20 @@ def _ExtractFlagsList( flags_for_file_output ):
   return [ ToUnicode( x ) for x in flags_for_file_output[ 'flags' ] ]
 
 
+def _ShouldAllowWinStyleFlags( flags ):
+  if OnWindows():
+    # Iterate in reverse because we only care
+    # about the last occurrence of --driver-mode flag.
+    for flag in reversed( flags ):
+      if flag.startswith( '--driver-mode' ):
+        return flag == '--driver-mode=cl'
+    # If there was no --driver-mode flag,
+    # check if we are using a compiler like clang-cl.
+    return bool( CL_COMPILER_REGEX.search( flags[ 0 ] ) )
+
+  return False
+
+
 def _CallExtraConfFlagsForFile( module, filename, client_data ):
   # We want to ensure we pass a native py2 `str` on py2 and a native py3 `str`
   # (unicode) object on py3. That's the API we provide.
@@ -273,10 +313,13 @@ def _SysRootSpecifedIn( flags ):
   return False
 
 
-def PrepareFlagsForClang( flags, filename, add_extra_clang_flags = True ):
-  flags = _AddLanguageFlagWhenAppropriate( flags )
+def PrepareFlagsForClang( flags,
+                          filename,
+                          add_extra_clang_flags = True,
+                          enable_windows_style_flags = False ):
+  flags = _AddLanguageFlagWhenAppropriate( flags, enable_windows_style_flags )
   flags = _RemoveXclangFlags( flags )
-  flags = _RemoveUnusedFlags( flags, filename )
+  flags = _RemoveUnusedFlags( flags, filename, enable_windows_style_flags )
   if add_extra_clang_flags:
     flags = _EnableTypoCorrection( flags )
 
@@ -306,18 +349,21 @@ def _RemoveXclangFlags( flags ):
   return sanitized_flags
 
 
-def _RemoveFlagsPrecedingCompiler( flags ):
-  """Assuming that the flag just before the first flag (which starts with a
-  dash) is the compiler path, removes all flags preceding it."""
+def _RemoveFlagsPrecedingCompiler( flags, enable_windows_style_flags ):
+  """Assuming that the flag just before the first flag (looks like a flag,
+  not like a file path) is the compiler path, removes all flags preceding it."""
 
   for index, flag in enumerate( flags ):
-    if flag.startswith( '-' ):
+    if ( flag.startswith( '-' ) or
+         ( enable_windows_style_flags and
+           flag.startswith( '/' ) and
+           not os.path.exists( flag ) ) ):
       return ( flags[ index - 1: ] if index > 1 else
                flags )
   return flags[ :-1 ]
 
 
-def _AddLanguageFlagWhenAppropriate( flags ):
+def _AddLanguageFlagWhenAppropriate( flags, enable_windows_style_flags ):
   """When flags come from the compile_commands.json file, the flag preceding the
   first flag starting with a dash is usually the path to the compiler that
   should be invoked. Since LibClang does not deduce the language from the
@@ -326,18 +372,36 @@ def _AddLanguageFlagWhenAppropriate( flags ):
   the file extension. This handles the case where the .h extension is used for
   C++ headers."""
 
-  flags = _RemoveFlagsPrecedingCompiler( flags )
+  flags = _RemoveFlagsPrecedingCompiler( flags, enable_windows_style_flags )
 
-  # First flag is now the compiler path or a flag starting with a dash.
+  # First flag is now the compiler path, a flag starting with a dash or
+  # a flag starting with a forward slash if enable_windows_style_flags is True.
   first_flag = flags[ 0 ]
 
+  # NOTE: This is intentionally NOT checking for enable_windows_style_flags.
+  #
+  # Because of _RemoveFlagsPrecedingCompiler called above, irrelevant of
+  # enable_windows_style_flags. the first flag is either the compiler
+  # (path or executable), a Windows style flag or starts with a dash.
+  #
+  # If it doesn't start with a dash, it is either an absolute path,
+  # a Windows style flag or a C++ compiler executable from $PATH.
+  #   If it starts with a forward slash the flag can either be an absolute
+  #   flag or a Windows style flag.
+  #     If it matches the regex, it is safe to assume the flag is a compiler
+  #     path.
+  #     If it does not match the regex, it could still be a Windows style
+  #     path or an absolute path. - This is determined in _RemoveUnusedFlags()
+  #     and cleaned properly.
+  #   If the flag starts with anything else (i.e. not a '-' or a '/'), the flag
+  #   is a stray file path and shall be gotten rid of in _RemoveUnusedFlags().
   if ( not first_flag.startswith( '-' ) and
        CPP_COMPILER_REGEX.search( first_flag ) ):
     return [ first_flag, '-x', 'c++' ] + flags[ 1: ]
   return flags
 
 
-def _RemoveUnusedFlags( flags, filename ):
+def _RemoveUnusedFlags( flags, filename, enable_windows_style_flags ):
   """Given an iterable object that produces strings (flags for Clang), removes
   the '-c' and '-o' options that Clang does not like to see when it's producing
   completions for a file. Same for '-MD' etc.
@@ -355,26 +419,28 @@ def _RemoveUnusedFlags( flags, filename ):
     flags = flags[ 1: ]
 
   skip_next = False
-  previous_flag_is_include = False
-  previous_flag_starts_with_dash = False
-  current_flag_starts_with_dash = False
+  previous_flag = flags[ 0 ]
+  current_flag = flags[ 0 ]
 
+  filename = os.path.realpath( filename )
   for flag in flags:
-    previous_flag_starts_with_dash = current_flag_starts_with_dash
-    current_flag_starts_with_dash = flag.startswith( '-' )
+    previous_flag = current_flag
+    current_flag = flag
 
     if skip_next:
       skip_next = False
       continue
 
-    if flag in STATE_FLAGS_TO_SKIP:
+    if ( flag in STATE_FLAGS_TO_SKIP or
+         ( enable_windows_style_flags and
+           flag in STATE_FLAGS_TO_SKIP_WIN_STYLE ) ):
       continue
 
     if flag in FILE_FLAGS_TO_SKIP:
       skip_next = True
       continue
 
-    if flag == filename or os.path.realpath( flag ) == filename:
+    if os.path.realpath( flag ) == filename:
       continue
 
     # We want to make sure that we don't have any stray filenames in our flags;
@@ -383,14 +449,40 @@ def _RemoveUnusedFlags( flags, filename ):
     # "foo.cpp" when we are compiling "foo.h" because the comp db doesn't have
     # flags for headers. The returned flags include "foo.cpp" and we need to
     # remove that.
-    if ( not current_flag_starts_with_dash and
-          ( not previous_flag_starts_with_dash or
-            ( not previous_flag_is_include and '/' in flag ) ) ):
+    if _SkipStrayFilenameFlag( current_flag,
+                               previous_flag,
+                               enable_windows_style_flags ):
       continue
 
     new_flags.append( flag )
-    previous_flag_is_include = flag in INCLUDE_FLAGS
+
   return new_flags
+
+
+def _SkipStrayFilenameFlag( current_flag,
+                            previous_flag,
+                            enable_windows_style_flags ):
+  current_flag_starts_with_slash = current_flag.startswith( '/' )
+  previous_flag_starts_with_slash = previous_flag.startswith( '/' )
+
+  current_flag_starts_with_dash = current_flag.startswith( '-' )
+  previous_flag_starts_with_dash = previous_flag.startswith( '-' )
+
+  previous_flag_is_include = ( previous_flag in INCLUDE_FLAGS or
+                               ( enable_windows_style_flags and
+                                 previous_flag in INCLUDE_FLAGS_WIN_STYLE ) )
+
+  current_flag_may_be_path = ( '/' in current_flag or
+                               ( enable_windows_style_flags and
+                                 '\\' in current_flag ) )
+
+  return ( not ( current_flag_starts_with_dash or
+                 ( enable_windows_style_flags and
+                   current_flag_starts_with_slash ) ) and
+           ( not ( previous_flag_starts_with_dash or
+                   ( enable_windows_style_flags and
+                     previous_flag_starts_with_slash ) ) or
+             ( not previous_flag_is_include and current_flag_may_be_path ) ) )
 
 
 # Return the path to the macOS toolchain root directory to use for system
@@ -532,6 +624,9 @@ def _MakeRelativePathsInFlagsAbsolute( flags, working_directory ):
     return list( flags )
   new_flags = []
   make_next_absolute = False
+  path_flags = ( PATH_FLAGS + INCLUDE_FLAGS_WIN_STYLE
+                 if _ShouldAllowWinStyleFlags( flags )
+                 else PATH_FLAGS )
   for flag in flags:
     new_flag = flag
 
@@ -541,7 +636,7 @@ def _MakeRelativePathsInFlagsAbsolute( flags, working_directory ):
         new_flag = os.path.join( working_directory, flag )
       new_flag = os.path.normpath( new_flag )
     else:
-      for path_flag in PATH_FLAGS:
+      for path_flag in path_flags:
         # Single dash argument alone, e.g. -isysroot <path>
         if flag == path_flag:
           make_next_absolute = True
@@ -592,10 +687,11 @@ def _GetCompilationInfoForFile( database, file_name, file_extension ):
 def UserIncludePaths( flags, filename ):
   quoted_include_paths = [ os.path.dirname( filename ) ]
   include_paths = []
-
   if flags:
     quote_flag = '-iquote'
-    path_flags = [ '-isystem', '-I' ]
+    path_flags = ( [ '-isystem', '-I', '/I' ]
+                   if _ShouldAllowWinStyleFlags( flags )
+                   else [ '-isystem', '-I' ] )
 
     try:
       it = iter( flags )

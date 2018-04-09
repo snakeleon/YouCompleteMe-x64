@@ -188,7 +188,7 @@ class TestClass(Super):
         self.base_class
         #< (-20,13), (0,13)
         self.base_var
-        #< 
+        #< (0, 18),
         TestClass.base_var
 
 
@@ -242,7 +242,7 @@ def f(**kwargs):
 # No result
 # -----------------
 if isinstance(j, int):
-    #< 
+    #< (0, 4),
     j
 
 # -----------------
@@ -302,3 +302,15 @@ x = 3
 {x:1 for  x in something}
 #< 10 (0,1), (0,10)
 {x:1 for  x in something}
+
+def x():
+    zzz = 3
+    if UNDEFINED:
+        zzz = 5
+        if UNDEFINED2:
+            #< (3, 8), (4, 4), (0, 12), (-3, 8), (-5, 4)
+            zzz
+    else:
+        #< (0, 8), (1, 4), (-3, 12), (-6, 8), (-8, 4)
+        zzz
+    zzz
