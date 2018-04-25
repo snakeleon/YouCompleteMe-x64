@@ -1,19 +1,19 @@
-# Copyright (C) 2011, 2012  Google Inc.
+# Copyright (C) 2011-2018 ycmd contributors
 #
-# This file is part of YouCompleteMe.
+# This file is part of ycmd.
 #
-# YouCompleteMe is free software: you can redistribute it and/or modify
+# ycmd is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation, either version 3 of the License, or
 # (at your option) any later version.
 #
-# YouCompleteMe is distributed in the hope that it will be useful,
+# ycmd is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
-# along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
+# along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
 if ( APPLE )
   # OSX requires CMake >= 2.8.12, see YCM issue #1439
@@ -169,38 +169,30 @@ elseif( COMPILER_IS_CLANG )
     set( CMAKE_XCODE_ATTRIBUTE_CLANG_CXX_LIBRARY "libc++" )
   endif()
 elseif( MSVC )
-  if ( NOT MSVC_VERSION LESS 1800 )
+  if ( NOT MSVC_VERSION LESS 1900 )
     set( CPP11_AVAILABLE true )
   endif()
 endif()
 
 #############################################################################
 
-# For MSVC enable UNICODE and compilation on multiple processors
+# For MSVC enable UNICODE and compilation on multiple processors. Increase the
+# number of sections that an object file can hold. This is needed for storing
+# the Unicode table.
 if ( MSVC )
   add_definitions( /DUNICODE /D_UNICODE /Zc:wchar_t- )
-  set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP" )
+  set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP /bigobj" )
 endif()
-
-# Solves the conflict in names of hypot in python sources and boost::python
-if ( MINGW )
-  set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -include cmath")
-endif()
-
 
 if( MSVC OR CYGWIN OR MSYS)
   # BOOST_ALL_NO_LIB turns off MSVC library autolinking
   add_definitions( -DBOOST_ALL_NO_LIB )
 endif()
 
-if( WIN32 OR CYGWIN OR MSYS)
-  # BOOST_PYTHON_SOURCE makes boost use the correct __declspec
-  add_definitions( -DBOOST_PYTHON_SOURCE -DBOOST_THREAD_USE_LIB )
-  if ( NOT MSVC AND 64_BIT_PLATFORM )
-      # Enables Python compilation for 64-bit Windows. Already defined by Python
-      # headers when compiling with MSVC.
-    add_definitions( -DMS_WIN64 )
-  endif()
+# Enables Python compilation for 64-bit Windows. Already defined by Python
+# headers when compiling with MSVC.
+if( WIN32 OR CYGWIN OR MSYS AND NOT MSVC AND 64_BIT_PLATFORM )
+  add_definitions( -DMS_WIN64 )
 endif()
 
 #############################################################################

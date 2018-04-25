@@ -1,4 +1,4 @@
-# Copyright (C) 2017 ycmd contributors
+# Copyright (C) 2017-2018 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -31,7 +31,7 @@ import queue
 import threading
 
 from ycmd.completers.completer import Completer
-from ycmd.completers.completer_utils import GetFileContents
+from ycmd.completers.completer_utils import GetFileContents, GetFileLines
 from ycmd import utils
 from ycmd import responses
 
@@ -597,6 +597,9 @@ class LanguageServerCompleter( Completer ):
   Completions
 
   - The implementation should not require any code to support completions
+  - (optional) Override GetCodepointForCompletionRequest if you wish to change
+    the completion position (e.g. if you want to pass the "query" to the
+    server)
 
   Diagnostics
 
@@ -733,6 +736,12 @@ class LanguageServerCompleter( Completer ):
                request_data ) )
 
 
+  def GetCodepointForCompletionRequest( self, request_data ):
+    """Returns the 1-based codepoint offset on the current line at which to make
+    the completion request"""
+    return request_data[ 'start_codepoint' ]
+
+
   def ComputeCandidatesInner( self, request_data ):
     if not self.ServerIsReady():
       return None
@@ -740,7 +749,11 @@ class LanguageServerCompleter( Completer ):
     self._UpdateServerWithFileContents( request_data )
 
     request_id = self.GetConnection().NextRequestId()
-    msg = lsp.Completion( request_id, request_data )
+
+    msg = lsp.Completion(
+      request_id,
+      request_data,
+      self.GetCodepointForCompletionRequest( request_data ) )
     response = self.GetConnection().GetResponse( request_id,
                                                  msg,
                                                  REQUEST_TIMEOUT_COMPLETION )
@@ -898,7 +911,7 @@ class LanguageServerCompleter( Completer ):
     # polling mechanism.
     filepath = request_data[ 'filepath' ]
     uri = lsp.FilePathToUri( filepath )
-    contents = utils.SplitLines( GetFileContents( request_data, filepath ) )
+    contents = GetFileLines( request_data, filepath )
     with self._server_info_mutex:
       if uri in self._latest_diagnostics:
         return [ _BuildDiagnostic( contents, uri, diag )
@@ -1025,10 +1038,10 @@ class LanguageServerCompleter( Completer ):
 
       with self._server_info_mutex:
         if filepath in self._server_file_state:
-          contents = self._server_file_state[ filepath ].contents
+          contents = utils.SplitLines(
+            self._server_file_state[ filepath ].contents )
         else:
-          contents = GetFileContents( request_data, filepath )
-      contents = utils.SplitLines( contents )
+          contents = GetFileLines( request_data, filepath )
       return {
         'diagnostics': [ _BuildDiagnostic( contents, uri, x )
                          for x in params[ 'diagnostics' ] ],
@@ -1443,7 +1456,7 @@ class LanguageServerCompleter( Completer ):
                                                  message,
                                                  REQUEST_TIMEOUT_COMMAND )
     filepath = request_data[ 'filepath' ]
-    contents = utils.SplitLines( GetFileContents( request_data, filepath ) )
+    contents = GetFileLines( request_data, filepath )
     chunks = [ responses.FixItChunk( text_edit[ 'newText' ],
                                      _BuildRange( contents,
                                                   filepath,
@@ -1455,6 +1468,20 @@ class LanguageServerCompleter( Completer ):
                           request_data[ 'column_num' ],
                           request_data[ 'filepath' ] ),
       chunks ) ] )
+
+
+  def GetCommandResponse( self, request_data, command, arguments ):
+    if not self.ServerIsReady():
+      raise RuntimeError( 'Server is initializing. Please wait.' )
+
+    self._UpdateServerWithFileContents( request_data )
+
+    request_id = self.GetConnection().NextRequestId()
+    message = lsp.ExecuteCommand( request_id, command, arguments )
+    response = self.GetConnection().GetResponse( request_id,
+                                                 message,
+                                                 REQUEST_TIMEOUT_COMMAND )
+    return response[ 'result' ]
 
 
 def _CompletionItemToCompletionData( insertion_text, item, fixits ):
@@ -1569,7 +1596,7 @@ def _InsertionTextForItem( request_data, item ):
 
   if additional_text_edits:
     filepath = request_data[ 'filepath' ]
-    contents = utils.SplitLines( GetFileContents( request_data, filepath ) )
+    contents = GetFileLines( request_data, filepath )
     chunks = [ responses.FixItChunk( e[ 'newText' ],
                                      _BuildRange( contents,
                                                   filepath,
@@ -1671,8 +1698,7 @@ def _GetCompletionItemStartCodepointOrReject( text_edit, request_data ):
       "The TextEdit '{0}' spans multiple lines".format(
         text_edit[ 'newText' ] ) )
 
-  file_contents = utils.SplitLines(
-    GetFileContents( request_data, request_data[ 'filepath' ] ) )
+  file_contents = GetFileLines( request_data, request_data[ 'filepath' ] )
   line_value = file_contents[ edit_range[ 'start' ][ 'line' ] ]
 
   start_codepoint = lsp.UTF16CodeUnitsToCodepoints(
@@ -1713,8 +1739,7 @@ def _PositionToLocationAndDescription( request_data, position ):
   """Convert a LSP position to a ycmd location."""
   try:
     filename = lsp.UriToFilePath( position[ 'uri' ] )
-    file_contents = utils.SplitLines( GetFileContents( request_data,
-                                                       filename ) )
+    file_contents = GetFileLines( request_data, filename )
   except lsp.InvalidUriException:
     _logger.debug( "Invalid URI, file contents not available in GoTo" )
     filename = ''
@@ -1792,7 +1817,7 @@ def TextEditToChunks( request_data, uri, text_edit ):
     _logger.debug( 'Invalid filepath received in TextEdit' )
     filepath = ''
 
-  contents = utils.SplitLines( GetFileContents( request_data, filepath ) )
+  contents = GetFileLines( request_data, filepath )
   return [
     responses.FixItChunk( change[ 'newText' ],
                           _BuildRange( contents,

@@ -1,4 +1,4 @@
-// Copyright (C) 2011, 2012 Google Inc.
+// Copyright (C) 2011-2018 ycmd contributors
 //
 // This file is part of ycmd.
 //
@@ -21,7 +21,8 @@
 #include "IdentifierUtils.h"
 #include "Result.h"
 #include "Utils.h"
-#include "ReleaseGil.h"
+
+#include <pybind11/pybind11.h>
 
 namespace YouCompleteMe {
 
@@ -47,7 +48,7 @@ void IdentifierCompleter::AddIdentifiersToDatabase(
   const std::vector< std::string > &new_candidates,
   const std::string &filetype,
   const std::string &filepath ) {
-  ReleaseGil unlock;
+  pybind11::gil_scoped_release unlock;
   identifier_database_.AddIdentifiers( new_candidates,
                                        filetype,
                                        filepath );
@@ -65,7 +66,7 @@ void IdentifierCompleter::ClearForFileAndAddIdentifiersToDatabase(
 
 void IdentifierCompleter::AddIdentifiersToDatabaseFromTagFiles(
   const std::vector< std::string > &absolute_paths_to_tag_files ) {
-  ReleaseGil unlock;
+  pybind11::gil_scoped_release unlock;
   for( const std::string & path : absolute_paths_to_tag_files ) {
     identifier_database_.AddIdentifiers(
       ExtractIdentifiersFromTagsFile( path ) );
@@ -84,11 +85,7 @@ std::vector< std::string > IdentifierCompleter::CandidatesForQueryAndType(
   const std::string &query,
   const std::string &filetype,
   const size_t max_candidates ) const {
-  ReleaseGil unlock;
-
-  if ( !IsPrintable( query ) ) {
-    return std::vector< std::string >();
-  }
+  pybind11::gil_scoped_release unlock;
 
   std::vector< Result > results;
   identifier_database_.ResultsForQueryAndType( query,
@@ -100,8 +97,9 @@ std::vector< std::string > IdentifierCompleter::CandidatesForQueryAndType(
   candidates.reserve( results.size() );
 
   for ( const Result & result : results ) {
-    candidates.push_back( *result.Text() );
+    candidates.push_back( result.Text() );
   }
+
   return candidates;
 }
 

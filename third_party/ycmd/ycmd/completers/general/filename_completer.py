@@ -25,11 +25,11 @@ from builtins import *  # noqa
 
 import logging
 import os
-import re
 from collections import defaultdict
 
 from ycmd.completers.completer import Completer
-from ycmd.utils import GetCurrentDirectory, OnWindows, ToUnicode
+from ycmd.utils import ( ExpandVariablesInPath, GetCurrentDirectory, OnWindows,
+                         re, ToUnicode )
 from ycmd import responses
 
 EXTRA_INFO_MAP = { 1 : '[File]', 2 : '[Dir]', 3 : '[File&Dir]' }
@@ -98,8 +98,7 @@ class FilenameCompleter( Completer ):
     line = current_line[ : start_codepoint ]
 
     path_match = self._path_regex.search( line )
-    path_dir = os.path.expanduser(
-      os.path.expandvars( path_match.group() ) ) if path_match else ''
+    path_dir = ExpandVariablesInPath( path_match.group() ) if path_match else ''
 
     # If the client supplied its working directory, use that instead of the
     # working directory of ycmd

@@ -31,8 +31,12 @@ from ycmd.utils import ToBytes
 from ycmd.request_wrap import RequestWrap
 
 
-def PrepareJson( contents = '', line_num = 1, column_num = 1, filetype = '' ):
-  return {
+def PrepareJson( contents = '',
+                 line_num = 1,
+                 column_num = 1,
+                 filetype = '',
+                 force_semantic = None ):
+  message = {
     'line_num': line_num,
     'column_num': column_num,
     'filepath': '/foo',
@@ -43,6 +47,10 @@ def PrepareJson( contents = '', line_num = 1, column_num = 1, filetype = '' ):
       }
     }
   }
+  if force_semantic is not None:
+    message[ 'force_semantic' ] = force_semantic
+
+  return message
 
 
 def Prefix_test():
@@ -259,11 +267,13 @@ def StartColumn_Set_test():
   eq_( wrap[ 'start_column' ], 7 )
   eq_( wrap[ 'start_codepoint' ], 7 )
   eq_( wrap[ 'query' ], "test" )
+  eq_( wrap[ 'prefix' ], "this '" )
 
   wrap[ 'start_column' ] = 6
   eq_( wrap[ 'start_column' ], 6 )
   eq_( wrap[ 'start_codepoint' ], 6 )
   eq_( wrap[ 'query' ], "'test" )
+  eq_( wrap[ 'prefix' ], "this " )
 
 
 def StartColumn_SetUnicode_test():
@@ -273,11 +283,13 @@ def StartColumn_SetUnicode_test():
   eq_( 7,  wrap[ 'start_codepoint' ] )
   eq_( 12, wrap[ 'start_column' ] )
   eq_( wrap[ 'query' ], "te" )
+  eq_( wrap[ 'prefix' ], "†eß† \'" )
 
   wrap[ 'start_column' ] = 11
   eq_( wrap[ 'start_column' ], 11 )
   eq_( wrap[ 'start_codepoint' ], 6 )
   eq_( wrap[ 'query' ], "'te" )
+  eq_( wrap[ 'prefix' ], "†eß† " )
 
 
 def StartCodepoint_Set_test():
@@ -287,11 +299,13 @@ def StartCodepoint_Set_test():
   eq_( wrap[ 'start_column' ], 7 )
   eq_( wrap[ 'start_codepoint' ], 7 )
   eq_( wrap[ 'query' ], "test" )
+  eq_( wrap[ 'prefix' ], "this '" )
 
   wrap[ 'start_codepoint' ] = 6
   eq_( wrap[ 'start_column' ], 6 )
   eq_( wrap[ 'start_codepoint' ], 6 )
   eq_( wrap[ 'query' ], "'test" )
+  eq_( wrap[ 'prefix' ], "this " )
 
 
 def StartCodepoint_SetUnicode_test():
@@ -301,11 +315,13 @@ def StartCodepoint_SetUnicode_test():
   eq_( 7,  wrap[ 'start_codepoint' ] )
   eq_( 12, wrap[ 'start_column' ] )
   eq_( wrap[ 'query' ], "te" )
+  eq_( wrap[ 'prefix' ], "†eß† \'" )
 
   wrap[ 'start_codepoint' ] = 6
   eq_( wrap[ 'start_column' ], 11 )
   eq_( wrap[ 'start_codepoint' ], 6 )
   eq_( wrap[ 'query' ], "'te" )
+  eq_( wrap[ 'prefix' ], "†eß† " )
 
 
 def Calculated_SetMethod_test():
@@ -339,3 +355,20 @@ def NonCalculated_Set_test():
                  equal_to( 'Key "column_num" is read-only' ) )
   else:
     raise AssertionError( 'Expected setting "column_num" to fail' )
+
+
+def ForceSemanticCompletion_test():
+  wrap = RequestWrap( PrepareJson() )
+  assert_that( wrap[ 'force_semantic' ], equal_to( False ) )
+
+  wrap = RequestWrap( PrepareJson( force_semantic = True ) )
+  assert_that( wrap[ 'force_semantic' ], equal_to( True ) )
+
+  wrap = RequestWrap( PrepareJson( force_semantic = 1 ) )
+  assert_that( wrap[ 'force_semantic' ], equal_to( True ) )
+
+  wrap = RequestWrap( PrepareJson( force_semantic = 0 ) )
+  assert_that( wrap[ 'force_semantic' ], equal_to( False ) )
+
+  wrap = RequestWrap( PrepareJson( force_semantic = 'No' ) )
+  assert_that( wrap[ 'force_semantic' ], equal_to( True ) )

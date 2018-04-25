@@ -16,20 +16,20 @@
 // along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "PythonSupport.h"
-#include "Result.h"
 #include "Candidate.h"
 #include "CandidateRepository.h"
-#include "ReleaseGil.h"
+#include "Result.h"
 #include "Utils.h"
 
-#include <vector>
 #include <utility>
+#include <vector>
 
-using boost::python::len;
-using boost::python::str;
-using boost::python::extract;
-using boost::python::object;
-using pylist = boost::python::list;
+using pybind11::len;
+using pybind11::str;
+using pybind11::bytes;
+using pybind11::object;
+using pybind11::isinstance;
+using pylist = pybind11::list;
 
 namespace YouCompleteMe {
 
@@ -41,14 +41,16 @@ std::vector< const Candidate * > CandidatesFromObjectList(
   size_t num_candidates = len( candidates );
   std::vector< std::string > candidate_strings;
   candidate_strings.reserve( num_candidates );
+  // Store the property in a native Python string so that the below doesn't need
+  // to reconvert over and over:
+  str py_prop( candidate_property );
 
   for ( size_t i = 0; i < num_candidates; ++i ) {
     if ( candidate_property.empty() ) {
       candidate_strings.push_back( GetUtf8String( candidates[ i ] ) );
     } else {
-      object holder = extract< object >( candidates[ i ] );
       candidate_strings.push_back( GetUtf8String(
-                                     holder[ candidate_property.c_str() ] ) );
+                                     candidates[ i ][ py_prop ] ) );
     }
   }
 
@@ -59,16 +61,12 @@ std::vector< const Candidate * > CandidatesFromObjectList(
 } // unnamed namespace
 
 
-boost::python::list FilterAndSortCandidates(
-  const boost::python::list &candidates,
+pylist FilterAndSortCandidates(
+  const pylist &candidates,
   const std::string &candidate_property,
   const std::string &query,
   const size_t max_candidates ) {
   pylist filtered_candidates;
-
-  if ( !IsPrintable( query ) ) {
-    return boost::python::list();
-  }
 
   size_t num_candidates = len( candidates );
   std::vector< const Candidate * > repository_candidates =
@@ -76,20 +74,17 @@ boost::python::list FilterAndSortCandidates(
 
   std::vector< ResultAnd< size_t > > result_and_objects;
   {
-    ReleaseGil unlock;
-    Bitset query_bitset = LetterBitsetFromString( query );
-    bool query_has_uppercase_letters = HasUppercase( query );
+    pybind11::gil_scoped_release unlock;
+    Word query_object( query );
 
     for ( size_t i = 0; i < num_candidates; ++i ) {
       const Candidate *candidate = repository_candidates[ i ];
 
-      if ( candidate->Text().empty() ||
-           !candidate->MatchesQueryBitset( query_bitset ) ) {
+      if ( candidate->IsEmpty() || !candidate->ContainsBytes( query_object ) ) {
         continue;
       }
 
-      Result result = candidate->QueryMatchResult( query,
-                                                   query_has_uppercase_letters );
+      Result result = candidate->QueryMatchResult( query_object );
 
       if ( result.IsSubsequence() ) {
         ResultAnd< size_t > result_and_object( result, i );
@@ -108,43 +103,17 @@ boost::python::list FilterAndSortCandidates(
 }
 
 
-std::string GetUtf8String( const boost::python::object &value ) {
-#if PY_MAJOR_VERSION >= 3
-  // While strings are internally represented in UCS-2 or UCS-4 on Python 3,
-  // they are UTF-8 encoded when converted to std::string.
-  extract< std::string > to_string( value );
-
-  if ( to_string.check() ) {
-    return to_string();
-  }
-#else
-  std::string type = extract< std::string >( value.attr( "__class__" )
-                                                  .attr( "__name__" ) );
-
-  if ( type == "str" ) {
-    return extract< std::string >( value );
+std::string GetUtf8String( object value ) {
+  // If already a unicode or string (or something derived from it)
+  // pybind will already convert to utf8 when converting to std::string.
+  // For `bytes` the contents are left untouched:
+  if ( isinstance< str >( value ) || isinstance< bytes >( value ) ) {
+    return value.cast< std::string >();
   }
 
-  if ( type == "unicode" ) {
-    // unicode -> str
-    return extract< std::string >( value.attr( "encode" )( "utf8" ) );
-  }
-
-  // newstr and newbytes have a __native__ method that convert them
-  // respectively to unicode and str.
-  if ( type == "newstr" ) {
-    // newstr -> unicode -> str
-    return extract< std::string >( value.attr( "__native__" )()
-                                        .attr( "encode" )( "utf8" ) );
-  }
-
-  if ( type == "newbytes" ) {
-    // newbytes -> str
-    return extract< std::string >( value.attr( "__native__" )() );
-  }
-#endif
-
-  return extract< std::string >( str( value ).encode( "utf8" ) );
+  // Otherwise go through `pybind11::str()`,
+  // which goes through Python's built-in `str`.
+  return str( value );
 }
 
 } // namespace YouCompleteMe

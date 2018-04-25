@@ -1,6 +1,4 @@
-# Copyright (C) 2011-2012 Chiel ten Brinke <ctenbrinke@gmail.com>
-#                         Google Inc.
-#               2017      ycmd contributors
+# Copyright (C) 2011-2018 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -28,15 +26,13 @@ from collections import defaultdict
 from future.utils import itervalues
 import logging
 import os
-import re
 import requests
 import threading
 
 from ycmd.completers.completer import Completer
-from ycmd.completers.completer_utils import GetFileContents
+from ycmd.completers.completer_utils import GetFileLines
 from ycmd.completers.cs import solutiondetection
-from ycmd.utils import ( ForceSemanticCompletion, CodepointOffsetToByteOffset,
-                         urljoin )
+from ycmd.utils import CodepointOffsetToByteOffset, re, urljoin
 from ycmd import responses
 from ycmd import utils
 
@@ -105,13 +101,8 @@ class CsharpCompleter( Completer ):
     return True
 
 
-  def CompletionType( self, request_data ):
-    return ForceSemanticCompletion( request_data )
-
-
   def ComputeCandidatesInner( self, request_data ):
     solutioncompleter = self._GetSolutionCompleter( request_data )
-    completion_type = self.CompletionType( request_data )
     return [ responses.BuildCompletionData(
                 completion[ 'CompletionText' ],
                 completion[ 'DisplayText' ],
@@ -121,8 +112,7 @@ class CsharpCompleter( Completer ):
                 { "required_namespace_import" :
                    completion[ 'RequiredNamespaceImport' ] } )
              for completion
-             in solutioncompleter._GetCompletions( request_data,
-                                                   completion_type ) ]
+             in solutioncompleter._GetCompletions( request_data ) ]
 
 
   def FilterAndSortCandidates( self, candidates, query ):
@@ -434,15 +424,11 @@ class CsharpSolutionCompleter( object ):
     return self._GetResponse( '/reloadsolution' )
 
 
-  def CompletionType( self, request_data ):
-    return ForceSemanticCompletion( request_data )
-
-
-  def _GetCompletions( self, request_data, completion_type ):
+  def _GetCompletions( self, request_data ):
     """ Ask server for completions """
     parameters = self._DefaultParameters( request_data )
-    parameters[ 'WantImportableTypes' ] = completion_type
-    parameters[ 'ForceSemanticCompletion' ] = completion_type
+    parameters[ 'WantImportableTypes' ] = request_data[ 'force_semantic' ]
+    parameters[ 'ForceSemanticCompletion' ] = request_data[ 'force_semantic' ]
     parameters[ 'WantDocumentationForEveryCompletionResult' ] = True
     completions = self._GetResponse( '/autocomplete', parameters )
     return completions if completions is not None else []
@@ -684,7 +670,7 @@ def _BuildLocation( request_data, filename, line_num, column_num ):
   # column is 1 in that case.
   if column_num <= 0:
     column_num = 1
-  contents = utils.SplitLines( GetFileContents( request_data, filename ) )
+  contents = GetFileLines( request_data, filename )
   line_value = contents[ line_num - 1 ]
   return responses.Location(
       line_num,

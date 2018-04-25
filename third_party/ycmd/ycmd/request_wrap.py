@@ -1,6 +1,6 @@
 # encoding: utf8
 #
-# Copyright (C) 2014 Google Inc.
+# Copyright (C) 2014-2018 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -23,6 +23,8 @@ from __future__ import division
 from __future__ import absolute_import
 # Not installing aliases from python-future; it's unreliable and slow.
 from builtins import *  # noqa
+
+from future.utils import iteritems
 
 from ycmd.utils import ( ByteOffsetToCodepointOffset,
                          CodepointOffsetToByteOffset,
@@ -86,8 +88,12 @@ class RequestWrap( object ):
       'filetypes': ( self._Filetypes, None ),
 
       'first_filetype': ( self._FirstFiletype, None ),
+
+      'force_semantic': ( self._GetForceSemantic, None ),
+
+      'lines': ( self._CurrentLines, None )
     }
-    self._cached_computed = {}
+    self._cached_computed = dict()
 
 
   def __getitem__( self, key ):
@@ -115,6 +121,35 @@ class RequestWrap( object ):
     return key in self._computed_key or key in self._request
 
 
+  def __eq__( self, other ):
+    if ( self[ 'filepath' ]         != other[ 'filepath' ] or
+         self[ 'filetypes' ]        != other[ 'filetypes' ] or
+         self[ 'line_num' ]         != other[ 'line_num' ] or
+         self[ 'start_column' ]     != other[ 'start_column' ] or
+         self[ 'prefix' ]           != other[ 'prefix' ] or
+         self[ 'force_semantic' ]   != other[ 'force_semantic' ] or
+         len( self[ 'file_data' ] ) != len( other[ 'file_data' ] ) ):
+      return False
+
+    for filename, file_data in iteritems( self[ 'file_data' ] ):
+      if filename == self[ 'filepath' ]:
+        lines = self[ 'lines' ]
+        other_lines = other[ 'lines' ]
+        if len( lines ) != len( other_lines ):
+          return False
+
+        line_num = self[ 'line_num' ]
+        if ( lines[ : line_num - 1 ] != other_lines[ : line_num - 1 ] or
+             lines[ line_num : ] != other_lines[ line_num : ] ):
+          return False
+
+      elif ( filename not in other[ 'file_data' ] or
+             file_data != other[ 'file_data' ][ filename ] ):
+        return False
+
+    return True
+
+
   def get( self, key, default = None ):
     try:
       return self[ key ]
@@ -122,17 +157,20 @@ class RequestWrap( object ):
       return default
 
 
-  def _CurrentLine( self ):
-    current_file = self._request[ 'filepath' ]
-    contents = self._request[ 'file_data' ][ current_file ][ 'contents' ]
+  def _CurrentLines( self ):
+    current_file = self[ 'filepath' ]
+    contents = self[ 'file_data' ][ current_file ][ 'contents' ]
+    return SplitLines( contents )
 
+
+  def _CurrentLine( self ):
     try:
-      return SplitLines( contents )[ self._request[ 'line_num' ] - 1 ]
+      return self[ 'lines' ][ self[ 'line_num' ] - 1 ]
     except IndexError:
       _logger.exception( 'Client returned invalid line number {0} '
                          'for file {1}. Assuming empty.'.format(
-                           self._request[ 'line_num' ],
-                           self._request[ 'filepath' ] ) )
+                           self[ 'line_num' ],
+                           self[ 'filepath' ] ) )
       return ''
 
 
@@ -154,9 +192,10 @@ class RequestWrap( object ):
       self[ 'line_value' ],
       column_num )
 
-    # The same applies to the 'query' (the bit after the start column up to the
-    # cursor column). It's dependent on the 'start_codepoint' so we must reset
-    # it.
+    # The same applies to the 'prefix' (the bit before the start column) and the
+    # 'query' (the bit after the start column up to the cursor column). They are
+    # dependent on the 'start_codepoint' so we must reset them.
+    self._cached_computed.pop( 'prefix', None )
     self._cached_computed.pop( 'query', None )
 
 
@@ -177,9 +216,10 @@ class RequestWrap( object ):
       self[ 'line_value' ],
       codepoint_offset )
 
-    # The same applies to the 'query' (the bit after the start column up to the
-    # cursor column). It's dependent on the 'start_codepoint' so we must reset
-    # it.
+    # The same applies to the 'prefix' (the bit before the start column) and the
+    # 'query' (the bit after the start column up to the cursor column). They are
+    # dependent on the 'start_codepoint' so we must reset them.
+    self._cached_computed.pop( 'prefix', None )
     self._cached_computed.pop( 'query', None )
 
 
@@ -203,6 +243,10 @@ class RequestWrap( object ):
   def _Filetypes( self ):
     path = self[ 'filepath' ]
     return self[ 'file_data' ][ path ][ 'filetypes' ]
+
+
+  def _GetForceSemantic( self ):
+    return bool( self._request.get( 'force_semantic', False ) )
 
 
 def CompletionStartColumn( line_value, column_num, filetype ):

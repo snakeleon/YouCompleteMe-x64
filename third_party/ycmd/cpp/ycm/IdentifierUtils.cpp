@@ -18,9 +18,9 @@
 #include "IdentifierUtils.h"
 #include "Utils.h"
 
-#include <unordered_map>
-#include <boost/regex.hpp>
 #include <boost/algorithm/string/regex.hpp>
+#include <boost/regex.hpp>
+#include <unordered_map>
 
 namespace YouCompleteMe {
 
@@ -123,6 +123,7 @@ const std::unordered_map < const char *,
         { "PlistXML"            , "plistxml"            },
         { "pod"                 , "pod"                 },
         { "Protobuf"            , "protobuf"            },
+        { "PuppetManifest"      , "puppet"              },
         { "Python"              , "python"              },
         { "PythonLoggingConfig" , "pythonloggingconfig" },
         { "QemuHX"              , "qemuhx"              },

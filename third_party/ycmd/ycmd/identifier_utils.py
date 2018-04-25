@@ -1,6 +1,6 @@
 # encoding: utf-8
 #
-# Copyright (C) 2014 Google Inc.
+# Copyright (C) 2014-2018 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -24,8 +24,7 @@ from __future__ import absolute_import
 # Not installing aliases from python-future; it's unreliable and slow.
 from builtins import *  # noqa
 
-import re
-from ycmd.utils import SplitLines
+from ycmd.utils import re, SplitLines
 
 C_STYLE_COMMENT = "/\*(?:\n|.)*?\*/"
 CPP_STYLE_COMMENT = "//.*?$"
@@ -144,11 +143,19 @@ FILETYPE_TO_IDENTIFIER_REGEX = {
     'haskell': re.compile( r"[_a-zA-Z][\w']+", re.UNICODE ),
 
     # Spec: ?
-    # Labels like \label{fig:foobar} are very common
-    'tex': re.compile( r"[_a-zA-Z:-]+", re.UNICODE ),
+    # Colons are often used in labels (e.g. \label{fig:foobar}) so we accept
+    # them in the middle of an identifier but not at its extremities. We also
+    # accept dashes for compound words.
+    'tex': re.compile( r"[^\W\d](?:[\w:-]*\w)?", re.UNICODE ),
 
     # Spec: http://doc.perl6.org/language/syntax
     'perl6': re.compile( r"[_a-zA-Z](?:\w|[-'](?=[_a-zA-Z]))*", re.UNICODE ),
+
+    # https://www.scheme.com/tspl4/grammar.html#grammar:symbols
+    'scheme': re.compile( r"\+|\-|\.\.\.|"
+                          r"(?:->|(:?\\x[0-9A-Fa-f]+;|[!$%&*/:<=>?~^]|[^\W\d]))"
+                          r"(?:\\x[0-9A-Fa-f]+;|[-+.@!$%&*/:<=>?~^\w])*",
+                          re.UNICODE ),
 }
 
 FILETYPE_TO_IDENTIFIER_REGEX[ 'typescript' ] = (

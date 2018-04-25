@@ -1,4 +1,4 @@
-// Copyright (C) 2017 ycmd contributors
+// Copyright (C) 2017-2018 ycmd contributors
 //
 // This file is part of ycmd.
 //
@@ -15,16 +15,21 @@
 // You should have received a copy of the GNU General Public License
 // along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-#include "benchmark/benchmark_api.h"
 #include "BenchUtils.h"
 #include "CandidateRepository.h"
+#include "CharacterRepository.h"
+#include "CodePointRepository.h"
 #include "IdentifierCompleter.h"
+
+#include <benchmark/benchmark_api.h>
 
 namespace YouCompleteMe {
 
 class IdentifierCompleterFixture : public benchmark::Fixture {
 public:
   void SetUp( const benchmark::State& ) {
+    CodePointRepository::Instance().ClearCodePoints();
+    CharacterRepository::Instance().ClearCharacters();
     CandidateRepository::Instance().ClearCandidates();
   }
 };

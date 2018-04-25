@@ -15,15 +15,14 @@
 // You should have received a copy of the GNU General Public License
 // along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-#include "TranslationUnit.h"
-#include "CompletionData.h"
 #include "ClangUtils.h"
 #include "ClangHelpers.h"
+#include "CompletionData.h"
+#include "TranslationUnit.h"
 
-#include <boost/filesystem.hpp>
-
-#include <cstdlib>
 #include <algorithm>
+#include <boost/filesystem.hpp>
+#include <cstdlib>
 #include <memory>
 
 using std::unique_lock;
@@ -188,6 +187,22 @@ std::vector< CompletionData > TranslationUnit::CandidatesForLocation(
   return candidates;
 }
 
+Location TranslationUnit::GetDeclarationLocationForCursor( CXCursor cursor ) {
+  CXCursor referenced_cursor = clang_getCursorReferenced( cursor );
+
+  if ( !CursorIsValid( referenced_cursor ) ) {
+    return Location();
+  }
+
+  CXCursor canonical_cursor = clang_getCanonicalCursor( referenced_cursor );
+
+  if ( !CursorIsValid( canonical_cursor ) ) {
+    return Location( clang_getCursorLocation( referenced_cursor ) );
+  }
+
+  return Location( clang_getCursorLocation( canonical_cursor ) );
+}
+
 Location TranslationUnit::GetDeclarationLocation(
   const std::string &filename,
   int line,
@@ -210,19 +225,17 @@ Location TranslationUnit::GetDeclarationLocation(
     return Location();
   }
 
-  CXCursor referenced_cursor = clang_getCursorReferenced( cursor );
+  return GetDeclarationLocationForCursor( cursor );
+}
 
-  if ( !CursorIsValid( referenced_cursor ) ) {
+Location TranslationUnit::GetDefinitionLocationForCursor( CXCursor cursor ) {
+  CXCursor definition_cursor = clang_getCursorDefinition( cursor );
+
+  if ( !CursorIsValid( definition_cursor ) ) {
     return Location();
   }
 
-  CXCursor canonical_cursor = clang_getCanonicalCursor( referenced_cursor );
-
-  if ( !CursorIsValid( canonical_cursor ) ) {
-    return Location( clang_getCursorLocation( referenced_cursor ) );
-  }
-
-  return Location( clang_getCursorLocation( canonical_cursor ) );
+  return Location( clang_getCursorLocation( definition_cursor ) );
 }
 
 Location TranslationUnit::GetDefinitionLocation(
@@ -247,13 +260,48 @@ Location TranslationUnit::GetDefinitionLocation(
     return Location();
   }
 
-  CXCursor definition_cursor = clang_getCursorDefinition( cursor );
+  return GetDefinitionLocationForCursor( cursor );
+}
 
-  if ( !CursorIsValid( definition_cursor ) ) {
+Location TranslationUnit::GetDefinitionOrDeclarationLocation(
+  const std::string &filename,
+  int line,
+  int column,
+  const std::vector< UnsavedFile > &unsaved_files,
+  bool reparse ) {
+  if ( reparse ) {
+    Reparse( unsaved_files );
+  }
+
+  unique_lock< mutex > lock( clang_access_mutex_ );
+
+  if ( !clang_translation_unit_ ) {
     return Location();
   }
 
-  return Location( clang_getCursorLocation( definition_cursor ) );
+  CXCursor cursor = GetCursor( filename, line, column );
+
+  if ( !CursorIsValid( cursor ) ) {
+    return Location();
+  }
+
+  // Return the definition or the declaration of a symbol under the cursor
+  // according to the following logic:
+  //  - if the cursor is already on the definition, return the location of the
+  //    declaration;
+  //  - otherwise, search for the definition and return its location;
+  //  - if no definition is found, return the location of the declaration.
+  if ( clang_isCursorDefinition( cursor ) ) {
+    return GetDeclarationLocationForCursor( cursor );
+  }
+
+  Location location = GetDefinitionLocationForCursor( cursor );
+
+  if ( location.IsValid() ) {
+    return location;
+  }
+
+  return GetDeclarationLocationForCursor( cursor );
 }
 
 std::string TranslationUnit::GetTypeAtLocation(
@@ -427,12 +475,13 @@ void TranslationUnit::UpdateLatestDiagnostics() {
 }
 
 namespace {
+
 /// Sort a FixIt container by its location's distance from a given column
 /// (such as the cursor location).
 ///
 /// PreCondition: All FixIts in the container are on the same line.
 struct sort_by_location {
-  sort_by_location( int column ) : column_( column ) { }
+  explicit sort_by_location( int column ) : column_( column ) { }
 
   bool operator()( const FixIt &a, const FixIt &b ) {
     int a_distance = a.location.column_number_ - column_;
@@ -444,7 +493,8 @@ struct sort_by_location {
 private:
   int column_;
 };
-}
+
+} // unnamed namespace
 
 std::vector< FixIt > TranslationUnit::GetFixItsForLocationInFile(
   const std::string &filename,

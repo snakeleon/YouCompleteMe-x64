@@ -12,19 +12,18 @@ set -e
 brew update || brew update
 
 # List of homebrew formulae to install in the order they appear.
-# We require CMake, Node, Go, Mono and Ninja for our build and tests, and all
+# We require CMake, Node, Go, and Mono for our build and tests, and all
 # the others are dependencies of pyenv.
 REQUIREMENTS="cmake
               node.js
               go
               mono
-              ninja
               readline
               autoconf
               pkg-config
               openssl"
 
-# Install CMake, Node, Go, Mono, Ninja, pyenv and dependencies.
+# Install CMake, Node, Go, Mono, pyenv and dependencies.
 for pkg in $REQUIREMENTS; do
   # Install package, or upgrade it if it is already installed.
   brew install $pkg || brew outdated $pkg || brew upgrade $pkg
@@ -50,9 +49,12 @@ PATH="${PYENV_ROOT}/bin:${PATH}"
 eval "$(pyenv init -)"
 
 if [ "${YCMD_PYTHON_VERSION}" == "2.7" ]; then
-  # Prior versions fail to compile with error "ld: library not found for
-  # -lSystemStubs"
-  PYENV_VERSION="2.7.2"
+  # Versions prior to 2.7.2 fail to compile with error "ld: library not found
+  # for -lSystemStubs"
+  # FIXME: pip 10 fails to upgrade packages on Python 2.7.3 or older. See
+  # https://github.com/pypa/pip/issues/5231 for the error. Revert to 2.7.2 once
+  # this is fixed in pip.
+  PYENV_VERSION="2.7.4"
 else
   PYENV_VERSION="3.4.0"
 fi
@@ -76,7 +78,6 @@ echo '  eval "$(pyenv init -)"' >> $BASH_ENV
 echo '  unset PYENV_LOADING' >> $BASH_ENV
 echo 'fi' >> $BASH_ENV
 
-pip install -U pip wheel setuptools
 pip install -r test_requirements.txt
 
 # Enable coverage for Python subprocesses. See:

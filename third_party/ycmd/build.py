@@ -79,11 +79,13 @@ DYNAMIC_PYTHON_LIBRARY_REGEX = """
   )$
 """
 
-JDTLS_MILESTONE = '0.14.0'
-JDTLS_BUILD_STAMP = '201802282111'
+JDTLS_MILESTONE = '0.15.0'
+JDTLS_BUILD_STAMP = '201803152351'
 JDTLS_SHA256 = (
-  'ce27fa4af601d11c3914253d51218667003b51468672d0ae369039ec8a111a3b'
+  '4fe3ca50d2b7011f7323863bdf77a16979e5d3a2a534d69e1ef32742cc443061'
 )
+
+REGEX_MODULE_VERSION = '2018.02.21'
 
 
 def OnMac():
@@ -155,10 +157,8 @@ def NumCores():
 
 
 def CheckCall( args, **kwargs ):
-  quiet = kwargs.get( 'quiet', False )
-  kwargs.pop( 'quiet', None )
-  status_message = kwargs.get( 'status_message', None )
-  kwargs.pop( 'status_message', None )
+  quiet = kwargs.pop( 'quiet', False )
+  status_message = kwargs.pop( 'status_message', None )
 
   if quiet:
     _CheckCallQuiet( args, status_message, **kwargs )
@@ -168,9 +168,9 @@ def CheckCall( args, **kwargs ):
 
 def _CheckCallQuiet( args, status_message, **kwargs ):
   if not status_message:
-    status_message = 'Running {0}'.format( args[ 0 ] )
+    status_message = 'Running {}'.format( args[ 0 ] )
 
-  # __future_ not appear to support flush= on print_function
+  # __future__ not appear to support flush= on print_function
   sys.stdout.write( status_message + '...' )
   sys.stdout.flush()
 
@@ -181,8 +181,7 @@ def _CheckCallQuiet( args, status_message, **kwargs ):
 
 
 def _CheckCall( args, **kwargs ):
-  exit_message = kwargs.get( 'exit_message', None )
-  kwargs.pop( 'exit_message', None )
+  exit_message = kwargs.pop( 'exit_message', None )
   stdout = kwargs.get( 'stdout', None )
 
   try:
@@ -296,12 +295,12 @@ def CustomPythonCmakeArgs( args ):
 
 
 def GetGenerator( args ):
+  if args.ninja:
+    return 'Ninja'
   if OnWindows():
     return 'Visual Studio {version}{arch}'.format(
         version = args.msvc,
         arch = ' Win64' if platform.architecture()[ 0 ] == '64bit' else '' )
-  if PathToFirstExistingExecutable( ['ninja'] ):
-    return 'Ninja'
   return 'Unix Makefiles'
 
 
@@ -325,9 +324,11 @@ def ParseArguments():
   parser.add_argument( '--system-libclang', action = 'store_true',
                        help = 'Use system libclang instead of downloading one '
                        'from llvm.org. NOT RECOMMENDED OR SUPPORTED!' )
-  parser.add_argument( '--msvc', type = int, choices = [ 12, 14, 15 ],
+  parser.add_argument( '--msvc', type = int, choices = [ 14, 15 ],
                        default = 15, help = 'Choose the Microsoft Visual '
                        'Studio version (default: %(default)s).' )
+  parser.add_argument( '--ninja', action = 'store_true',
+                       help = 'Use Ninja build system.' )
   parser.add_argument( '--all',
                        action = 'store_true',
                        help   = 'Enable all supported completers',
@@ -362,11 +363,12 @@ def ParseArguments():
   parser.add_argument( '--racer-completer', action = 'store_true',
                        help = argparse.SUPPRESS )
   parser.add_argument( '--tern-completer', action = 'store_true',
-                       help = argparse.SUPPRESS ),
+                       help = argparse.SUPPRESS )
 
   args = parser.parse_args()
 
-  if args.enable_coverage:
+  # coverage is not supported for c++ on MSVC
+  if not OnWindows() and args.enable_coverage:
     # We always want a debug build when running with coverage enabled
     args.enable_debug = True
 
@@ -528,6 +530,50 @@ def BuildYcmdLib( args ):
       rmtree( build_dir, ignore_errors = OnCiService() )
 
 
+def InstallRegexModule( args ):
+  # We don't exit the script if the regex module cannot be installed; ycmd is
+  # still usable without this module.
+  if args.quiet:
+    sys.stdout.write( 'Installing regex module...' )
+    sys.stdout.flush()
+
+  regex_dir = p.join( DIR_OF_THIRD_PARTY, 'regex', 'py{}'.format( PY_MAJOR ) )
+  pip_command = [ sys.executable, '-m', 'pip', 'install', '--upgrade',
+                  'regex=={}'.format( REGEX_MODULE_VERSION ), '-t', regex_dir ]
+
+  # We need to add the --system option on Debian-like distributions. See
+  # https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=830892
+  try:
+    output = subprocess.check_output(
+      pip_command + [ '--help' ], stderr = subprocess.STDOUT ).decode( 'utf8' )
+  except subprocess.CalledProcessError as error:
+    output = error.output.decode( 'utf8' )
+
+  # Return early if pip is not available.
+  if 'No module named pip' in output:
+    message = 'SKIP\n' if args.quiet else output
+    message += ( 'WARNING: pip is required to install the regex module.\n'
+                 'Unicode will not be fully supported without this module.' )
+    print( message )
+    return
+
+  if '--system' in output:
+    pip_command.append( '--system' )
+
+  try:
+    if args.quiet:
+      subprocess.check_call( pip_command, stdout = subprocess.PIPE,
+                                          stderr = subprocess.PIPE )
+      print( 'OK' )
+    else:
+      subprocess.check_call( pip_command )
+  except subprocess.CalledProcessError:
+    if args.quiet:
+      print( 'SKIP' )
+    print( 'WARNING: cannot install the regex module. '
+           'Unicode will not be fully supported.' )
+
+
 def EnableCsCompleter( args ):
   build_command = PathToFirstExistingExecutable(
     [ 'msbuild', 'msbuild.exe', 'xbuild' ] )
@@ -676,6 +722,7 @@ def Main():
   if not args.skip_build:
     ExitIfYcmdLibInUseOnWindows()
     BuildYcmdLib( args )
+    InstallRegexModule( args )
     WritePythonUsedDuringBuild()
   if args.cs_completer or args.omnisharp_completer or args.all_completers:
     EnableCsCompleter( args )

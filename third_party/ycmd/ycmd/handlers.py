@@ -31,7 +31,6 @@ import sys
 import time
 import traceback
 from bottle import request
-from threading import Thread
 
 import ycm_core
 from ycmd import extra_conf_store, hmac_plugin, server_state, user_options_store
@@ -40,6 +39,7 @@ from ycmd.responses import ( BuildExceptionResponse, BuildCompletionResponse,
 from ycmd.request_wrap import RequestWrap
 from ycmd.bottle_utils import SetResponseHeader
 from ycmd.completers.completer_utils import FilterAndSortCandidatesWrap
+from ycmd.utils import StartThread
 
 
 # num bytes for the request body buffer; request.json only works if the request
@@ -89,8 +89,8 @@ def RunCompleterCommand():
 def GetCompletions():
   _logger.info( 'Received completion request' )
   request_data = RequestWrap( request.json )
-  ( do_filetype_completion, forced_filetype_completion ) = (
-                    _server_state.ShouldUseFiletypeCompleter( request_data ) )
+  do_filetype_completion = _server_state.ShouldUseFiletypeCompleter(
+    request_data )
   _logger.debug( 'Using filetype completion: %s', do_filetype_completion )
 
   errors = None
@@ -103,21 +103,21 @@ def GetCompletions():
                                  .ComputeCandidates( request_data ) )
 
     except Exception as exception:
-      if forced_filetype_completion:
+      if request_data[ 'force_semantic' ]:
         # user explicitly asked for semantic completion, so just pass the error
         # back
         raise
-      else:
-        # store the error to be returned with results from the identifier
-        # completer
-        stack = traceback.format_exc()
-        _logger.error( 'Exception from semantic completer (using general): ' +
-                        "".join( stack ) )
-        errors = [ BuildExceptionResponse( exception, stack ) ]
 
-  if not completions and not forced_filetype_completion:
-    completions = ( _server_state.GetGeneralCompleter()
-                                 .ComputeCandidates( request_data ) )
+      # store the error to be returned with results from the identifier
+      # completer
+      stack = traceback.format_exc()
+      _logger.error( 'Exception from semantic completer (using general): ' +
+                      "".join( stack ) )
+      errors = [ BuildExceptionResponse( exception, stack ) ]
+
+  if not completions and not request_data[ 'force_semantic' ]:
+    completions = _server_state.GetGeneralCompleter().ComputeCandidates(
+      request_data )
 
   return _JsonResponse(
       BuildCompletionResponse( completions if completions else [],
@@ -311,9 +311,7 @@ def ServerShutdown():
 
   # Use a separate thread to let the server send the response before shutting
   # down.
-  terminator = Thread( target = Terminator )
-  terminator.daemon = True
-  terminator.start()
+  StartThread( Terminator )
 
 
 def ServerCleanup():
@@ -349,7 +347,4 @@ def KeepSubserversAlive( check_interval_seconds ):
       for completer in loaded_completers:
         completer.ServerIsHealthy()
 
-  keepalive = Thread( target = Keepalive,
-                      args = ( check_interval_seconds, ) )
-  keepalive.daemon = True
-  keepalive.start()
+  StartThread( Keepalive, check_interval_seconds )

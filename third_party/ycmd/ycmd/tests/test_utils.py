@@ -130,6 +130,13 @@ def LocationMatcher( filepath, line_num, column_num ):
   } )
 
 
+def RangeMatcher( filepath, start, end ):
+  return has_entries( {
+    'start': LocationMatcher( filepath, *start ),
+    'end': LocationMatcher( filepath, *end ),
+  } )
+
+
 def ChunkMatcher( replacement_text, start, end ):
   return has_entries( {
     'replacement_text': replacement_text,
@@ -196,11 +203,13 @@ def SetUpApp( custom_options = {} ):
 def IsolatedApp( custom_options = {} ):
   old_server_state = handlers._server_state
   old_extra_conf_store_state = extra_conf_store.Get()
+  old_options = user_options_store.GetAll()
   try:
     yield SetUpApp( custom_options )
   finally:
     handlers._server_state = old_server_state
     extra_conf_store.Set( old_extra_conf_store_state )
+    user_options_store.SetAll( old_options )
 
 
 def StartCompleterServer( app, filetype, filepath = '/foo' ):
@@ -324,6 +333,9 @@ def TemporaryTestDir():
 def WithRetry( test ):
   """Decorator to be applied to tests that retries the test over and over
   until it passes or |timeout| seconds have passed."""
+
+  if 'YCM_TEST_NO_RETRY' in os.environ:
+    return test
 
   @functools.wraps( test )
   def wrapper( *args, **kwargs ):

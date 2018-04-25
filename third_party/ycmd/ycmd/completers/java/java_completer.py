@@ -1,4 +1,4 @@
-# Copyright (C) 2017 ycmd contributors
+# Copyright (C) 2017-2018 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -33,6 +33,7 @@ from subprocess import PIPE
 
 from ycmd import utils, responses
 from ycmd.completers.language_server import language_server_completer
+from ycmd.completers.language_server import language_server_protocol as lsp
 
 NO_DOCUMENTATION_MESSAGE = 'No documentation available for current context'
 
@@ -135,16 +136,39 @@ def _LauncherConfiguration():
 
 def _MakeProjectFilesForPath( path ):
   for tail in PROJECT_FILE_TAILS:
-    yield os.path.join( path, tail )
+    yield os.path.join( path, tail ), tail
 
 
 def _FindProjectDir( starting_dir ):
-  for path in utils.PathsToAllParentFolders( starting_dir ):
-    for project_file in _MakeProjectFilesForPath( path ):
-      if os.path.isfile( project_file ):
-        return path
+  project_path = starting_dir
+  project_type = None
 
-  return starting_dir
+  for folder in utils.PathsToAllParentFolders( starting_dir ):
+    for project_file, tail in _MakeProjectFilesForPath( folder ):
+      if os.path.isfile( project_file ):
+        project_path = folder
+        project_type = tail
+        break
+    if project_type:
+      break
+
+  if project_type:
+    # We've found a project marker file (like build.gradle). Search parent
+    # directories for that same project type file and find the topmost one as
+    # the project root.
+    _logger.debug( 'Found {0} style project in {1}. Searching for '
+                   'project root:'.format( project_type, project_path ) )
+
+    for folder in utils.PathsToAllParentFolders( os.path.join( project_path,
+                                                               '..') ):
+      if os.path.isfile( os.path.join( folder, project_type ) ):
+        _logger.debug( '  {0} is a parent project dir'.format( folder ) )
+        project_path = folder
+      else:
+        break
+    _logger.debug( '  Project root is {0}'.format( project_path ) )
+
+  return project_path
 
 
 def _WorkspaceDirForProject( project_dir, use_clean_workspace ):
@@ -218,11 +242,17 @@ class JavaCompleter( language_server_completer.LanguageServerCompleter ):
       'StopServer': (
         lambda self, request_data, args: self._StopServer()
       ),
+      'OpenProject': (
+        lambda self, request_data, args: self._OpenProject( request_data, args )
+      ),
       'GetDoc': (
         lambda self, request_data, args: self.GetDoc( request_data )
       ),
       'GetType': (
         lambda self, request_data, args: self.GetType( request_data )
+      ),
+      'OrganizeImports': (
+        lambda self, request_data, args: self.OrganizeImports( request_data )
       ),
     }
 
@@ -297,6 +327,27 @@ class JavaCompleter( language_server_completer.LanguageServerCompleter ):
       self._StartServer( request_data )
 
 
+  def _OpenProject( self, request_data, args ):
+    if len( args ) != 1:
+      raise ValueError( "Usage: OpenProject <project directory>" )
+
+    project_directory = args[ 0 ]
+
+    # If the dir is not absolute, calculate it relative to the working dir of
+    # the client (if supplied).
+    if not os.path.isabs( project_directory ):
+      if 'working_dir' not in request_data:
+        raise ValueError( "Project directory must be absolute" )
+
+      project_directory = os.path.normpath( os.path.join(
+        request_data[ 'working_dir' ],
+        project_directory ) )
+
+    with self._server_state_mutex:
+      self._StopServer()
+      self._StartServer( request_data, project_directory=project_directory )
+
+
   def _CleanUp( self ):
     if not self._server_keep_logfiles:
       if self._server_stderr:
@@ -324,7 +375,7 @@ class JavaCompleter( language_server_completer.LanguageServerCompleter ):
     self.ServerReset()
 
 
-  def _StartServer( self, request_data ):
+  def _StartServer( self, request_data, project_directory=None ):
     with self._server_state_mutex:
       if self._server_started:
         return
@@ -333,8 +384,12 @@ class JavaCompleter( language_server_completer.LanguageServerCompleter ):
 
       _logger.info( 'Starting jdt.ls Language Server...' )
 
-      self._project_dir = _FindProjectDir(
-        os.path.dirname( request_data[ 'filepath' ] ) )
+      if project_directory:
+        self._project_dir = project_directory
+      else:
+        self._project_dir = _FindProjectDir(
+          os.path.dirname( request_data[ 'filepath' ] ) )
+
       self._workspace_path = _WorkspaceDirForProject(
         self._project_dir,
         self._use_clean_workspace )
@@ -425,6 +480,24 @@ class JavaCompleter( language_server_completer.LanguageServerCompleter ):
       # down cleanly.
       self._CleanUp()
 
+
+  def GetCodepointForCompletionRequest( self, request_data ):
+    """Returns the 1-based codepoint offset on the current line at which to make
+    the completion request"""
+    # When the user forces semantic completion, we pass the actual cursor
+    # position to jdt.ls.
+
+    # At the top level (i.e. without a semantic trigger), there are always way
+    # too many possible candidates for jdt.ls to return anything useful. This is
+    # because we don't send the currently typed characters to jdt.ls. The
+    # general idea is that we apply our own post-filter and sort. However, in
+    # practice we never get a full set of possibilities at the top-level. So, as
+    # a compromise, we allow the user to force us to send the "query" to the
+    # semantic engine, and thus get good completion results at the top level,
+    # even if this means the "filtering and sorting" is not 100% ycmd flavor.
+    return ( request_data[ 'column_codepoint' ]
+             if request_data[ 'force_semantic' ]
+             else request_data[ 'start_codepoint' ] )
 
 
   def HandleNotificationInPollThread( self, notification ):
@@ -526,6 +599,17 @@ class JavaCompleter( language_server_completer.LanguageServerCompleter ):
       raise RuntimeError( NO_DOCUMENTATION_MESSAGE )
 
     return responses.BuildDetailedInfoResponse( documentation )
+
+
+  def OrganizeImports( self, request_data ):
+    workspace_edit = self.GetCommandResponse(
+      request_data,
+      'java.edit.organizeImports',
+      [ lsp.FilePathToUri( request_data[ 'filepath' ] ) ] )
+
+    fixit = language_server_completer.WorkspaceEditToFixIt( request_data,
+                                                            workspace_edit )
+    return responses.BuildFixItResponse( [ fixit ] )
 
 
   def HandleServerCommand( self, request_data, command ):

@@ -1,6 +1,6 @@
 # encoding: utf-8
 #
-# Copyright (C) 2015 ycmd contributors
+# Copyright (C) 2015-2018 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -24,12 +24,11 @@ from __future__ import division
 # Not installing aliases from python-future; it's unreliable and slow.
 from builtins import *  # noqa
 
+from hamcrest import ( assert_that, contains, contains_inanyorder, has_entries,
+                       matches_regexp )
+from nose.tools import eq_
+import requests
 import pprint
-
-from hamcrest import ( assert_that,
-                       contains,
-                       contains_inanyorder,
-                       has_entries )
 
 from ycmd.tests.typescript import PathToTestFile, SharedYcmd
 from ycmd.tests.test_utils import ( BuildRequest,
@@ -40,585 +39,894 @@ from ycmd.tests.test_utils import ( BuildRequest,
 from ycmd.utils import ReadFile
 
 
+def RunTest( app, test ):
+  contents = ReadFile( test[ 'request' ][ 'filepath' ] )
+
+  def CombineRequest( request, data ):
+    kw = request
+    request.update( data )
+    return BuildRequest( **kw )
+
+  app.post_json(
+    '/event_notification',
+    CombineRequest( test[ 'request' ], {
+      'contents': contents,
+      'filetype': 'typescript',
+      'event_name': 'BufferVisit'
+    } )
+  )
+
+  app.post_json(
+    '/event_notification',
+    CombineRequest( test[ 'request' ], {
+      'contents': contents,
+      'filetype': 'typescript',
+      'event_name': 'FileReadyToParse'
+    } )
+  )
+
+  # We ignore errors here and check the response code ourself.
+  # This is to allow testing of requests returning errors.
+  response = app.post_json(
+    '/run_completer_command',
+    CombineRequest( test[ 'request' ], {
+      'contents': contents,
+      'filetype': 'typescript',
+      'command_arguments': ( [ test[ 'request' ][ 'command' ] ]
+                             + test[ 'request' ].get( 'arguments', [] ) )
+    } ),
+    expect_errors = True
+  )
+
+  print( 'completer response: {0}'.format( pprint.pformat( response.json ) ) )
+
+  eq_( response.status_code, test[ 'expect' ][ 'response' ] )
+
+  assert_that( response.json, test[ 'expect' ][ 'data' ] )
+
+
+@SharedYcmd
+def Subcommands_DefinedSubcommands_test( app ):
+  subcommands_data = BuildRequest( completer_target = 'typescript' )
+
+  assert_that(
+    app.post_json( '/defined_subcommands', subcommands_data ).json,
+    contains_inanyorder(
+      'Format',
+      'GoTo',
+      'GoToDeclaration',
+      'GoToDefinition',
+      'GoToType',
+      'GetDoc',
+      'GetType',
+      'GoToReferences',
+      'FixIt',
+      'OrganizeImports',
+      'RefactorRename',
+      'RestartServer'
+    )
+  )
+
+
+@SharedYcmd
+def Subcommands_Format_WholeFile_Spaces_test( app ):
+  filepath = PathToTestFile( 'test.ts' )
+  RunTest( app, {
+    'description': 'Formatting is applied on the whole file '
+                   'with tabs composed of 4 spaces',
+    'request': {
+      'command': 'Format',
+      'filepath': filepath,
+      'options': {
+        'tab_size': 4,
+        'insert_spaces': True
+      }
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': has_entries( {
+        'fixits': contains( has_entries( {
+          'chunks': contains(
+
+            ChunkMatcher( '    ',
+                          LocationMatcher( filepath,  3,  1 ),
+                          LocationMatcher( filepath,  3,  3 ) ),
+
+            ChunkMatcher( '    ',
+                          LocationMatcher( filepath,  4,  1 ),
+                          LocationMatcher( filepath,  4,  3 ) ),
+
+            ChunkMatcher( ' ',
+                          LocationMatcher( filepath,  4, 14 ),
+                          LocationMatcher( filepath,  4, 14 ) ),
+
+            ChunkMatcher( '    ',
+                          LocationMatcher( filepath,  5,  1 ),
+                          LocationMatcher( filepath,  5,  3 ) ),
+
+            ChunkMatcher( ' ',
+                          LocationMatcher( filepath,  5, 14 ),
+                          LocationMatcher( filepath,  5, 14 ) ),
+
+            ChunkMatcher( '    ',
+                          LocationMatcher( filepath,  6,  1 ),
+                          LocationMatcher( filepath,  6,  3 ) ),
+
+            ChunkMatcher( '        ',
+                          LocationMatcher( filepath,  7,  1 ),
+                          LocationMatcher( filepath,  7,  5 ) ),
+
+            ChunkMatcher( '            ',
+                          LocationMatcher( filepath,  8,  1 ),
+                          LocationMatcher( filepath,  8,  7 ) ),
+
+            ChunkMatcher( '            ',
+                          LocationMatcher( filepath,  9,  1 ),
+                          LocationMatcher( filepath,  9,  7 ) ),
+
+            ChunkMatcher( '        ',
+                          LocationMatcher( filepath, 10,  1 ),
+                          LocationMatcher( filepath, 10,  5 ) ),
+
+            ChunkMatcher( '    ',
+                          LocationMatcher( filepath, 11,  1 ),
+                          LocationMatcher( filepath, 11,  3 ) ),
+
+            ChunkMatcher( ' ',
+                          LocationMatcher( filepath, 11,  6 ),
+                          LocationMatcher( filepath, 11,  6 ) ),
+
+            ChunkMatcher( '    ',
+                          LocationMatcher( filepath, 27,  1 ),
+                          LocationMatcher( filepath, 27,  3 ) ),
+
+            ChunkMatcher( '     ',
+                          LocationMatcher( filepath, 28,  1 ),
+                          LocationMatcher( filepath, 28,  4 ) ),
+
+            ChunkMatcher( '     ',
+                          LocationMatcher( filepath, 29,  1 ),
+                          LocationMatcher( filepath, 29,  4 ) ),
+
+            ChunkMatcher( '    ',
+                          LocationMatcher( filepath, 30,  1 ),
+                          LocationMatcher( filepath, 30,  3 ) ),
+
+            ChunkMatcher( ' ',
+                          LocationMatcher( filepath, 30, 17 ),
+                          LocationMatcher( filepath, 30, 17 ) ),
+
+          )
+        } ) )
+      } )
+    }
+  } )
+
+
+@SharedYcmd
+def Subcommands_Format_WholeFile_Tabs_test( app ):
+  filepath = PathToTestFile( 'test.ts' )
+  RunTest( app, {
+    'description': 'Formatting is applied on the whole file '
+                   'with tabs composed of 2 spaces',
+    'request': {
+      'command': 'Format',
+      'filepath': filepath,
+      'options': {
+        'tab_size': 4,
+        'insert_spaces': False
+      }
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': has_entries( {
+        'fixits': contains( has_entries( {
+          'chunks': contains(
+
+            ChunkMatcher( '\t',
+                          LocationMatcher( filepath,  3,  1 ),
+                          LocationMatcher( filepath,  3,  3 ) ),
+
+            ChunkMatcher( '\t',
+                          LocationMatcher( filepath,  4,  1 ),
+                          LocationMatcher( filepath,  4,  3 ) ),
+
+            ChunkMatcher( ' ',
+                          LocationMatcher( filepath,  4, 14 ),
+                          LocationMatcher( filepath,  4, 14 ) ),
+
+            ChunkMatcher( '\t',
+                          LocationMatcher( filepath,  5,  1 ),
+                          LocationMatcher( filepath,  5,  3 ) ),
+
+            ChunkMatcher( ' ',
+                          LocationMatcher( filepath,  5, 14 ),
+                          LocationMatcher( filepath,  5, 14 ) ),
+
+            ChunkMatcher( '\t',
+                          LocationMatcher( filepath,  6,  1 ),
+                          LocationMatcher( filepath,  6,  3 ) ),
+
+            ChunkMatcher( '\t\t',
+                          LocationMatcher( filepath,  7,  1 ),
+                          LocationMatcher( filepath,  7,  5 ) ),
+
+            ChunkMatcher( '\t\t\t',
+                          LocationMatcher( filepath,  8,  1 ),
+                          LocationMatcher( filepath,  8,  7 ) ),
+
+            ChunkMatcher( '\t\t\t',
+                          LocationMatcher( filepath,  9,  1 ),
+                          LocationMatcher( filepath,  9,  7 ) ),
+
+            ChunkMatcher( '\t\t',
+                          LocationMatcher( filepath, 10,  1 ),
+                          LocationMatcher( filepath, 10,  5 ) ),
+
+            ChunkMatcher( '\t',
+                          LocationMatcher( filepath, 11,  1 ),
+                          LocationMatcher( filepath, 11,  3 ) ),
+
+            ChunkMatcher( ' ',
+                          LocationMatcher( filepath, 11,  6 ),
+                          LocationMatcher( filepath, 11,  6 ) ),
+
+            ChunkMatcher( '\t',
+                          LocationMatcher( filepath, 27,  1 ),
+                          LocationMatcher( filepath, 27,  3 ) ),
+
+            ChunkMatcher( '\t ',
+                          LocationMatcher( filepath, 28,  1 ),
+                          LocationMatcher( filepath, 28,  4 ) ),
+
+            ChunkMatcher( '\t ',
+                          LocationMatcher( filepath, 29,  1 ),
+                          LocationMatcher( filepath, 29,  4 ) ),
+
+            ChunkMatcher( '\t',
+                          LocationMatcher( filepath, 30,  1 ),
+                          LocationMatcher( filepath, 30,  3 ) ),
+
+            ChunkMatcher( ' ',
+                          LocationMatcher( filepath, 30, 17 ),
+                          LocationMatcher( filepath, 30, 17 ) ),
+
+          )
+        } ) )
+      } )
+    }
+  } )
+
+
+@SharedYcmd
+def Subcommands_Format_Range_Spaces_test( app ):
+  filepath = PathToTestFile( 'test.ts' )
+  RunTest( app, {
+    'description': 'Formatting is applied on some part of the file '
+                   'with tabs composed of 4 spaces by default',
+    'request': {
+      'command': 'Format',
+      'filepath': filepath,
+      'range': {
+        'start': {
+          'line_num': 6,
+          'column_num': 3,
+        },
+        'end': {
+          'line_num': 11,
+          'column_num': 6
+        }
+      },
+      'options': {
+        'tab_size': 4,
+        'insert_spaces': True
+      }
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': has_entries( {
+        'fixits': contains( has_entries( {
+          'chunks': contains(
+
+            ChunkMatcher( '    ',
+                          LocationMatcher( filepath,  6,  1 ),
+                          LocationMatcher( filepath,  6,  3 ) ),
+
+            ChunkMatcher( '        ',
+                          LocationMatcher( filepath,  7,  1 ),
+                          LocationMatcher( filepath,  7,  5 ) ),
+
+            ChunkMatcher( '            ',
+                          LocationMatcher( filepath,  8,  1 ),
+                          LocationMatcher( filepath,  8,  7 ) ),
+
+            ChunkMatcher( '            ',
+                          LocationMatcher( filepath,  9,  1 ),
+                          LocationMatcher( filepath,  9,  7 ) ),
+
+            ChunkMatcher( '        ',
+                          LocationMatcher( filepath, 10,  1 ),
+                          LocationMatcher( filepath, 10,  5 ) ),
+
+            ChunkMatcher( '    ',
+                          LocationMatcher( filepath, 11,  1 ),
+                          LocationMatcher( filepath, 11,  3 ) ),
+
+          )
+        } ) )
+      } )
+    }
+  } )
+
+
+@SharedYcmd
+def Subcommands_Format_Range_Tabs_test( app ):
+  filepath = PathToTestFile( 'test.ts' )
+  RunTest( app, {
+    'description': 'Formatting is applied on some part of the file '
+                   'with tabs instead of spaces',
+    'request': {
+      'command': 'Format',
+      'filepath': filepath,
+      'range': {
+        'start': {
+          'line_num': 6,
+          'column_num': 3,
+        },
+        'end': {
+          'line_num': 11,
+          'column_num': 6
+        }
+      },
+      'options': {
+        'tab_size': 4,
+        'insert_spaces': False
+      }
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': has_entries( {
+        'fixits': contains( has_entries( {
+          'chunks': contains(
+
+            ChunkMatcher( '\t',
+                          LocationMatcher( filepath,  6,  1 ),
+                          LocationMatcher( filepath,  6,  3 ) ),
+
+            ChunkMatcher( '\t\t',
+                          LocationMatcher( filepath,  7,  1 ),
+                          LocationMatcher( filepath,  7,  5 ) ),
+
+            ChunkMatcher( '\t\t\t',
+                          LocationMatcher( filepath,  8,  1 ),
+                          LocationMatcher( filepath,  8,  7 ) ),
+
+            ChunkMatcher( '\t\t\t',
+                          LocationMatcher( filepath,  9,  1 ),
+                          LocationMatcher( filepath,  9,  7 ) ),
+
+            ChunkMatcher( '\t\t',
+                          LocationMatcher( filepath, 10,  1 ),
+                          LocationMatcher( filepath, 10,  5 ) ),
+
+            ChunkMatcher( '\t',
+                          LocationMatcher( filepath, 11,  1 ),
+                          LocationMatcher( filepath, 11,  3 ) ),
+
+          )
+        } ) )
+      } )
+    }
+  } )
+
+
 @SharedYcmd
 def Subcommands_GetType_Basic_test( app ):
-  filepath = PathToTestFile( 'test.ts' )
-  contents = ReadFile( filepath )
-
-  event_data = BuildRequest( filepath = filepath,
-                             filetype = 'typescript',
-                             contents = contents,
-                             event_name = 'BufferVisit' )
-
-  app.post_json( '/event_notification', event_data )
-
-  gettype_data = BuildRequest( completer_target = 'filetype_default',
-                               command_arguments = [ 'GetType' ],
-                               line_num = 17,
-                               column_num = 1,
-                               contents = contents,
-                               filetype = 'typescript',
-                               filepath = filepath )
-
-  response = app.post_json( '/run_completer_command', gettype_data ).json
-  assert_that( response, MessageMatcher( 'var foo: Foo' ) )
+  RunTest( app, {
+    'description': 'GetType works on a variable',
+    'request': {
+      'command': 'GetType',
+      'line_num': 17,
+      'column_num': 1,
+      'filepath': PathToTestFile( 'test.ts' ),
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': MessageMatcher( 'var foo: Foo' )
+    }
+  } )
 
 
 @SharedYcmd
 def Subcommands_GetType_HasNoType_test( app ):
-  filepath = PathToTestFile( 'test.ts' )
-  contents = ReadFile( filepath )
-
-  event_data = BuildRequest( filepath = filepath,
-                             filetype = 'typescript',
-                             contents = contents,
-                             event_name = 'BufferVisit' )
-
-  app.post_json( '/event_notification', event_data )
-
-  gettype_data = BuildRequest( completer_target = 'filetype_default',
-                               command_arguments = [ 'GetType' ],
-                               line_num = 2,
-                               column_num = 1,
-                               contents = contents,
-                               filetype = 'typescript',
-                               filepath = filepath )
-
-  response = app.post_json( '/run_completer_command',
-                            gettype_data,
-                            expect_errors = True ).json
-  assert_that( response,
-               ErrorMatcher( RuntimeError, 'No content available.' ) )
+  RunTest( app, {
+    'description': 'GetType returns an error on a keyword',
+    'request': {
+      'command': 'GetType',
+      'line_num': 2,
+      'column_num': 1,
+      'filepath': PathToTestFile( 'test.ts' ),
+    },
+    'expect': {
+      'response': requests.codes.internal_server_error,
+      'data': ErrorMatcher( RuntimeError, 'No content available.' )
+    }
+  } )
 
 
 @SharedYcmd
 def Subcommands_GetDoc_Method_test( app ):
-  filepath = PathToTestFile( 'test.ts' )
-  contents = ReadFile( filepath )
-
-  event_data = BuildRequest( filepath = filepath,
-                             filetype = 'typescript',
-                             contents = contents,
-                             event_name = 'BufferVisit' )
-
-  app.post_json( '/event_notification', event_data )
-
-  gettype_data = BuildRequest( completer_target = 'filetype_default',
-                               command_arguments = [ 'GetDoc' ],
-                               line_num = 34,
-                               column_num = 9,
-                               contents = contents,
-                               filetype = 'typescript',
-                               filepath = filepath )
-
-  response = app.post_json( '/run_completer_command', gettype_data ).json
-  assert_that( response,
-               has_entries( {
-                 'detailed_info': '(method) Bar.testMethod(): void\n\n'
-                                  'Method documentation'
-               } ) )
+  RunTest( app, {
+    'description': 'GetDoc on a method returns its docstring',
+    'request': {
+      'command': 'GetDoc',
+      'line_num': 34,
+      'column_num': 9,
+      'filepath': PathToTestFile( 'test.ts' ),
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': has_entries( {
+         'detailed_info': '(method) Bar.testMethod(): void\n\n'
+                          'Method documentation'
+      } )
+    }
+  } )
 
 
 @SharedYcmd
 def Subcommands_GetDoc_Class_test( app ):
-  filepath = PathToTestFile( 'test.ts' )
-  contents = ReadFile( filepath )
-
-  event_data = BuildRequest( filepath = filepath,
-                             filetype = 'typescript',
-                             contents = contents,
-                             event_name = 'BufferVisit' )
-
-  app.post_json( '/event_notification', event_data )
-
-  gettype_data = BuildRequest( completer_target = 'filetype_default',
-                               command_arguments = [ 'GetDoc' ],
-                               line_num = 37,
-                               column_num = 2,
-                               contents = contents,
-                               filetype = 'typescript',
-                               filepath = filepath )
-
-  response = app.post_json( '/run_completer_command', gettype_data ).json
-  assert_that( response,
-               has_entries( {
-                 'detailed_info': 'class Bar\n\n'
-                                  'Class documentation\n\n'
-                                  'Multi-line'
-               } ) )
+  RunTest( app, {
+    'description': 'GetDoc on a class returns its docstring',
+    'request': {
+      'command': 'GetDoc',
+      'line_num': 37,
+      'column_num': 2,
+      'filepath': PathToTestFile( 'test.ts' ),
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': has_entries( {
+         'detailed_info': 'class Bar\n\n'
+                          'Class documentation\n\n'
+                          'Multi-line'
+      } )
+    }
+  } )
 
 
 @SharedYcmd
 def Subcommands_GetDoc_Class_Unicode_test( app ):
-  filepath = PathToTestFile( 'unicode.ts' )
-  contents = ReadFile( filepath )
-
-  event_data = BuildRequest( filepath = filepath,
-                             filetype = 'typescript',
-                             contents = contents,
-                             event_name = 'BufferVisit' )
-
-  app.post_json( '/event_notification', event_data )
-
-  gettype_data = BuildRequest( completer_target = 'filetype_default',
-                               command_arguments = [ 'GetDoc' ],
-                               line_num = 35,
-                               column_num = 12,
-                               contents = contents,
-                               filetype = 'typescript',
-                               filepath = filepath )
-
-  response = app.post_json( '/run_completer_command', gettype_data ).json
-  assert_that( response,
-               has_entries( {
-                 'detailed_info': 'class Båøz\n\n'
-                                  'Test unicøde st††††',
-               } ) )
+  RunTest( app, {
+    'description': 'GetDoc works with Unicode characters',
+    'request': {
+      'command': 'GetDoc',
+      'line_num': 35,
+      'column_num': 12,
+      'filepath': PathToTestFile( 'unicode.ts' ),
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': has_entries( {
+         'detailed_info': 'class Båøz\n\n'
+                          'Test unicøde st††††',
+      } )
+    }
+  } )
 
 
 @SharedYcmd
 def Subcommands_GoToReferences_test( app ):
-  filepath = PathToTestFile( 'test.ts' )
-  file3 = PathToTestFile( 'file3.ts' )
-  contents = ReadFile( filepath )
-
-  event_data = BuildRequest( filepath = filepath,
-                             filetype = 'typescript',
-                             contents = contents,
-                             event_name = 'BufferVisit' )
-
-  app.post_json( '/event_notification', event_data )
-
-  references_data = BuildRequest( completer_target = 'filetype_default',
-                                  command_arguments = [ 'GoToReferences' ],
-                                  line_num = 33,
-                                  column_num = 6,
-                                  contents = contents,
-                                  filetype = 'typescript',
-                                  filepath = filepath )
-
-  expected = contains_inanyorder(
-    has_entries( { 'description': 'var bar = new Bar();',
-                   'line_num'   : 33,
-                   'column_num' : 5,
-                   'filepath'   : filepath } ),
-    has_entries( { 'description': 'bar.testMethod();',
-                   'line_num'   : 34,
-                   'column_num' : 1,
-                   'filepath'   : filepath } ),
-    has_entries( { 'description': 'bar.nonExistingMethod();',
-                   'line_num'   : 35,
-                   'column_num' : 1,
-                   'filepath'   : filepath } ),
-    has_entries( { 'description': 'var bar = new Bar();',
-                   'line_num'   : 1,
-                   'column_num' : 5,
-                   'filepath'   : file3 } ),
-    has_entries( { 'description': 'bar.testMethod();',
-                   'line_num'   : 2,
-                   'column_num' : 1,
-                   'filepath'   : file3 } )
-  )
-  actual = app.post_json( '/run_completer_command', references_data ).json
-
-  pprint.pprint( actual )
-
-  assert_that( actual, expected )
+  RunTest( app, {
+    'description': 'GoToReferences works',
+    'request': {
+      'command': 'GoToReferences',
+      'line_num': 33,
+      'column_num': 6,
+      'filepath': PathToTestFile( 'test.ts' ),
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': contains_inanyorder(
+        has_entries( { 'description': 'var bar = new Bar();',
+                       'line_num'   : 33,
+                       'column_num' : 5,
+                       'filepath'   : PathToTestFile( 'test.ts' ) } ),
+        has_entries( { 'description': 'bar.testMethod();',
+                       'line_num'   : 34,
+                       'column_num' : 1,
+                       'filepath'   : PathToTestFile( 'test.ts' ) } ),
+        has_entries( { 'description': 'bar.nonExistingMethod();',
+                       'line_num'   : 35,
+                       'column_num' : 1,
+                       'filepath'   : PathToTestFile( 'test.ts' ) } ),
+        has_entries( { 'description': 'var bar = new Bar();',
+                       'line_num'   : 1,
+                       'column_num' : 5,
+                       'filepath'   : PathToTestFile( 'file3.ts' ) } ),
+        has_entries( { 'description': 'bar.testMethod();',
+                       'line_num'   : 2,
+                       'column_num' : 1,
+                       'filepath'   : PathToTestFile( 'file3.ts' ) } )
+      )
+    }
+  } )
 
 
 @SharedYcmd
 def Subcommands_GoToReferences_Unicode_test( app ):
-  filepath = PathToTestFile( 'unicode.ts' )
-  contents = ReadFile( filepath )
-
-  event_data = BuildRequest( filepath = filepath,
-                             filetype = 'typescript',
-                             contents = contents,
-                             event_name = 'BufferVisit' )
-
-  app.post_json( '/event_notification', event_data )
-
-  references_data = BuildRequest( completer_target = 'filetype_default',
-                                  command_arguments = [ 'GoToReferences' ],
-                                  line_num = 14,
-                                  column_num = 3,
-                                  contents = contents,
-                                  filetype = 'typescript',
-                                  filepath = filepath )
-
-  expected = contains_inanyorder(
-    has_entries( { 'description': '  å: number;',
-                   'line_num'   : 14,
-                   'column_num' : 3,
-                   'filepath'   : filepath } ),
-    has_entries( { 'description': 'var baz = new Bår(); baz.å;',
-                   'line_num'   : 20,
-                   'column_num' : 27,
-                   'filepath'   : filepath } ),
-    has_entries( { 'description': 'baz.å;',
-                   'line_num'   : 23,
-                   'column_num' : 5,
-                   'filepath'   : filepath } ),
-    has_entries( { 'description': 'føø_long_long.å;',
-                   'line_num'   : 27,
-                   'column_num' : 17,
-                   'filepath'   : filepath } )
-  )
-  actual = app.post_json( '/run_completer_command', references_data ).json
-
-  pprint.pprint( actual )
-
-  assert_that( actual, expected )
+  RunTest( app, {
+    'description': 'GoToReferences works with Unicode characters',
+    'request': {
+      'command': 'GoToReferences',
+      'line_num': 14,
+      'column_num': 3,
+      'filepath': PathToTestFile( 'unicode.ts' ),
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': contains_inanyorder(
+        has_entries( { 'description': '  å: number;',
+                       'line_num'   : 14,
+                       'column_num' : 3,
+                       'filepath'   : PathToTestFile( 'unicode.ts' ) } ),
+        has_entries( { 'description': 'var baz = new Bår(); baz.å;',
+                       'line_num'   : 20,
+                       'column_num' : 27,
+                       'filepath'   : PathToTestFile( 'unicode.ts' ) } ),
+        has_entries( { 'description': 'baz.å;',
+                       'line_num'   : 23,
+                       'column_num' : 5,
+                       'filepath'   : PathToTestFile( 'unicode.ts' ) } ),
+        has_entries( { 'description': 'føø_long_long.å;',
+                       'line_num'   : 27,
+                       'column_num' : 17,
+                       'filepath'   : PathToTestFile( 'unicode.ts' ) } )
+      )
+    }
+  } )
 
 
 @SharedYcmd
-def Subcommands_GoTo_test( app ):
-  filepath = PathToTestFile( 'test.ts' )
-  contents = ReadFile( filepath )
+def Subcommands_GoTo_Basic( app, goto_command ):
+  RunTest( app, {
+    'description': goto_command + ' works within file',
+    'request': {
+      'command': goto_command,
+      'line_num': 34,
+      'column_num': 8,
+      'filepath': PathToTestFile( 'test.ts' ),
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': LocationMatcher( PathToTestFile( 'test.ts' ), 30, 3 )
+    }
+  } )
 
-  event_data = BuildRequest( filepath = filepath,
-                             filetype = 'typescript',
-                             contents = contents,
-                             event_name = 'BufferVisit' )
 
-  app.post_json( '/event_notification', event_data )
-
-  goto_data = BuildRequest( completer_target = 'filetype_default',
-                            command_arguments = [ 'GoToDefinition' ],
-                            line_num = 34,
-                            column_num = 9,
-                            contents = contents,
-                            filetype = 'typescript',
-                            filepath = filepath )
-
-  response = app.post_json( '/run_completer_command', goto_data ).json
-  assert_that( response,
-               has_entries( {
-                 'filepath': filepath,
-                 'line_num': 30,
-                 'column_num': 3,
-               } ) )
+def Subcommands_GoTo_Basic_test():
+  for command in [ 'GoTo', 'GoToDefinition', 'GoToDeclaration' ]:
+    yield Subcommands_GoTo_Basic, command
 
 
 @SharedYcmd
-def Subcommands_GoTo_Unicode_test( app ):
-  filepath = PathToTestFile( 'unicode.ts' )
-  contents = ReadFile( filepath )
+def Subcommands_GoTo_Unicode( app, goto_command ):
+  RunTest( app, {
+    'description': goto_command + ' works with Unicode characters',
+    'request': {
+      'command': goto_command,
+      'line_num': 28,
+      'column_num': 19,
+      'filepath': PathToTestFile( 'unicode.ts' ),
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': LocationMatcher( PathToTestFile( 'unicode.ts' ), 15, 3 )
+    }
+  } )
 
-  event_data = BuildRequest( filepath = filepath,
-                             filetype = 'typescript',
-                             contents = contents,
-                             event_name = 'BufferVisit' )
 
-  app.post_json( '/event_notification', event_data )
-
-  goto_data = BuildRequest( completer_target = 'filetype_default',
-                            command_arguments = [ 'GoToDefinition' ],
-                            line_num = 28,
-                            column_num = 19,
-                            contents = contents,
-                            filetype = 'typescript',
-                            filepath = filepath )
-
-  response = app.post_json( '/run_completer_command', goto_data ).json
-  assert_that( response,
-               has_entries( {
-                 'filepath': filepath,
-                 'line_num': 15,
-                 'column_num': 3,
-               } ) )
+def Subcommands_GoTo_Unicode_test():
+  for command in [ 'GoTo', 'GoToDefinition', 'GoToDeclaration' ]:
+    yield Subcommands_GoTo_Unicode, command
 
 
 @SharedYcmd
-def Subcommands_GoTo_Fail_test( app ):
-  filepath = PathToTestFile( 'test.ts' )
-  contents = ReadFile( filepath )
+def Subcommands_GoTo_Fail( app, goto_command ):
+  RunTest( app, {
+    'description': goto_command + ' fails on non-existing method',
+    'request': {
+      'command': goto_command,
+      'line_num': 35,
+      'column_num': 6,
+      'filepath': PathToTestFile( 'test.ts' ),
+    },
+    'expect': {
+      'response': requests.codes.internal_server_error,
+      'data': ErrorMatcher( RuntimeError, 'Could not find definition.' )
+    }
+  } )
 
-  event_data = BuildRequest( filepath = filepath,
-                             filetype = 'typescript',
-                             contents = contents,
-                             event_name = 'BufferVisit' )
 
-  app.post_json( '/event_notification', event_data )
-
-  goto_data = BuildRequest( completer_target = 'filetype_default',
-                            command_arguments = [ 'GoToDefinition' ],
-                            line_num = 35,
-                            column_num = 6,
-                            contents = contents,
-                            filetype = 'typescript',
-                            filepath = filepath )
-
-  response = app.post_json( '/run_completer_command',
-                            goto_data,
-                            expect_errors = True ).json
-  assert_that( response,
-               ErrorMatcher( RuntimeError, 'Could not find definition.' ) )
+def Subcommands_GoTo_Fail_test():
+  for command in [ 'GoTo', 'GoToDefinition', 'GoToDeclaration' ]:
+    yield Subcommands_GoTo_Fail, command
 
 
 @SharedYcmd
 def Subcommands_GoToType_test( app ):
-  filepath = PathToTestFile( 'test.ts' )
-  contents = ReadFile( filepath )
-
-  event_data = BuildRequest( filepath = filepath,
-                             filetype = 'typescript',
-                             contents = contents,
-                             event_name = 'BufferVisit' )
-
-  app.post_json( '/event_notification', event_data )
-
-  goto_data = BuildRequest( completer_target = 'filetype_default',
-                            command_arguments = [ 'GoToType' ],
-                            line_num = 14,
-                            column_num = 6,
-                            contents = contents,
-                            filetype = 'typescript',
-                            filepath = filepath )
-
-  response = app.post_json( '/run_completer_command', goto_data ).json
-  assert_that( response,
-               has_entries( {
-                 'filepath': filepath,
-                 'line_num': 2,
-                 'column_num': 7,
-               } ) )
+  RunTest( app, {
+    'description': 'GoToType works',
+    'request': {
+      'command': 'GoToType',
+      'line_num': 14,
+      'column_num': 6,
+      'filepath': PathToTestFile( 'test.ts' ),
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': LocationMatcher( PathToTestFile( 'test.ts' ), 2, 7 )
+    }
+  } )
 
 
 @SharedYcmd
-def Subcommands_GoToType_fail_test( app ):
-  filepath = PathToTestFile( 'test.ts' )
-  contents = ReadFile( filepath )
+def Subcommands_GoToType_Fail_test( app ):
+  RunTest( app, {
+    'description': 'GoToType fails outside the buffer',
+    'request': {
+      'command': 'GoToType',
+      'line_num': 39,
+      'column_num': 8,
+      'filepath': PathToTestFile( 'test.ts' ),
+    },
+    'expect': {
+      'response': requests.codes.internal_server_error,
+      'data': ErrorMatcher( RuntimeError, 'Could not find type definition.' )
+    }
+  } )
 
-  event_data = BuildRequest( filepath = filepath,
-                             filetype = 'typescript',
-                             contents = contents,
-                             event_name = 'BufferVisit' )
 
-  app.post_json( '/event_notification', event_data )
+@SharedYcmd
+def Subcommands_FixIt_test( app ):
+  RunTest( app, {
+    'description': 'FixIt works on a non-existing method',
+    'request': {
+      'command': 'FixIt',
+      'line_num': 35,
+      'column_num': 12,
+      'filepath': PathToTestFile( 'test.ts' ),
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': has_entries( {
+        'fixits': contains_inanyorder(
+          has_entries( {
+            'text': "Declare method 'nonExistingMethod'",
+            'chunks': contains(
+              ChunkMatcher(
+                matches_regexp(
+                  '^    nonExistingMethod\(\): any {\r?\n'
+                  '        throw new Error\("Method not implemented."\);\r?\n'
+                  '    }\r?\n$',
+                ),
+                LocationMatcher( PathToTestFile( 'test.ts' ), 27, 1 ),
+                LocationMatcher( PathToTestFile( 'test.ts' ), 27, 1 ) )
+            ),
+            'location': LocationMatcher( PathToTestFile( 'test.ts' ), 35, 12 )
+          } ),
+          has_entries( {
+            'text': "Declare property 'nonExistingMethod'",
+            'chunks': contains(
+              ChunkMatcher(
+                matches_regexp( '^    nonExistingMethod: any;\r?\n$' ),
+                LocationMatcher( PathToTestFile( 'test.ts' ), 27, 1 ),
+                LocationMatcher( PathToTestFile( 'test.ts' ), 27, 1 ) )
+            ),
+            'location': LocationMatcher( PathToTestFile( 'test.ts' ), 35, 12 )
+          } ),
+          has_entries( {
+            'text': "Add index signature for property 'nonExistingMethod'",
+            'chunks': contains(
+              ChunkMatcher(
+                matches_regexp( '^    \[x: string\]: any;\r?\n$' ),
+                LocationMatcher( PathToTestFile( 'test.ts' ), 27, 1 ),
+                LocationMatcher( PathToTestFile( 'test.ts' ), 27, 1 ) )
+            ),
+            'location': LocationMatcher( PathToTestFile( 'test.ts' ), 35, 12 )
+          } )
+        )
+      } )
+    }
+  } )
 
-  goto_data = BuildRequest( completer_target = 'filetype_default',
-                            command_arguments = [ 'GoToType' ],
-                            line_num = 39,
-                            column_num = 8,
-                            contents = contents,
-                            filetype = 'typescript',
-                            filepath = filepath )
 
-  response = app.post_json( '/run_completer_command',
-                            goto_data,
-                            expect_errors = True ).json
-  assert_that( response,
-               ErrorMatcher( RuntimeError, 'Could not find type definition.' ) )
+@SharedYcmd
+def Subcommands_OrganizeImports_test( app ):
+  filepath = PathToTestFile( 'imports.ts' )
+  RunTest( app, {
+    'description': 'OrganizeImports removes unused imports, '
+                   'coalesces imports from the same module, and sorts them',
+    'request': {
+      'command': 'OrganizeImports',
+      'filepath': filepath,
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': has_entries( {
+        'fixits': contains( has_entries( {
+          'chunks': contains(
+            ChunkMatcher(
+              matches_regexp(
+                'import \* as lib from "library";\r?\n'
+                'import func, { func1, func2 } from "library";\r?\n' ),
+              LocationMatcher( filepath,  1, 1 ),
+              LocationMatcher( filepath,  2, 1 ) ),
+            ChunkMatcher(
+              '',
+              LocationMatcher( filepath,  5, 1 ),
+              LocationMatcher( filepath,  6, 1 ) ),
+            ChunkMatcher(
+              '',
+              LocationMatcher( filepath,  9, 1 ),
+              LocationMatcher( filepath, 10, 1 ) ),
+          )
+        } ) )
+      } )
+    }
+  } )
 
 
 @SharedYcmd
 def Subcommands_RefactorRename_Missing_test( app ):
-  filepath = PathToTestFile( 'test.ts' )
-  contents = ReadFile( filepath )
-
-  event_data = BuildRequest( filepath = filepath,
-                             filetype = 'typescript',
-                             contents = contents,
-                             event_name = 'BufferVisit' )
-
-  app.post_json( '/event_notification', event_data )
-
-  request = BuildRequest( completer_target = 'filetype_default',
-                          command_arguments = [ 'RefactorRename' ],
-                          line_num = 30,
-                          column_num = 6,
-                          contents = contents,
-                          filetype = 'typescript',
-                          filepath = filepath )
-
-  response = app.post_json( '/run_completer_command',
-                            request,
-                            expect_errors = True ).json
-  assert_that( response,
-               ErrorMatcher( ValueError,
-                             'Please specify a new name to rename it to.\n'
-                             'Usage: RefactorRename <new name>' ) )
+  RunTest( app, {
+    'description': 'RefactorRename requires a parameter',
+    'request': {
+      'command': 'RefactorRename',
+      'line_num': 30,
+      'column_num': 6,
+      'filepath': PathToTestFile( 'test.ts' ),
+    },
+    'expect': {
+      'response': requests.codes.internal_server_error,
+      'data': ErrorMatcher( ValueError,
+                            'Please specify a new name to rename it to.\n'
+                            'Usage: RefactorRename <new name>' )
+    }
+  } )
 
 
 @SharedYcmd
 def Subcommands_RefactorRename_NotPossible_test( app ):
-  filepath = PathToTestFile( 'test.ts' )
-  contents = ReadFile( filepath )
-
-  event_data = BuildRequest( filepath = filepath,
-                             filetype = 'typescript',
-                             contents = contents,
-                             event_name = 'BufferVisit' )
-
-  app.post_json( '/event_notification', event_data )
-
-  request = BuildRequest( completer_target = 'filetype_default',
-                          command_arguments = [
-                            'RefactorRename',
-                            'whatever'
-                          ],
-                          line_num = 35,
-                          column_num = 5,
-                          contents = contents,
-                          filetype = 'typescript',
-                          filepath = filepath )
-
-  response = app.post_json( '/run_completer_command',
-                            request,
-                            expect_errors = True ).json
-  assert_that( response,
-               ErrorMatcher( RuntimeError,
-                             'Value cannot be renamed: '
-                             'You cannot rename this element.' ) )
+  RunTest( app, {
+    'description': 'RefactorRename cannot rename a non-existing method',
+    'request': {
+      'command': 'RefactorRename',
+      'arguments': [ 'whatever' ],
+      'line_num': 35,
+      'column_num': 5,
+      'filepath': PathToTestFile( 'test.ts' ),
+    },
+    'expect': {
+      'response': requests.codes.internal_server_error,
+      'data': ErrorMatcher( RuntimeError,
+                            'Value cannot be renamed: '
+                            'You cannot rename this element.' )
+    }
+  } )
 
 
 @SharedYcmd
 def Subcommands_RefactorRename_Simple_test( app ):
-  filepath = PathToTestFile( 'test.ts' )
-  contents = ReadFile( filepath )
-
-  event_data = BuildRequest( filepath = filepath,
-                             filetype = 'typescript',
-                             contents = contents,
-                             event_name = 'BufferVisit' )
-
-  app.post_json( '/event_notification', event_data )
-
-  request = BuildRequest( completer_target = 'filetype_default',
-                          command_arguments = [ 'RefactorRename', 'test' ],
-                          line_num = 2,
-                          column_num = 8,
-                          contents = contents,
-                          filetype = 'typescript',
-                          filepath = filepath )
-
-  response = app.post_json( '/run_completer_command',
-                            request ).json
-
-  pprint.pprint( response, indent = 2 )
-
-  assert_that( response, has_entries ( {
-    'fixits': contains( has_entries( {
-      'chunks': contains_inanyorder(
-        ChunkMatcher(
-          'test',
-          LocationMatcher( filepath, 14, 15 ),
-          LocationMatcher( filepath, 14, 18 ) ),
-        ChunkMatcher(
-          'test',
-          LocationMatcher( filepath, 2, 7 ),
-          LocationMatcher( filepath, 2, 10 ) ),
-      ),
-      'location': LocationMatcher( filepath, 2, 8 )
-    } ) )
-  } ) )
+  RunTest( app, {
+    'description': 'RefactorRename works on a class name',
+    'request': {
+      'command': 'RefactorRename',
+      'arguments': [ 'test' ],
+      'line_num': 2,
+      'column_num': 8,
+      'filepath': PathToTestFile( 'test.ts' ),
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': has_entries( {
+        'fixits': contains( has_entries( {
+          'chunks': contains_inanyorder(
+            ChunkMatcher(
+              'test',
+              LocationMatcher( PathToTestFile( 'test.ts' ), 14, 15 ),
+              LocationMatcher( PathToTestFile( 'test.ts' ), 14, 18 ) ),
+            ChunkMatcher(
+              'test',
+              LocationMatcher( PathToTestFile( 'test.ts' ), 2, 7 ),
+              LocationMatcher( PathToTestFile( 'test.ts' ), 2, 10 ) ),
+          ),
+          'location': LocationMatcher( PathToTestFile( 'test.ts' ), 2, 8 )
+        } ) )
+      } )
+    }
+  } )
 
 
 @SharedYcmd
 def Subcommands_RefactorRename_MultipleFiles_test( app ):
-  filepath = PathToTestFile( 'test.ts' )
-  file2 = PathToTestFile( 'file2.ts' )
-  file3 = PathToTestFile( 'file3.ts' )
-  contents = ReadFile( filepath )
-
-  event_data = BuildRequest( filepath = filepath,
-                             filetype = 'typescript',
-                             contents = contents,
-                             event_name = 'BufferVisit' )
-
-  app.post_json( '/event_notification', event_data )
-
-  request = BuildRequest( completer_target = 'filetype_default',
-                          command_arguments = [
-                            'RefactorRename',
-                            'this-is-a-longer-string'
-                          ],
-                          line_num = 25,
-                          column_num = 9,
-                          contents = contents,
-                          filetype = 'typescript',
-                          filepath = filepath )
-
-  response = app.post_json( '/run_completer_command',
-                            request ).json
-
-  pprint.pprint( response, indent = 2 )
-
-  assert_that( response, has_entries ( {
-    'fixits': contains( has_entries( {
-      'chunks': contains_inanyorder(
-        ChunkMatcher(
-          'this-is-a-longer-string',
-          LocationMatcher( filepath, 25, 7 ),
-          LocationMatcher( filepath, 25, 10 ) ),
-        ChunkMatcher(
-          'this-is-a-longer-string',
-          LocationMatcher( filepath, 33, 15 ),
-          LocationMatcher( filepath, 33, 18 ) ),
-        ChunkMatcher(
-          'this-is-a-longer-string',
-          LocationMatcher( filepath, 37, 1 ),
-          LocationMatcher( filepath, 37, 4 ) ),
-        ChunkMatcher(
-          'this-is-a-longer-string',
-          LocationMatcher( file2, 1, 5 ),
-          LocationMatcher( file2, 1, 8 ) ),
-        ChunkMatcher(
-          'this-is-a-longer-string',
-          LocationMatcher( file3, 1, 15 ),
-          LocationMatcher( file3, 1, 18 ) ),
-      ),
-      'location': LocationMatcher( filepath, 25, 9 )
-    } ) )
-  } ) )
+  RunTest( app, {
+    'description': 'RefactorRename works across files',
+    'request': {
+      'command': 'RefactorRename',
+      'arguments': [ 'this-is-a-longer-string' ],
+      'line_num': 25,
+      'column_num': 9,
+      'filepath': PathToTestFile( 'test.ts' ),
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': has_entries( {
+        'fixits': contains( has_entries( {
+          'chunks': contains_inanyorder(
+            ChunkMatcher(
+              'this-is-a-longer-string',
+              LocationMatcher( PathToTestFile( 'test.ts' ), 25, 7 ),
+              LocationMatcher( PathToTestFile( 'test.ts' ), 25, 10 ) ),
+            ChunkMatcher(
+              'this-is-a-longer-string',
+              LocationMatcher( PathToTestFile( 'test.ts' ), 33, 15 ),
+              LocationMatcher( PathToTestFile( 'test.ts' ), 33, 18 ) ),
+            ChunkMatcher(
+              'this-is-a-longer-string',
+              LocationMatcher( PathToTestFile( 'test.ts' ), 37, 1 ),
+              LocationMatcher( PathToTestFile( 'test.ts' ), 37, 4 ) ),
+            ChunkMatcher(
+              'this-is-a-longer-string',
+              LocationMatcher( PathToTestFile( 'file2.ts' ), 1, 5 ),
+              LocationMatcher( PathToTestFile( 'file2.ts' ), 1, 8 ) ),
+            ChunkMatcher(
+              'this-is-a-longer-string',
+              LocationMatcher( PathToTestFile( 'file3.ts' ), 1, 15 ),
+              LocationMatcher( PathToTestFile( 'file3.ts' ), 1, 18 ) ),
+          ),
+          'location': LocationMatcher( PathToTestFile( 'test.ts' ), 25, 9 )
+        } ) )
+      } )
+    }
+  } )
 
 
 @SharedYcmd
 def Subcommands_RefactorRename_SimpleUnicode_test( app ):
-  filepath = PathToTestFile( 'unicode.ts' )
-  contents = ReadFile( filepath )
-
-  event_data = BuildRequest( filepath = filepath,
-                             filetype = 'typescript',
-                             contents = contents,
-                             event_name = 'BufferVisit' )
-
-  app.post_json( '/event_notification', event_data )
-
-  request = BuildRequest( completer_target = 'filetype_default',
-                          command_arguments = [ 'RefactorRename', 'ø' ],
-                          line_num = 14,
-                          column_num = 3,
-                          contents = contents,
-                          filetype = 'typescript',
-                          filepath = filepath )
-
-  response = app.post_json( '/run_completer_command',
-                            request ).json
-
-  pprint.pprint( response, indent = 2 )
-
-  assert_that( response, has_entries ( {
-    'fixits': contains( has_entries( {
-      'chunks': contains_inanyorder(
-        ChunkMatcher(
-          'ø',
-          LocationMatcher( filepath, 14, 3 ),
-          LocationMatcher( filepath, 14, 5 ) ),
-        ChunkMatcher(
-          'ø',
-          LocationMatcher( filepath, 20, 27 ),
-          LocationMatcher( filepath, 20, 29 ) ),
-        ChunkMatcher(
-          'ø',
-          LocationMatcher( filepath, 23, 5 ),
-          LocationMatcher( filepath, 23, 7 ) ),
-        ChunkMatcher(
-          'ø',
-          LocationMatcher( filepath, 27, 17),
-          LocationMatcher( filepath, 27, 19 ) ),
-      ),
-      'location': LocationMatcher( filepath, 14, 3 )
-    } ) )
-  } ) )
+  RunTest( app, {
+    'description': 'RefactorRename works with Unicode characters',
+    'request': {
+      'command': 'RefactorRename',
+      'arguments': [ 'ø' ],
+      'line_num': 14,
+      'column_num': 3,
+      'filepath': PathToTestFile( 'unicode.ts' ),
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': has_entries( {
+        'fixits': contains( has_entries( {
+          'chunks': contains_inanyorder(
+            ChunkMatcher(
+              'ø',
+              LocationMatcher( PathToTestFile( 'unicode.ts' ), 14, 3 ),
+              LocationMatcher( PathToTestFile( 'unicode.ts' ), 14, 5 ) ),
+            ChunkMatcher(
+              'ø',
+              LocationMatcher( PathToTestFile( 'unicode.ts' ), 20, 27 ),
+              LocationMatcher( PathToTestFile( 'unicode.ts' ), 20, 29 ) ),
+            ChunkMatcher(
+              'ø',
+              LocationMatcher( PathToTestFile( 'unicode.ts' ), 23, 5 ),
+              LocationMatcher( PathToTestFile( 'unicode.ts' ), 23, 7 ) ),
+            ChunkMatcher(
+              'ø',
+              LocationMatcher( PathToTestFile( 'unicode.ts' ), 27, 17),
+              LocationMatcher( PathToTestFile( 'unicode.ts' ), 27, 19 ) ),
+          ),
+          'location': LocationMatcher( PathToTestFile( 'unicode.ts' ), 14, 3 )
+        } ) )
+      } )
+    }
+  } )

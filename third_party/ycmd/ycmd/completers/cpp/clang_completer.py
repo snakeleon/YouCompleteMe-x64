@@ -1,5 +1,5 @@
 # Copyright (C) 2011-2012 Google Inc.
-#               2017      ycmd contributors
+#               2018      ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -27,14 +27,13 @@ from collections import defaultdict
 from future.utils import iteritems
 import logging
 import os.path
-import re
 import textwrap
 import xml.etree.ElementTree
 from xml.etree.ElementTree import ParseError as XmlParseError
 
 import ycm_core
 from ycmd import responses
-from ycmd.utils import ToCppStringCompatible, ToUnicode
+from ycmd.utils import re, ToBytes, ToCppStringCompatible, ToUnicode
 from ycmd.completers.completer import Completer
 from ycmd.completers.cpp.flags import ( Flags, PrepareFlagsForClang,
                                         NoCompilationDatabase,
@@ -243,9 +242,8 @@ class ClangCompleter( Completer ):
     if include_response:
       return include_response
 
-    location = self._LocationForGoTo( 'GetDefinitionLocation', request_data )
-    if not location or not location.IsValid():
-      location = self._LocationForGoTo( 'GetDeclarationLocation', request_data )
+    location = self._LocationForGoTo( 'GetDefinitionOrDeclarationLocation',
+                                      request_data )
     if not location or not location.IsValid():
       raise RuntimeError( 'Can\'t jump to definition or declaration.' )
     return _ResponseForLocation( location )
@@ -256,13 +254,9 @@ class ClangCompleter( Completer ):
     if include_response:
       return include_response
 
-    location = self._LocationForGoTo( 'GetDefinitionLocation',
+    location = self._LocationForGoTo( 'GetDefinitionOrDeclarationLocation',
                                       request_data,
                                       reparse = False )
-    if not location or not location.IsValid():
-      location = self._LocationForGoTo( 'GetDeclarationLocation',
-                                        request_data,
-                                        reparse = False )
     if not location or not location.IsValid():
       raise RuntimeError( 'Can\'t jump to definition or declaration.' )
     return _ResponseForLocation( location )
@@ -441,7 +435,7 @@ class ClangCompleter( Completer ):
     flags_item = responses.DebugInfoItem(
       key = 'flags', value = '{0}'.format( list( flags ) ) )
     filename_item = responses.DebugInfoItem(
-      key = 'translation_unit', value = filename )
+      key = 'translation unit', value = filename )
 
     return responses.BuildDebugInfoResponse( name = 'C-family',
                                              items = [ database_item,
@@ -555,7 +549,11 @@ def _BuildGetDocResponse( doc_data ):
   # useful pieces of documentation available to the developer. Perhaps in
   # future, we can use this XML for more interesting things.
   try:
-    root = xml.etree.ElementTree.fromstring( doc_data.comment_xml )
+    # Only python2 actually requires bytes here.
+    # Doing the same on python3 makes the code simpler,
+    # but introduces unnecessary, though quite acceptable overhead
+    # (compared to XML processing).
+    root = xml.etree.ElementTree.fromstring( ToBytes( doc_data.comment_xml ) )
   except XmlParseError:
     raise ValueError( NO_DOCUMENTATION_MESSAGE )
 
