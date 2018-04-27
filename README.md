@@ -3419,9 +3419,9 @@ This software is licensed under the [GPL v3 license][gpl].
 
 ###关于版本
 
-- ycmd  核心版本: 33 (09 April 2018) 静态编译
+- ycmd  核心版本: 37 (25 April 2018) 静态编译
 - libclang  版本: 3.9.1 (23 December 2016) [Clang][Clang]
-- Python    支持: 3.6.4 (19 December 2017) [Python][python-win-download]
+- Python    支持: 3.6.5 (28 March 2018) [Python][python-win-download]
 
 支持操作系统:
 
