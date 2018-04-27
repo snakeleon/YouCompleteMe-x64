@@ -866,12 +866,45 @@ match uppercase letters in the completion strings (the lowercase letters still
 match both). On top of that, a letter with no diacritic marks will match that
 letter with or without marks:
 
-| matches | foo | føo | fOo | fØo |
-|---------|-----|-----|-----|-----|
-| **foo** |  ✔️  |  ✔️  |  ✔️  |  ✔️  |
-| **føo** |  ❌ |  ✔️  |  ❌ |  ✔️  |
-| **fOo** |  ❌ |  ❌ |  ✔️  |  ✔️  |
-| **fØo** |  ❌ |  ❌ |  ❌ |  ✔️  |
+<table>
+<tbody>
+<tr>
+  <th>matches</th>
+  <th>foo</th>
+  <th>føo</th>
+  <th>fOo</th>
+  <th>fØo</th>
+</tr>
+<tr>
+  <th>foo</th>
+  <td>✔️</td>
+  <td>✔️</td>
+  <td>✔️</td>
+  <td>✔️</td>
+</tr>
+<tr>
+  <th>føo</th>
+  <td>❌</td>
+  <td>✔️</td>
+  <td>❌</td>
+  <td>✔️</td>
+</tr>
+<tr>
+  <th>fOo</th>
+  <td>❌</td>
+  <td>❌</td>
+  <td>✔️</td>
+  <td>✔️</td>
+</tr>
+<tr>
+  <th>fØo</th>
+  <td>❌</td>
+  <td>❌</td>
+  <td>❌</td>
+  <td>✔️</td>
+</tr>
+</tbody>
+</table>
 
 Use the TAB key to accept a completion and continue pressing TAB to cycle
 through the completions. Use Shift-TAB to cycle backwards. Note that if you're
@@ -3386,7 +3419,7 @@ This software is licensed under the [GPL v3 license][gpl].
 
 ###关于版本
 
-- ycmd  核心版本: 37 (25 April 2018) 静态编译
+- ycmd  核心版本: 33 (09 April 2018) 静态编译
 - libclang  版本: 3.9.1 (23 December 2016) [Clang][Clang]
 - Python    支持: 3.6.4 (19 December 2017) [Python][python-win-download]
 
