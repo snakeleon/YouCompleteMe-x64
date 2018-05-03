@@ -95,7 +95,7 @@ void BuildFullDiagnosticDataFromChildren(
 
   // Populate any fixit attached to this diagnostic.
   FixIt fixit = BuildFixIt( diag_text, diagnostic );
-  if ( fixit.chunks.size() > 0 ) {
+  if ( !fixit.chunks.empty() ) {
     fixits.push_back( fixit );
   }
 
@@ -149,8 +149,7 @@ std::vector< Range > GetRanges( const DiagnosticWrap &diagnostic_wrap ) {
   ranges.reserve( num_ranges );
 
   for ( size_t i = 0; i < num_ranges; ++i ) {
-    ranges.push_back(
-      Range( clang_getDiagnosticRange( diagnostic_wrap.get(), i ) ) );
+    ranges.emplace_back( clang_getDiagnosticRange( diagnostic_wrap.get(), i ) );
   }
 
   return ranges;
