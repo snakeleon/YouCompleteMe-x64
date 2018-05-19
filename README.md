@@ -499,10 +499,9 @@ Make sure you have Vim 7.4.1578 with Python 2 or Python 3 support.
 OpenBSD 5.5 and later have a Vim that's recent enough. You can see the version of
 Vim installed by running `vim --version`.
 
-FreeBSD 10.x comes with clang compiler but not the libraries needed to install.
+For FreeBSD 11.x, the requirement is cmake:
 
-    pkg install llvm38 boost-all boost-python-libs clang38
-    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/llvm38/lib/
+    pkg install cmake
 
 Install YouCompleteMe with [Vundle][].
 
@@ -511,17 +510,20 @@ using Vundle and the ycm_core library APIs have changed (happens
 rarely), YCM will notify you to recompile it. You should then rerun the install
 process.
 
-Install dependencies and CMake: `sudo pkg_add llvm boost cmake`
-
 Compiling YCM **with** semantic support for C-family languages:
 
     cd ~/.vim/bundle/YouCompleteMe
-    ./install.py --clang-completer --system-libclang --system-boost
+    ./install.py --clang-completer
 
 Compiling YCM **without** semantic support for C-family languages:
 
     cd ~/.vim/bundle/YouCompleteMe
-    ./install.py --system-boost
+    ./install.py
+
+If the `python` executable is not present, or the default `python` is not the
+one that should be compiled against, specify the python interpreter explicitly:
+
+    python3 install.py --clang-completer
 
 The following additional language support options are available:
 
@@ -2024,7 +2026,8 @@ let g:ycm_min_num_of_chars_for_completion = 1
 ```
 
 Note that after changing an option in your [vimrc script][vimrc] you have to
-restart Vim for the changes to take effect.
+restart [ycmd][] with the `:YcmRestartServer` command for the changes to take
+effect.
 
 ### The `g:ycm_min_num_of_chars_for_completion` option
 
@@ -3417,6 +3420,10 @@ YouCompleteMe maintainers directly using the [contact details](#contact) below.
 
 License
 -------
+
+This software is licensed under the [GPL v3 license][gpl].
+© 2015-2018 YouCompleteMe contributors
+
 
 This software is licensed under the [GPL v3 license][gpl].
 © 2015-2018 YouCompleteMe contributors
