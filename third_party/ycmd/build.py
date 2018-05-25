@@ -79,10 +79,10 @@ DYNAMIC_PYTHON_LIBRARY_REGEX = """
   )$
 """
 
-JDTLS_MILESTONE = '0.15.0'
-JDTLS_BUILD_STAMP = '201803152351'
+JDTLS_MILESTONE = '0.18.0'
+JDTLS_BUILD_STAMP = '201805010001'
 JDTLS_SHA256 = (
-  '4fe3ca50d2b7011f7323863bdf77a16979e5d3a2a534d69e1ef32742cc443061'
+  '9253d4222519442b65b4a01516c9496354b59813d906357a5f3f265601cc77db'
 )
 
 BUILD_ERROR_MESSAGE = (
@@ -363,6 +363,9 @@ def ParseArguments():
   parser.add_argument( '--no-regex',
                        action = 'store_true',
                        help = "Don't build the regex module" )
+  parser.add_argument( '--clang-tidy',
+                       action = 'store_true',
+                       help = "Run clang-tidy static analysis" )
 
 
   # These options are deprecated.
@@ -381,6 +384,9 @@ def ParseArguments():
   if not OnWindows() and args.enable_coverage:
     # We always want a debug build when running with coverage enabled
     args.enable_debug = True
+
+  if not args.clang_tidy and os.environ.get( 'YCM_CLANG_TIDY' ):
+    args.clang_tidy = True
 
   if ( args.system_libclang and
        not args.clang_completer and
@@ -404,6 +410,9 @@ def GetCmakeArgs( parsed_args ):
   cmake_args = []
   if parsed_args.clang_completer or parsed_args.all_completers:
     cmake_args.append( '-DUSE_CLANG_COMPLETER=ON' )
+
+  if parsed_args.clang_tidy:
+    cmake_args.append( '-DUSE_CLANG_TIDY=ON' )
 
   if parsed_args.system_libclang:
     cmake_args.append( '-DUSE_SYSTEM_LIBCLANG=ON' )

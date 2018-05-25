@@ -496,16 +496,17 @@ def SplitLines_test():
     ( ' \n', [ ' ', '' ] ),
     ( ' \n ', [ ' ', ' ' ] ),
     ( 'test\n', [ 'test', '' ] ),
-    ( '\r', [ '', '' ] ),
-    ( '\r ', [ '', ' ' ] ),
-    ( 'test\r', [ 'test', '' ] ),
-    ( '\n\r', [ '', '', '' ] ),
-    ( '\r\n', [ '', '' ] ),
-    ( '\r\n\n', [ '', '', '' ] ),
-    # Other behaviors are just the behavior of splitlines, so just a couple of
-    # tests to prove that we don't mangle it.
+    # Ignore \r on purpose.
+    ( '\r', [ '\r' ] ),
+    ( '\r ', [ '\r ' ] ),
+    ( 'test\r', [ 'test\r' ] ),
+    ( '\n\r', [ '', '\r' ] ),
+    ( '\r\n', [ '\r', '' ] ),
+    ( '\r\n\n', [ '\r', '', '' ] ),
     ( 'test\ntesting', [ 'test', 'testing' ] ),
     ( '\ntesting', [ '', 'testing' ] ),
+    # Do not split lines on \f and \v characters.
+    ( '\f\n\v', [ '\f', '\v' ] )
   ]
 
   for test in tests:
@@ -582,3 +583,14 @@ def GetCurrentDirectory_Py2NoCurrentDirectory_test():
 def GetCurrentDirectory_Py3NoCurrentDirectory_test():
   with patch( 'os.getcwd', side_effect = FileNotFoundError ): # noqa
     eq_( utils.GetCurrentDirectory(), tempfile.gettempdir() )
+
+
+def HashableDict_Equality_test():
+  dict1 = { 'key': 'value' }
+  dict2 = { 'key': 'another_value' }
+  ok_(     utils.HashableDict( dict1 ) == utils.HashableDict( dict1 ) )
+  ok_( not utils.HashableDict( dict1 ) != utils.HashableDict( dict1 ) )
+  ok_( not utils.HashableDict( dict1 ) == dict1 )
+  ok_(     utils.HashableDict( dict1 ) != dict1 )
+  ok_( not utils.HashableDict( dict1 ) == utils.HashableDict( dict2 ) )
+  ok_(     utils.HashableDict( dict1 ) != utils.HashableDict( dict2 ) )

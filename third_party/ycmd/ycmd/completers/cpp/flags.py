@@ -42,21 +42,21 @@ PATH_FLAGS =  [ '--sysroot=' ] + INCLUDE_FLAGS
 
 # We need to remove --fcolor-diagnostics because it will cause shell escape
 # sequences to show up in editors, which is bad. See Valloric/YouCompleteMe#1421
-STATE_FLAGS_TO_SKIP = set( [ '-c',
-                             '-MP',
-                             '-MD',
-                             '-MMD',
-                             '--fcolor-diagnostics' ] )
+STATE_FLAGS_TO_SKIP = { '-c',
+                        '-MP',
+                        '-MD',
+                        '-MMD',
+                        '--fcolor-diagnostics' }
 
-STATE_FLAGS_TO_SKIP_WIN_STYLE = set( [ '/c' ] )
+STATE_FLAGS_TO_SKIP_WIN_STYLE = { '/c' }
 
 # The -M* flags spec:
 #   https://gcc.gnu.org/onlinedocs/gcc-4.9.0/gcc/Preprocessor-Options.html
-FILE_FLAGS_TO_SKIP = set( [ '-MF',
-                            '-MT',
-                            '-MQ',
-                            '-o',
-                            '--serialize-diagnostics' ] )
+FILE_FLAGS_TO_SKIP = { '-MF',
+                       '-MT',
+                       '-MQ',
+                       '-o',
+                       '--serialize-diagnostics' }
 
 # Use a regex to correctly detect c++/c language for both versioned and
 # non-versioned compiler executable names suffixes
@@ -70,11 +70,11 @@ CL_COMPILER_REGEX = re.compile( r'(?:cl|clang-cl)(.exe)?$', re.IGNORECASE )
 # List of file extensions to be considered "header" files and thus not present
 # in the compilation database. The logic will try and find an associated
 # "source" file (see SOURCE_EXTENSIONS below) and use the flags for that.
-HEADER_EXTENSIONS = [ '.h', '.hxx', '.hpp', '.hh' ]
+HEADER_EXTENSIONS = [ '.h', '.hxx', '.hpp', '.hh', '.cuh' ]
 
 # List of file extensions which are considered "source" files for the purposes
 # of heuristically locating the flags for a header file.
-SOURCE_EXTENSIONS = [ '.cpp', '.cxx', '.cc', '.c', '.m', '.mm' ]
+SOURCE_EXTENSIONS = [ '.cpp', '.cxx', '.cc', '.c', '.cu', '.m', '.mm' ]
 
 EMPTY_FLAGS = {
   'flags': [],
@@ -91,7 +91,7 @@ class Flags( object ):
   'modules') that contain a method FlagsForFile( filename )."""
 
   def __init__( self ):
-    # It's caches all the way down...
+    # We cache the flags by a tuple of filename and client data.
     self.flags_for_file = {}
     self.extra_clang_flags = _ExtraClangFlags()
     self.no_extra_conf_file_warning_posted = False
@@ -100,7 +100,7 @@ class Flags( object ):
     # Keys are directory names and values are ycm_core.CompilationDatabase
     # instances or None. Value is None when it is known there is no compilation
     # database to be found for the directory.
-    self.compilation_database_dir_map = dict()
+    self.compilation_database_dir_map = {}
 
     # Sometimes we don't actually know what the flags to use are. Rather than
     # returning no flags, if we've previously found flags for a file in a
@@ -109,7 +109,7 @@ class Flags( object ):
     # compilation database) to receive at least some flags.
     # Keys are directory names and values are ycm_core.CompilationInfo
     # instances. Values may not be None.
-    self.file_directory_heuristic_map = dict()
+    self.file_directory_heuristic_map = {}
 
 
   def FlagsForFile( self,
@@ -128,7 +128,7 @@ class Flags( object ):
     # may be called from multiple threads, and python gives us
     # 1-python-statement synchronisation for "free" (via the GIL)
     try:
-      return self.flags_for_file[ filename ]
+      return self.flags_for_file[ filename, client_data ]
     except KeyError:
       pass
 
@@ -148,13 +148,15 @@ class Flags( object ):
 
     return self._ParseFlagsFromExtraConfOrDatabase( filename,
                                                     results,
-                                                    add_extra_clang_flags )
+                                                    add_extra_clang_flags,
+                                                    client_data )
 
 
   def _ParseFlagsFromExtraConfOrDatabase( self,
                                           filename,
                                           results,
-                                          add_extra_clang_flags ):
+                                          add_extra_clang_flags,
+                                          client_data ):
     if 'override_filename' in results:
       filename = results[ 'override_filename' ] or filename
 
@@ -172,7 +174,7 @@ class Flags( object ):
                                             _ShouldAllowWinStyleFlags( flags ) )
 
     if results.get( 'do_cache', True ):
-      self.flags_for_file[ filename ] = sanitized_flags, filename
+      self.flags_for_file[ filename, client_data ] = sanitized_flags, filename
 
     return sanitized_flags, filename
 
@@ -335,7 +337,7 @@ def _RemoveXclangFlags( flags ):
 
   sanitized_flags = []
   saw_xclang = False
-  for i, flag in enumerate( flags ):
+  for flag in flags:
     if flag == '-Xclang':
       saw_xclang = True
       continue
@@ -367,9 +369,10 @@ def _AddLanguageFlagWhenAppropriate( flags, enable_windows_style_flags ):
   first flag starting with a dash is usually the path to the compiler that
   should be invoked. Since LibClang does not deduce the language from the
   compiler name, we explicitely set the language to C++ if the compiler is a C++
-  one (g++, clang++, etc.). Otherwise, we let LibClang guess the language from
-  the file extension. This handles the case where the .h extension is used for
-  C++ headers."""
+  one (g++, clang++, etc.). We also set the language to CUDA if any of the
+  source files has a .cu or .cuh extension. Otherwise, we let LibClang guess the
+  language from the file extension. This handles the case where the .h extension
+  is used for C++ headers."""
 
   flags = _RemoveFlagsPrecedingCompiler( flags, enable_windows_style_flags )
 
@@ -377,14 +380,22 @@ def _AddLanguageFlagWhenAppropriate( flags, enable_windows_style_flags ):
   # a flag starting with a forward slash if enable_windows_style_flags is True.
   first_flag = flags[ 0 ]
 
-  # NOTE: This is intentionally NOT checking for enable_windows_style_flags.
-  #
   # Because of _RemoveFlagsPrecedingCompiler called above, irrelevant of
   # enable_windows_style_flags. the first flag is either the compiler
   # (path or executable), a Windows style flag or starts with a dash.
+  if first_flag.startswith( '-' ):
+    return flags
+
+  # Explicitly set the language to CUDA to avoid setting it to C++ when
+  # compiling CUDA source files with a C++ compiler
+  if any( fl.endswith( '.cu' ) or fl.endswith( '.cuh' )
+          for fl in reversed( flags ) ):
+    return [ first_flag, '-x', 'cuda' ] + flags[ 1: ]
+
+  # NOTE: This is intentionally NOT checking for enable_windows_style_flags.
   #
-  # If it doesn't start with a dash, it is either an absolute path,
-  # a Windows style flag or a C++ compiler executable from $PATH.
+  # The first flag is now either an absolute path, a Windows style flag or a
+  # C++ compiler executable from $PATH.
   #   If it starts with a forward slash the flag can either be an absolute
   #   flag or a Windows style flag.
   #     If it matches the regex, it is safe to assume the flag is a compiler
@@ -394,9 +405,9 @@ def _AddLanguageFlagWhenAppropriate( flags, enable_windows_style_flags ):
   #     and cleaned properly.
   #   If the flag starts with anything else (i.e. not a '-' or a '/'), the flag
   #   is a stray file path and shall be gotten rid of in _RemoveUnusedFlags().
-  if ( not first_flag.startswith( '-' ) and
-       CPP_COMPILER_REGEX.search( first_flag ) ):
+  if CPP_COMPILER_REGEX.search( first_flag ):
     return [ first_flag, '-x', 'c++' ] + flags[ 1: ]
+
   return flags
 
 

@@ -10,7 +10,7 @@
     <h1>ycmd</h1>
     <p class="sw-info">
         
-        Version: <span class="sw-info-version">0.2.0</span>,     <a href="https://github.com/Valloric/ycmd" class="sw-external-doc">ycmd GitHub page</a>
+        Version: <span class="sw-info-version">0.3.0</span>,     <a href="https://github.com/Valloric/ycmd" class="sw-external-doc">ycmd GitHub page</a>
     
     </p>
     <p><p>ycmd is a code-completion &amp; code-comprehension server.</p>
@@ -22,6 +22,7 @@
     applied:</p>
     <ul>
     <li>All strings going into and out of the server are UTF-8 encoded.</li>
+    <li>All lines end with <code>\n</code>.</li>
     <li>All line and column numbers are 1-based, not 0-based. They are also byte
     offsets, not Unicode codepoint offsets.</li>
     <li>All file paths are full, absolute paths. If a file has not been written
@@ -285,99 +286,7 @@
                                             <div class="col-md-6 sw-request-model">
                             <div  class="panel panel-definition">
                                 <div class="panel-body">
-                                        
-                                                <section class="json-schema-properties">
-                                                    <dl>
-                                                            <dt data-property-name="line_num">
-                                                                <span class="json-property-name">line_num:</span>
-                                                                
-                                                                <span class="json-property-type">    <a class="json-schema-ref" href="#/definitions/LineNumber">LineNumber</a>
-                                                                </span>
-                                                                <span class="json-property-range" title="Value limits"></span>
-                                                                
-                                                                    <span class="json-property-required"></span>
-                                                            </dt>
-                                                            <dd>
-                                                                
-                                                                <div class="json-inner-schema">
-                                                                    
-                                                                </div>
-                                                            </dd>
-                                                            <dt data-property-name="column_num">
-                                                                <span class="json-property-name">column_num:</span>
-                                                                
-                                                                <span class="json-property-type">    <a class="json-schema-ref" href="#/definitions/ColumnNumber">ColumnNumber</a>
-                                                                </span>
-                                                                <span class="json-property-range" title="Value limits"></span>
-                                                                
-                                                                    <span class="json-property-required"></span>
-                                                            </dt>
-                                                            <dd>
-                                                                
-                                                                <div class="json-inner-schema">
-                                                                    
-                                                                </div>
-                                                            </dd>
-                                                            <dt data-property-name="filepath">
-                                                                <span class="json-property-name">filepath:</span>
-                                                                
-                                                                <span class="json-property-type">    <a class="json-schema-ref" href="#/definitions/FilePath">FilePath</a>
-                                                                </span>
-                                                                <span class="json-property-range" title="Value limits"></span>
-                                                                
-                                                                    <span class="json-property-required"></span>
-                                                            </dt>
-                                                            <dd>
-                                                                
-                                                                <div class="json-inner-schema">
-                                                                    
-                                                                </div>
-                                                            </dd>
-                                                            <dt data-property-name="file_data">
-                                                                <span class="json-property-name">file_data:</span>
-                                                                
-                                                                <span class="json-property-type">    <a class="json-schema-ref" href="#/definitions/FileDataMap">FileDataMap</a>
-                                                                </span>
-                                                                <span class="json-property-range" title="Value limits"></span>
-                                                                
-                                                                    <span class="json-property-required"></span>
-                                                            </dt>
-                                                            <dd>
-                                                                
-                                                                <div class="json-inner-schema">
-                                                                    
-                                                                </div>
-                                                            </dd>
-                                                            <dt data-property-name="completer_target">
-                                                                <span class="json-property-name">completer_target:</span>
-                                                                
-                                                                <span class="json-property-type">    <a class="json-schema-ref" href="#/definitions/CompleterTarget">CompleterTarget</a>
-                                                                </span>
-                                                                <span class="json-property-range" title="Value limits"></span>
-                                                                
-                                                            </dt>
-                                                            <dd>
-                                                                
-                                                                <div class="json-inner-schema">
-                                                                    
-                                                                </div>
-                                                            </dd>
-                                                            <dt data-property-name="working_dir">
-                                                                <span class="json-property-name">working_dir:</span>
-                                                                
-                                                                <span class="json-property-type">    <a class="json-schema-ref" href="#/definitions/WorkingDirectory">WorkingDirectory</a>
-                                                                </span>
-                                                                <span class="json-property-range" title="Value limits"></span>
-                                                                
-                                                            </dt>
-                                                            <dd>
-                                                                
-                                                                <div class="json-inner-schema">
-                                                                    
-                                                                </div>
-                                                            </dd>
-                                                    </dl>
-                                                </section>
+                                            <a class="json-schema-ref" href="#/definitions/SimpleRequest">SimpleRequest</a>
                                 </div>
                             </div></div>
                                         </div>
@@ -1016,6 +925,20 @@
                                                                 <span class="json-property-name">working_dir:</span>
                                                                 
                                                                 <span class="json-property-type">    <a class="json-schema-ref" href="#/definitions/WorkingDirectory">WorkingDirectory</a>
+                                                                </span>
+                                                                <span class="json-property-range" title="Value limits"></span>
+                                                                
+                                                            </dt>
+                                                            <dd>
+                                                                
+                                                                <div class="json-inner-schema">
+                                                                    
+                                                                </div>
+                                                            </dd>
+                                                            <dt data-property-name="extra_conf_data">
+                                                                <span class="json-property-name">extra_conf_data:</span>
+                                                                
+                                                                <span class="json-property-type">    <a class="json-schema-ref" href="#/definitions/ExtraConfData">ExtraConfData</a>
                                                                 </span>
                                                                 <span class="json-property-range" title="Value limits"></span>
                                                                 
@@ -1832,6 +1755,20 @@
                                                                 <span class="json-property-name">working_dir:</span>
                                                                 
                                                                 <span class="json-property-type">    <a class="json-schema-ref" href="#/definitions/WorkingDirectory">WorkingDirectory</a>
+                                                                </span>
+                                                                <span class="json-property-range" title="Value limits"></span>
+                                                                
+                                                            </dt>
+                                                            <dd>
+                                                                
+                                                                <div class="json-inner-schema">
+                                                                    
+                                                                </div>
+                                                            </dd>
+                                                            <dt data-property-name="extra_conf_data">
+                                                                <span class="json-property-name">extra_conf_data:</span>
+                                                                
+                                                                <span class="json-property-type">    <a class="json-schema-ref" href="#/definitions/ExtraConfData">ExtraConfData</a>
                                                                 </span>
                                                                 <span class="json-property-range" title="Value limits"></span>
                                                                 
@@ -2883,6 +2820,27 @@
                                     </section>
                     </div>
                 </div>        
+                <div id="definition-ExtraConfData" class="panel panel-definition">
+                        <div class="panel-heading">
+                                <h3 class="panel-title"><a name="/definitions/ExtraConfData"></a>ExtraConfData:
+                                    <span class="json-property-type">
+                <span class="json-property-type">object</span>
+                <span class="json-property-range" title="Value limits"></span>
+                
+                </span>
+                                </h3>
+                        </div>
+                    <div class="panel-body">
+                                <section class="json-schema-description">
+                                    <p>A dictionary passed to the <code>FlagsForFile</code> function of the
+                            <code>.ycm_extra_conf.py</code> file as the <code>client_data</code> parameter. This optional
+                            field should be used to give users a way to customize the
+                            <code>.ycm_extra_conf.py</code> file with their own set of options.</p>
+                            
+                                </section>
+                            
+                    </div>
+                </div>        
                 <div id="definition-FileData" class="panel panel-definition">
                         <div class="panel-heading">
                                 <h3 class="panel-title"><a name="/definitions/FileData"></a>FileData:
@@ -3675,6 +3633,20 @@
                                                     <span class="json-property-name">working_dir:</span>
                                                     
                                                     <span class="json-property-type">    <a class="json-schema-ref" href="#/definitions/WorkingDirectory">WorkingDirectory</a>
+                                                    </span>
+                                                    <span class="json-property-range" title="Value limits"></span>
+                                                    
+                                                </dt>
+                                                <dd>
+                                                    
+                                                    <div class="json-inner-schema">
+                                                        
+                                                    </div>
+                                                </dd>
+                                                <dt data-property-name="extra_conf_data">
+                                                    <span class="json-property-name">extra_conf_data:</span>
+                                                    
+                                                    <span class="json-property-type">    <a class="json-schema-ref" href="#/definitions/ExtraConfData">ExtraConfData</a>
                                                     </span>
                                                     <span class="json-property-range" title="Value limits"></span>
                                                     

@@ -1,3 +1,5 @@
 *.dll
 *.so
-*.pyd
+*.py[cod]
+*.ilk
+*.pdb

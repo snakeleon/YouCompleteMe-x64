@@ -42,8 +42,8 @@ class PreparedTriggers( object ):
     final_triggers = _FiletypeDictUnion( PREPARED_DEFAULT_FILETYPE_TRIGGERS,
                                          user_prepared_triggers )
     if filetype_set:
-      final_triggers = dict( ( k, v ) for k, v in iteritems( final_triggers )
-                             if k in filetype_set )
+      final_triggers = { k: v for k, v in iteritems( final_triggers )
+                         if k in filetype_set }
 
     self._filetype_to_prepared_triggers = final_triggers
 
@@ -200,7 +200,7 @@ DEFAULT_FILETYPE_TRIGGERS = {
     r're!\[.*\]\s',             # method composition
   ],
   'ocaml' : [ '.', '#' ],
-  'cpp,objcpp' : [ '->', '.', '::' ],
+  'cpp,cuda,objcpp' : [ '->', '.', '::' ],
   'perl' : [ '->' ],
   'php' : [ '->', '::' ],
   'cs,java,javascript,typescript,d,python,perl6,scala,vb,elixir,go,groovy' : [
