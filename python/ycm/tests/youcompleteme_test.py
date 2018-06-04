@@ -209,7 +209,7 @@ def YouCompleteMe_DebugInfo_ServerRunning_test( ycm ):
         'Extra configuration path: .*testdata[/\\\\]\\.ycm_extra_conf\\.py\n'
         '(?(CLANG)C-family completer debug information:\n'
         '  Compilation database path: None\n'
-        '  Flags: \\[\'_TEMP_FILE_\'.*\\]\n'
+        '  Flags: \\[u?\'_TEMP_FILE_\'.*\\]\n'
         '  Translation unit: .+\n)'
         'Server running at: .+\n'
         'Server process ID: \d+\n'
@@ -240,22 +240,22 @@ def YouCompleteMe_DebugInfo_ServerNotRunning_test( ycm ):
 
 @YouCompleteMeInstance()
 def YouCompleteMe_OnVimLeave_RemoveClientLogfileByDefault_test( ycm ):
-    client_logfile = ycm._client_logfile
-    assert_that( os.path.isfile( client_logfile ),
-                 'Logfile {0} does not exist.'.format( client_logfile ) )
-    ycm.OnVimLeave()
-    assert_that( not os.path.isfile( client_logfile ),
-                 'Logfile {0} was not removed.'.format( client_logfile ) )
+  client_logfile = ycm._client_logfile
+  assert_that( os.path.isfile( client_logfile ),
+               'Logfile {0} does not exist.'.format( client_logfile ) )
+  ycm.OnVimLeave()
+  assert_that( not os.path.isfile( client_logfile ),
+               'Logfile {0} was not removed.'.format( client_logfile ) )
 
 
 @YouCompleteMeInstance( { 'g:ycm_keep_logfiles': 1 } )
 def YouCompleteMe_OnVimLeave_KeepClientLogfile_test( ycm ):
-    client_logfile = ycm._client_logfile
-    assert_that( os.path.isfile( client_logfile ),
-                 'Logfile {0} does not exist.'.format( client_logfile ) )
-    ycm.OnVimLeave()
-    assert_that( os.path.isfile( client_logfile ),
-                 'Logfile {0} was removed.'.format( client_logfile ) )
+  client_logfile = ycm._client_logfile
+  assert_that( os.path.isfile( client_logfile ),
+               'Logfile {0} does not exist.'.format( client_logfile ) )
+  ycm.OnVimLeave()
+  assert_that( os.path.isfile( client_logfile ),
+               'Logfile {0} was removed.'.format( client_logfile ) )
 
 
 @YouCompleteMeInstance()
@@ -383,6 +383,22 @@ def YouCompleteMe_ShowDetailedDiagnostic_MessageFromServer_test(
 
   post_vim_message.assert_has_exact_calls( [
     call( 'some_detailed_diagnostic', warning = False )
+  ] )
+
+
+@YouCompleteMeInstance()
+@patch( 'ycm.vimsupport.PostVimMessage', new_callable = ExtendedMock )
+def YouCompleteMe_ShowDetailedDiagnostic_Exception_test(
+  ycm, post_vim_message ):
+
+  current_buffer = VimBuffer( 'buffer' )
+  with MockVimBuffers( [ current_buffer ], current_buffer ):
+    with patch( 'ycm.client.base_request._JsonFromFuture',
+                side_effect = RuntimeError( 'Some exception' ) ):
+      ycm.ShowDetailedDiagnostic(),
+
+  post_vim_message.assert_has_exact_calls( [
+    call( 'Some exception', truncate = False )
   ] )
 
 
@@ -696,7 +712,7 @@ def YouCompleteMe_UpdateMatches_ClearDiagnosticMatchesInNewBuffer_test( ycm ):
 @patch( 'ycm.vimsupport.PostVimMessage', new_callable = ExtendedMock )
 def YouCompleteMe_AsyncDiagnosticUpdate_SingleFile_test( ycm,
                                                          post_vim_message,
-                                                         *args  ):
+                                                         *args ):
 
   # This test simulates asynchronous diagnostic updates associated with a single
   # file (e.g. Translation Unit), but where the actual errors refer to other
@@ -811,7 +827,7 @@ def YouCompleteMe_AsyncDiagnosticUpdate_SingleFile_test( ycm,
 @patch( 'ycm.vimsupport.PostVimMessage', new_callable = ExtendedMock )
 def YouCompleteMe_AsyncDiagnosticUpdate_PerFile_test( ycm,
                                                       post_vim_message,
-                                                      *args  ):
+                                                      *args ):
 
   # This test simulates asynchronous diagnostic updates which are delivered per
   # file, including files which are open and files which are not.
@@ -903,7 +919,7 @@ def YouCompleteMe_AsyncDiagnosticUpdate_PerFile_test( ycm,
 
 
 @YouCompleteMeInstance()
-def YouCompleteMe_OnPeriodicTick_ServerNotRunning_test( ycm, *args  ):
+def YouCompleteMe_OnPeriodicTick_ServerNotRunning_test( ycm, *args ):
   with patch.object( ycm, 'IsServerAlive', return_value = False ):
     assert_that( ycm.OnPeriodicTick(), equal_to( False ) )
 
@@ -935,8 +951,8 @@ def YouCompleteMe_OnPeriodicTick_DontRetry_test( ycm,
 
   # Create the request and make the first poll; we expect no response
   with MockVimBuffers( buffers, current_buffer, ( 1, 1 ) ):
-      assert_that( ycm.OnPeriodicTick(), equal_to( True ) )
-      post_data_to_handler_async.assert_called()
+    assert_that( ycm.OnPeriodicTick(), equal_to( True ) )
+    post_data_to_handler_async.assert_called()
 
   assert ycm._message_poll_request is not None
   post_data_to_handler_async.reset_mock()

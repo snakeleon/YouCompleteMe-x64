@@ -884,7 +884,6 @@ will notify you to recompile it. You should then rerun the install process.
    where '<generator>' is 'Unix Makefiles' on Unix systems and one of the
    following Visual Studio generators on Windows:
 
-   - 'Visual Studio 12 Win64'
    - 'Visual Studio 14 Win64'
    - 'Visual Studio 15 Win64'
 
@@ -1900,8 +1899,8 @@ The *GoToDeclaration* subcommand
 
 Looks up the symbol under the cursor and jumps to its declaration.
 
-Supported in filetypes: 'c, cpp, objc, objcpp, cuda, cs, go, java, python, rust,
-typescript'
+Supported in filetypes: 'c, cpp, objc, objcpp, cuda, cs, go, java, python,
+rust, typescript'
 
 -------------------------------------------------------------------------------
 The *GoToDefinition* subcommand
