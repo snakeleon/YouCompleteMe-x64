@@ -49,6 +49,10 @@ try:
 except ImportError:
   from unittest2 import skipIf
 
+DIR_OF_THIS_SCRIPT = os.path.abspath( os.path.dirname( __file__ ) )
+YCMD_EXTRA_CONF = os.path.normpath(
+    os.path.join( DIR_OF_THIS_SCRIPT, '..', '..', '.ycm_extra_conf.py' ) )
+
 Py2Only = skipIf( not PY2, 'Python 2 only' )
 Py3Only = skipIf( PY2, 'Python 3 only' )
 WindowsOnly = skipIf( not OnWindows(), 'Windows only' )
@@ -62,6 +66,7 @@ def BuildRequest( **kwargs ):
   filepath = kwargs[ 'filepath' ] if 'filepath' in kwargs else '/foo'
   contents = kwargs[ 'contents' ] if 'contents' in kwargs else ''
   filetype = kwargs[ 'filetype' ] if 'filetype' in kwargs else 'foo'
+  filetypes = kwargs[ 'filetypes' ] if 'filetypes' in kwargs else [ filetype ]
 
   request = {
     'line_num': 1,
@@ -70,7 +75,7 @@ def BuildRequest( **kwargs ):
     'file_data': {
       filepath: {
         'contents': contents,
-        'filetypes': [ filetype ]
+        'filetypes': filetypes
       }
     }
   }
@@ -86,6 +91,12 @@ def BuildRequest( **kwargs ):
       request[ key ] = value
 
   return request
+
+
+def CombineRequest( request, data ):
+  kwargs = request.copy()
+  kwargs.update( data )
+  return BuildRequest( **kwargs )
 
 
 def ErrorMatcher( cls, msg = None ):

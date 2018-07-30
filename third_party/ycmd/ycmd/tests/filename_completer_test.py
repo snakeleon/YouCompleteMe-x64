@@ -25,7 +25,7 @@ from __future__ import absolute_import
 from builtins import *  # noqa
 
 import os
-from hamcrest import assert_that, contains_inanyorder, empty
+from hamcrest import assert_that, contains_inanyorder, empty, is_not
 from nose.tools import eq_, ok_
 from ycmd.completers.general.filename_completer import FilenameCompleter
 from ycmd.request_wrap import RequestWrap
@@ -108,7 +108,7 @@ class FilenameCompleter_test( object ):
     data = self._CompletionResultsForLine( 'const char* c = "./' )
     assert_that( data, contains_inanyorder(
       ( 'foo漢字.txt', '[File]' ),
-      ( 'include',     '[Dir]'  ),
+      ( 'include',     '[Dir]' ),
       ( 'test.cpp',    '[File]' ),
       ( 'test.hpp',    '[File]' )
     ) )
@@ -200,7 +200,7 @@ class FilenameCompleter_test( object ):
     os.environ.pop( 'YCM_TEST_filename_c0mpleter' )
     assert_that( data, contains_inanyorder(
       ( 'foo漢字.txt', '[File]' ),
-      ( 'include',     '[Dir]'  ),
+      ( 'include',     '[Dir]' ),
       ( 'test.cpp',    '[File]' ),
       ( 'test.hpp',    '[File]' )
     ) )
@@ -301,7 +301,7 @@ class FilenameCompleter_test( object ):
     assert_that( self._CompletionResultsForLine( contents,
                                                  column_num = column_num ),
                  contains_inanyorder( ( 'inner_dir', '[Dir]' ),
-                                      ( '∂†∫',       '[Dir]' )  ) )
+                                      ( '∂†∫',       '[Dir]' ) ) )
 
 
 @IsolatedYcmd( { 'filepath_completion_use_working_dir': 0 } )
@@ -370,3 +370,43 @@ def WorkingDir_UseClientWorkingDirectory_test( app ):
     ( 'Qt',    '[Dir]' ),
     ( 'QtGui', '[Dir]' )
   ) )
+
+
+@IsolatedYcmd( { 'filepath_blacklist': {} } )
+def FilenameCompleter_NoFiletypeBlacklisted_test( app ):
+  completion_data = BuildRequest( filetypes = [ 'foo', 'bar' ],
+                                  contents = './',
+                                  column_num = 3 )
+  results = app.post_json( '/completions',
+                           completion_data ).json[ 'completions' ]
+  assert_that( results, is_not( empty() ) )
+
+
+@IsolatedYcmd( { 'filepath_blacklist': { 'foo': 1 } } )
+def FilenameCompleter_FirstFiletypeBlacklisted_test( app ):
+  completion_data = BuildRequest( filetypes = [ 'foo', 'bar' ],
+                                  contents = './',
+                                  column_num = 3 )
+  results = app.post_json( '/completions',
+                           completion_data ).json[ 'completions' ]
+  assert_that( results, empty() )
+
+
+@IsolatedYcmd( { 'filepath_blacklist': { 'bar': 1 } } )
+def FilenameCompleter_SecondFiletypeBlacklisted_test( app ):
+  completion_data = BuildRequest( filetypes = [ 'foo', 'bar' ],
+                                  contents = './',
+                                  column_num = 3 )
+  results = app.post_json( '/completions',
+                           completion_data ).json[ 'completions' ]
+  assert_that( results, empty() )
+
+
+@IsolatedYcmd( { 'filepath_blacklist': { '*': 1 } } )
+def FilenameCompleter_AllFiletypesBlacklisted_test( app ):
+  completion_data = BuildRequest( filetypes = [ 'foo', 'bar' ],
+                                  contents = './',
+                                  column_num = 3 )
+  results = app.post_json( '/completions',
+                           completion_data ).json[ 'completions' ]
+  assert_that( results, empty() )

@@ -46,6 +46,7 @@ RESPONSE_TIMEOUT_SECONDS = 10
 
 # On Debian-based distributions, node is by default installed as nodejs.
 PATH_TO_NODE = utils.PathToFirstExistingExecutable( [ 'nodejs', 'node' ] )
+PATH_TO_TSSERVER = utils.FindExecutable( 'tsserver' )
 
 LOGFILE_FORMAT = 'tsserver_'
 
@@ -79,19 +80,14 @@ class DeferredResponse( object ):
       return self._message[ 'body' ]
 
 
-def FindTsserverBinary():
-  tsserver = utils.FindExecutable( 'tsserver' )
-  if not tsserver:
-    return None
-
-  if not utils.OnWindows():
-    return tsserver
-
-  # On Windows, tsserver is a batch script that calls the tsserver binary with
-  # node.
-  return os.path.abspath( os.path.join(
-    os.path.dirname( tsserver ), 'node_modules', 'typescript', 'bin',
-    'tsserver' ) )
+def TsserverCommand():
+  # Explicitly use node if the TSServer executable is supposed to be run through
+  # it. This handles the case where node is installed as nodejs.
+  with open( PATH_TO_TSSERVER ) as f:
+    first_line = f.readline()
+  if first_line.startswith( '#!/usr/bin/env node' ):
+    return [ PATH_TO_NODE, PATH_TO_TSSERVER ]
+  return [ PATH_TO_TSSERVER ]
 
 
 def ShouldEnableTypeScriptCompleter():
@@ -100,12 +96,11 @@ def ShouldEnableTypeScriptCompleter():
     return False
   _logger.info( 'Using node binary from {0}'.format( PATH_TO_NODE ) )
 
-  tsserver_binary_path = FindTsserverBinary()
-  if not tsserver_binary_path:
+  if not PATH_TO_TSSERVER:
     _logger.error( 'Not using TypeScript completer: unable to find TSServer.'
                    'TypeScript 1.5 or higher is required.' )
     return False
-  _logger.info( 'Using TSServer from {0}'.format( tsserver_binary_path ) )
+  _logger.info( 'Using TSServer from {0}'.format( PATH_TO_TSSERVER ) )
 
   return True
 
@@ -153,7 +148,7 @@ class TypeScriptCompleter( Completer ):
     self._logfile = None
 
     self._tsserver_lock = threading.RLock()
-    self._tsserver_binary_path = FindTsserverBinary()
+    self._tsserver_command = TsserverCommand()
     self._tsserver_handle = None
     self._tsserver_version = None
     # Used to read response only if TSServer is running.
@@ -182,9 +177,6 @@ class TypeScriptCompleter( Completer ):
     self._pending_lock = threading.Lock()
 
     self._StartServer()
-
-    self._max_diagnostics_to_display = user_options[
-      'max_diagnostics_to_display' ]
 
     self._latest_diagnostics_for_file_lock = threading.Lock()
     self._latest_diagnostics_for_file = defaultdict( list )
@@ -216,8 +208,7 @@ class TypeScriptCompleter( Completer ):
       _logger.info( 'TSServer log file: {0}'.format( self._logfile ) )
 
       # We need to redirect the error stream to the output one on Windows.
-      self._tsserver_handle = utils.SafePopen( [ PATH_TO_NODE,
-                                                 self._tsserver_binary_path ],
+      self._tsserver_handle = utils.SafePopen( self._tsserver_command,
                                                stdin = subprocess.PIPE,
                                                stdout = subprocess.PIPE,
                                                stderr = subprocess.STDOUT,
@@ -374,7 +365,7 @@ class TypeScriptCompleter( Completer ):
 
 
   def SupportedFiletypes( self ):
-    return [ 'typescript' ]
+    return [ 'javascript', 'typescript' ]
 
 
   def ComputeCandidatesInner( self, request_data ):
@@ -452,7 +443,9 @@ class TypeScriptCompleter( Completer ):
     filepath = request_data[ 'filepath' ]
     with self._latest_diagnostics_for_file_lock:
       self._latest_diagnostics_for_file[ filepath ] = diagnostics
-    return [ responses.BuildDiagnosticData( x ) for x in diagnostics ]
+    return responses.BuildDiagnosticResponse( diagnostics,
+                                              filepath,
+                                              self.max_diagnostics_to_display )
 
 
   def GetTsDiagnosticsForCurrentFile( self, request_data ):
@@ -484,11 +477,20 @@ class TypeScriptCompleter( Completer ):
                                    request_data[ 'column_num' ],
                                    filepath )
 
-    fixits = [ responses.FixIt( location,
-                                _BuildFixItForChanges( request_data,
-                                                       fix[ 'changes' ] ),
-                                fix[ 'description' ] )
-               for fix in ts_fixes ]
+    fixits = []
+    for fix in ts_fixes:
+      description = fix[ 'description' ]
+      # TSServer returns these fixits for every error in JavaScript files.
+      # Ignore them since they are not useful.
+      if description in [ 'Ignore this error message',
+                          'Disable checking for this file' ]:
+        continue
+
+      fixit = responses.FixIt( location,
+                               _BuildFixItForChanges( request_data,
+                                                      fix[ 'changes' ] ),
+                               description )
+      fixits.append( fixit )
 
     contents = GetFileLines( request_data, filepath )
 
@@ -521,7 +523,7 @@ class TypeScriptCompleter( Completer ):
     ts_diagnostics = self.GetTsDiagnosticsForCurrentFile( request_data )
 
     return [ self._TsDiagnosticToYcmdDiagnostic( request_data, x )
-             for x in ts_diagnostics[ : self._max_diagnostics_to_display ] ]
+             for x in ts_diagnostics ]
 
 
   def GetDetailedDiagnostic( self, request_data ):
@@ -842,12 +844,16 @@ class TypeScriptCompleter( Completer ):
       tsserver = responses.DebugInfoServer(
           name = 'TSServer',
           handle = self._tsserver_handle,
-          executable = self._tsserver_binary_path,
+          executable = PATH_TO_TSSERVER,
           logfiles = [ self._logfile ],
           extras = [ item_version ] )
 
+      node_executable = responses.DebugInfoItem( key = 'Node executable',
+                                                 value = PATH_TO_NODE )
+
       return responses.BuildDebugInfoResponse( name = 'TypeScript',
-                                               servers = [ tsserver ] )
+                                               servers = [ tsserver ],
+                                               items = [ node_executable ] )
 
 
 def _LogLevel():

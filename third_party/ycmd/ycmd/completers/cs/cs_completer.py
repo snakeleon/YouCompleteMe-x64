@@ -59,8 +59,6 @@ class CsharpCompleter( Completer ):
     self._solution_for_file = {}
     self._completer_per_solution = {}
     self._diagnostic_store = None
-    self._max_diagnostics_to_display = user_options[
-      'max_diagnostics_to_display' ]
     self._solution_state_lock = threading.Lock()
 
     if not os.path.isfile( PATH_TO_OMNISHARP_BINARY ):
@@ -203,8 +201,9 @@ class CsharpCompleter( Completer ):
 
     self._diagnostic_store = DiagnosticsToDiagStructure( diagnostics )
 
-    return [ responses.BuildDiagnosticData( x ) for x in
-             diagnostics[ : self._max_diagnostics_to_display ] ]
+    return responses.BuildDiagnosticResponse( diagnostics,
+                                              request_data[ 'filepath' ],
+                                              self.max_diagnostics_to_display )
 
 
   def _QuickFixToDiagnostic( self, request_data, quick_fix ):
@@ -577,10 +576,10 @@ class CsharpSolutionCompleter( object ):
 
   def _ChooseOmnisharpPort( self ):
     if not self._omnisharp_port:
-        if self._desired_omnisharp_port:
-            self._omnisharp_port = int( self._desired_omnisharp_port )
-        else:
-            self._omnisharp_port = utils.GetUnusedLocalhostPort()
+      if self._desired_omnisharp_port:
+        self._omnisharp_port = int( self._desired_omnisharp_port )
+      else:
+        self._omnisharp_port = utils.GetUnusedLocalhostPort()
     self._logger.info( u'using port {0}'.format( self._omnisharp_port ) )
 
 

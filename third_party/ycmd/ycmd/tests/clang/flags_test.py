@@ -37,6 +37,7 @@ from ycmd.completers.cpp.flags import _ShouldAllowWinStyleFlags
 from hamcrest import ( assert_that,
                        calling,
                        contains,
+                       empty,
                        equal_to,
                        has_item,
                        not_,
@@ -44,24 +45,37 @@ from hamcrest import ( assert_that,
 
 
 @contextlib.contextmanager
-def MockExtraConfModule( flags_for_file_function ):
+def MockExtraConfModule( settings_function ):
   module = MagicMock( spec = ModuleType )
-  module.FlagsForFile = flags_for_file_function
+  module.is_global_ycm_extra_conf = False
+  setattr( module, settings_function.__name__, settings_function )
   with patch( 'ycmd.extra_conf_store.ModuleForSourceFile',
               return_value = module ):
     yield
 
 
+def FlagsForFile_NothingReturned_test():
+  flags_object = flags.Flags()
+
+  def Settings( **kwargs ):
+    pass
+
+  with MockExtraConfModule( Settings ):
+    flags_list, filename = flags_object.FlagsForFile( '/foo' )
+    assert_that( flags_list, empty() )
+    assert_that( filename, equal_to( '/foo' ) )
+
+
 def FlagsForFile_FlagsNotReady_test():
   flags_object = flags.Flags()
 
-  def FlagsForFile( filename ):
+  def Settings( **kwargs ):
     return {
       'flags': [],
       'flags_ready': False
     }
 
-  with MockExtraConfModule( FlagsForFile ):
+  with MockExtraConfModule( Settings ):
     flags_list, filename = flags_object.FlagsForFile( '/foo', False )
     eq_( list( flags_list ), [] )
     eq_( filename, '/foo' )
@@ -70,12 +84,12 @@ def FlagsForFile_FlagsNotReady_test():
 def FlagsForFile_BadNonUnicodeFlagsAreAlsoRemoved_test( *args ):
   flags_object = flags.Flags()
 
-  def FlagsForFile( filename ):
+  def Settings( **kwargs ):
     return {
       'flags': [ bytes( b'-c' ), '-c', bytes( b'-foo' ), '-bar' ]
     }
 
-  with MockExtraConfModule( FlagsForFile ):
+  with MockExtraConfModule( Settings ):
     flags_list, _ = flags_object.FlagsForFile( '/foo', False )
     eq_( list( flags_list ), [ '-foo', '-bar' ] )
 
@@ -83,21 +97,21 @@ def FlagsForFile_BadNonUnicodeFlagsAreAlsoRemoved_test( *args ):
 def FlagsForFile_FlagsCachedByDefault_test():
   flags_object = flags.Flags()
 
-  def FlagsForFile( filename ):
+  def Settings( **kwargs ):
     return {
       'flags': [ '-x', 'c' ]
     }
 
-  with MockExtraConfModule( FlagsForFile ):
+  with MockExtraConfModule( Settings ):
     flags_list, _ = flags_object.FlagsForFile( '/foo', False )
     assert_that( flags_list, contains( '-x', 'c' ) )
 
-  def FlagsForFile( filename ):
+  def Settings( **kwargs ):
     return {
       'flags': [ '-x', 'c++' ]
     }
 
-  with MockExtraConfModule( FlagsForFile ):
+  with MockExtraConfModule( Settings ):
     flags_list, _ = flags_object.FlagsForFile( '/foo', False )
     assert_that( flags_list, contains( '-x', 'c' ) )
 
@@ -105,22 +119,22 @@ def FlagsForFile_FlagsCachedByDefault_test():
 def FlagsForFile_FlagsNotCachedWhenDoCacheIsFalse_test():
   flags_object = flags.Flags()
 
-  def FlagsForFile( filename ):
+  def Settings( **kwargs ):
     return {
       'flags': [ '-x', 'c' ],
       'do_cache': False
     }
 
-  with MockExtraConfModule( FlagsForFile ):
+  with MockExtraConfModule( Settings ):
     flags_list, _ = flags_object.FlagsForFile( '/foo', False )
     assert_that( flags_list, contains( '-x', 'c' ) )
 
-  def FlagsForFile( filename ):
+  def Settings( **kwargs ):
     return {
       'flags': [ '-x', 'c++' ]
     }
 
-  with MockExtraConfModule( FlagsForFile ):
+  with MockExtraConfModule( Settings ):
     flags_list, _ = flags_object.FlagsForFile( '/foo', False )
     assert_that( flags_list, contains( '-x', 'c++' ) )
 
@@ -128,22 +142,22 @@ def FlagsForFile_FlagsNotCachedWhenDoCacheIsFalse_test():
 def FlagsForFile_FlagsCachedWhenDoCacheIsTrue_test():
   flags_object = flags.Flags()
 
-  def FlagsForFile( filename ):
+  def Settings( **kwargs ):
     return {
       'flags': [ '-x', 'c' ],
       'do_cache': True
     }
 
-  with MockExtraConfModule( FlagsForFile ):
+  with MockExtraConfModule( Settings ):
     flags_list, _ = flags_object.FlagsForFile( '/foo', False )
     assert_that( flags_list, contains( '-x', 'c' ) )
 
-  def FlagsForFile( filename ):
+  def Settings( **kwargs ):
     return {
       'flags': [ '-x', 'c++' ]
     }
 
-  with MockExtraConfModule( FlagsForFile ):
+  with MockExtraConfModule( Settings ):
     flags_list, _ = flags_object.FlagsForFile( '/foo', False )
     assert_that( flags_list, contains( '-x', 'c' ) )
 
@@ -151,12 +165,12 @@ def FlagsForFile_FlagsCachedWhenDoCacheIsTrue_test():
 def FlagsForFile_DoNotMakeRelativePathsAbsoluteByDefault_test():
   flags_object = flags.Flags()
 
-  def FlagsForFile( filename ):
+  def Settings( **kwargs ):
     return {
       'flags': [ '-x', 'c', '-I', 'header' ]
     }
 
-  with MockExtraConfModule( FlagsForFile ):
+  with MockExtraConfModule( Settings ):
     flags_list, _ = flags_object.FlagsForFile( '/foo', False )
     assert_that( flags_list,
                  contains( '-x', 'c',
@@ -166,13 +180,13 @@ def FlagsForFile_DoNotMakeRelativePathsAbsoluteByDefault_test():
 def FlagsForFile_MakeRelativePathsAbsoluteIfOptionSpecified_test():
   flags_object = flags.Flags()
 
-  def FlagsForFile( filename ):
+  def Settings( **kwargs ):
     return {
       'flags': [ '-x', 'c', '-I', 'header' ],
       'include_paths_relative_to_dir': '/working_dir/'
     }
 
-  with MockExtraConfModule( FlagsForFile ):
+  with MockExtraConfModule( Settings ):
     flags_list, _ = flags_object.FlagsForFile( '/foo', False )
     assert_that( flags_list,
                  contains( '-x', 'c',
@@ -185,12 +199,12 @@ def FlagsForFile_MakeRelativePathsAbsoluteIfOptionSpecified_test():
 def FlagsForFile_AddMacIncludePathsWithoutSysroot_test():
   flags_object = flags.Flags()
 
-  def FlagsForFile( filename ):
+  def Settings( **kwargs ):
     return {
       'flags': [ '-test', '--test1', '--test2=test' ]
     }
 
-  with MockExtraConfModule( FlagsForFile ):
+  with MockExtraConfModule( Settings ):
     flags_list, _ = flags_object.FlagsForFile( '/foo' )
     assert_that( flags_list, has_item( 'sentinel_value_for_testing' ) )
 
@@ -201,30 +215,30 @@ def FlagsForFile_AddMacIncludePathsWithoutSysroot_test():
 def FlagsForFile_DoNotAddMacIncludePathsWithSysroot_test():
   flags_object = flags.Flags()
 
-  def FlagsForFile( filename ):
+  def Settings( **kwargs ):
     return {
       'flags': [ '-isysroot', 'test1', '--test2=test' ]
     }
 
-  with MockExtraConfModule( FlagsForFile ):
+  with MockExtraConfModule( Settings ):
     flags_list, _ = flags_object.FlagsForFile( '/foo' )
     assert_that( flags_list, not_( has_item( 'sentinel_value_for_testing' ) ) )
 
-  def FlagsForFile( filename ):
+  def Settings( **kwargs ):
     return {
       'flags': [ '-test', '--sysroot', 'test1' ]
     }
 
-  with MockExtraConfModule( FlagsForFile ):
+  with MockExtraConfModule( Settings ):
     flags_list, _ = flags_object.FlagsForFile( '/foo' )
     assert_that( flags_list, not_( has_item( 'sentinel_value_for_testing' ) ) )
 
-  def FlagsForFile( filename ):
+  def Settings( **kwargs ):
     return {
       'flags': [ '-test', 'test1', '--sysroot=test' ]
     }
 
-  with MockExtraConfModule( FlagsForFile ):
+  with MockExtraConfModule( Settings ):
     flags_list, _ = flags_object.FlagsForFile( '/foo' )
     assert_that( flags_list, not_( has_item( 'sentinel_value_for_testing' ) ) )
 
@@ -232,75 +246,101 @@ def FlagsForFile_DoNotAddMacIncludePathsWithSysroot_test():
 def FlagsForFile_OverrideTranslationUnit_test():
   flags_object = flags.Flags()
 
-  def FlagsForFile( filename ):
+  def Settings( **kwargs ):
     return {
       'flags': [],
-      'override_filename': 'changed:' + filename
+      'override_filename': 'changed:' + kwargs[ 'filename' ]
     }
 
-  with MockExtraConfModule( FlagsForFile ):
+  with MockExtraConfModule( Settings ):
     flags_list, filename = flags_object.FlagsForFile( '/foo' )
     assert_that( flags_list, contains() )
     assert_that( filename, equal_to( 'changed:/foo' ) )
 
 
-  def FlagsForFile( filename ):
+  def Settings( **kwargs ):
     return {
       'flags': [],
-      'override_filename': filename
+      'override_filename': kwargs[ 'filename' ]
     }
 
-  with MockExtraConfModule( FlagsForFile ):
+  with MockExtraConfModule( Settings ):
     flags_list, filename = flags_object.FlagsForFile( '/foo' )
     assert_that( flags_list, contains() )
     assert_that( filename, equal_to( '/foo' ) )
 
 
-  def FlagsForFile( filename ):
+  def Settings( **kwargs ):
     return {
       'flags': [],
       'override_filename': None
     }
 
-  with MockExtraConfModule( FlagsForFile ):
+  with MockExtraConfModule( Settings ):
     flags_list, filename = flags_object.FlagsForFile( '/foo' )
     assert_that( flags_list, contains() )
     assert_that( filename, equal_to( '/foo' ) )
 
 
-  def FlagsForFile( filename ):
+  def Settings( **kwargs ):
     return {
       'flags': [],
     }
 
-  with MockExtraConfModule( FlagsForFile ):
+  with MockExtraConfModule( Settings ):
     flags_list, filename = flags_object.FlagsForFile( '/foo' )
     assert_that( flags_list, contains() )
     assert_that( filename, equal_to( '/foo' ) )
 
 
-  def FlagsForFile( filename ):
+  def Settings( **kwargs ):
     return {
       'flags': [],
       'override_filename': ''
     }
 
-  with MockExtraConfModule( FlagsForFile ):
+  with MockExtraConfModule( Settings ):
     flags_list, filename = flags_object.FlagsForFile( '/foo' )
     assert_that( flags_list, contains() )
     assert_that( filename, equal_to( '/foo' ) )
 
 
-  def FlagsForFile( filename ):
+  def Settings( **kwargs ):
     return {
       'flags': [],
       'override_filename': '0'
     }
 
-  with MockExtraConfModule( FlagsForFile ):
+  with MockExtraConfModule( Settings ):
     flags_list, filename = flags_object.FlagsForFile( '/foo' )
     assert_that( flags_list, contains() )
     assert_that( filename, equal_to( '0' ) )
+
+
+def FlagsForFile_Compatibility_KeywordArguments_test():
+  flags_object = flags.Flags()
+
+  def FlagsForFile( filename, **kwargs ):
+    return {
+      'flags': [ '-x', 'c' ]
+    }
+
+  with MockExtraConfModule( FlagsForFile ):
+    flags_list, _ = flags_object.FlagsForFile( '/foo', False )
+    assert_that( flags_list, contains( '-x', 'c' ) )
+
+
+def FlagsForFile_Compatibility_NoKeywordArguments_test():
+  flags_object = flags.Flags()
+
+  def FlagsForFile( filename ):
+    return {
+      'flags': [ '-x', 'c' ]
+    }
+
+  with MockExtraConfModule( FlagsForFile ):
+    flags_list, _ = flags_object.FlagsForFile( '/foo', False )
+    assert_that( flags_list, contains( '-x', 'c' ) )
 
 
 def RemoveUnusedFlags_Passthrough_test():
@@ -820,7 +860,7 @@ def CompilationDatabase_NoDatabase_test():
 
 
 def CompilationDatabase_FileNotInDatabase_test():
-  compile_commands = [ ]
+  compile_commands = []
   with TemporaryTestDir() as tmp_dir:
     with TemporaryClangProject( tmp_dir, compile_commands ):
       eq_(

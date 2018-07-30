@@ -18,8 +18,6 @@
 #ifndef CODE_POINT_H_3W0LNCLY
 #define CODE_POINT_H_3W0LNCLY
 
-// This header is required on MSVC 12 for the uint8_t type.
-#include <cstdint>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -30,7 +28,7 @@ namespace YouCompleteMe {
 // http://www.unicode.org/reports/tr29/#Grapheme_Cluster_Break_Property_Values
 // NOTE: The properties must take the same value as the ones defined in the
 // update_unicode.py script.
-enum class BreakProperty {
+enum class BreakProperty : uint8_t {
   OTHER              =  0,
   CR                 =  1,
   LF                 =  2,
@@ -45,10 +43,7 @@ enum class BreakProperty {
   T                  = 11,
   LV                 = 12,
   LVT                = 13,
-  E_BASE             = 14,
-  E_MODIFIER         = 15,
-  GLUE_AFTER_ZWJ     = 16,
-  E_BASE_GAZ         = 17
+  EXTPICT            = 18
 };
 
 

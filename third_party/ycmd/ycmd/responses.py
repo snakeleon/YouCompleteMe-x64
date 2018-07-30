@@ -28,15 +28,15 @@ from ycmd.utils import ProcessIsRunning
 
 YCM_EXTRA_CONF_FILENAME = '.ycm_extra_conf.py'
 
-CONFIRM_CONF_FILE_MESSAGE = ('Found {0}. Load? \n\n(Question can be turned '
-                             'off with options, see YCM docs)')
+CONFIRM_CONF_FILE_MESSAGE = ( 'Found {0}. Load? \n\n(Question can be turned '
+                              'off with options, see YCM docs)' )
 
 NO_EXTRA_CONF_FILENAME_MESSAGE = ( 'No {0} file detected, so no compile flags '
   'are available. Thus no semantic support for C/C++/ObjC/ObjC++. Go READ THE '
   'DOCS *NOW*, DON\'T file a bug report.' ).format( YCM_EXTRA_CONF_FILENAME )
 
 NO_DIAGNOSTIC_SUPPORT_MESSAGE = ( 'YCM has no diagnostics support for this '
-  'filetype; refer to Syntastic docs if using Syntastic.')
+  'filetype; refer to Syntastic docs if using Syntastic.' )
 
 
 class ServerError( Exception ):
@@ -235,6 +235,24 @@ def BuildDiagnosticData( diagnostic ):
     'kind': kind,
     'fixit_available': len( diagnostic.fixits_ ) > 0,
   }
+
+
+def BuildDiagnosticResponse( diagnostics,
+                             filename,
+                             max_diagnostics_to_display ):
+  if ( max_diagnostics_to_display and
+       len( diagnostics ) > max_diagnostics_to_display ):
+    diagnostics = diagnostics[ : max_diagnostics_to_display ]
+    location = Location( 1, 1, filename )
+    location_extent = Range( location, location )
+    diagnostics.append( Diagnostic(
+      [ location_extent ],
+      location,
+      location_extent,
+      'Maximum number of diagnostics exceeded.',
+      'ERROR'
+    ) )
+  return [ BuildDiagnosticData( diagnostic ) for diagnostic in diagnostics ]
 
 
 def BuildFixItResponse( fixits ):

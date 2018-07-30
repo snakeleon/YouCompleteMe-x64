@@ -259,7 +259,7 @@ class LanguageServerConnection( threading.Thread ):
       self._connection_event.set()
 
       # Blocking loop which reads whole messages and calls _DispatchMessage
-      self._ReadMessages( )
+      self._ReadMessages()
     except LanguageServerConnectionStopped:
       # Abort any outstanding requests
       with self._response_mutex:
@@ -637,7 +637,7 @@ class LanguageServerCompleter( Completer ):
     pass # pragma: no cover
 
 
-  def __init__( self, user_options):
+  def __init__( self, user_options ):
     super( LanguageServerCompleter, self ).__init__( user_options )
 
     # _server_info_mutex synchronises access to the state of the
@@ -914,8 +914,11 @@ class LanguageServerCompleter( Completer ):
     contents = GetFileLines( request_data, filepath )
     with self._server_info_mutex:
       if uri in self._latest_diagnostics:
-        return [ _BuildDiagnostic( contents, uri, diag )
-                 for diag in self._latest_diagnostics[ uri ] ]
+        diagnostics = [ _BuildDiagnostic( contents, uri, diag )
+                        for diag in self._latest_diagnostics[ uri ] ]
+        return responses.BuildDiagnosticResponse(
+          diagnostics, filepath, self.max_diagnostics_to_display )
+
 
 
   def PollForMessagesInner( self, request_data, timeout ):
@@ -945,7 +948,7 @@ class LanguageServerCompleter( Completer ):
           # The server isn't running or something. Don't re-poll.
           return False
 
-        notification = self.GetConnection()._notifications.get_nowait( )
+        notification = self.GetConnection()._notifications.get_nowait()
         message = self.ConvertNotificationToMessage( request_data,
                                                      notification )
 
@@ -1042,9 +1045,11 @@ class LanguageServerCompleter( Completer ):
             self._server_file_state[ filepath ].contents )
         else:
           contents = GetFileLines( request_data, filepath )
+      diagnostics = [ _BuildDiagnostic( contents, uri, x )
+                      for x in params[ 'diagnostics' ] ]
       return {
-        'diagnostics': [ _BuildDiagnostic( contents, uri, x )
-                         for x in params[ 'diagnostics' ] ],
+        'diagnostics': responses.BuildDiagnosticResponse(
+          diagnostics, filepath, self.max_diagnostics_to_display ),
         'filepath': filepath
       }
 
@@ -1207,7 +1212,7 @@ class LanguageServerCompleter( Completer ):
 
       request_id = self.GetConnection().NextRequestId()
       msg = lsp.Initialize( request_id,
-                            self._GetProjectDirectory( request_data  ) )
+                            self._GetProjectDirectory( request_data ) )
 
       def response_handler( response, message ):
         if message is None:
@@ -1801,12 +1806,12 @@ def _BuildDiagnostic( contents, uri, diag ):
 
   r = _BuildRange( contents, filename, diag[ 'range' ] )
 
-  return responses.BuildDiagnosticData( responses.Diagnostic(
+  return responses.Diagnostic(
     ranges = [ r ],
     location = r.start_,
     location_extent = r,
     text = diag[ 'message' ],
-    kind = lsp.SEVERITY[ diag[ 'severity' ] ].upper() ) )
+    kind = lsp.SEVERITY[ diag[ 'severity' ] ].upper() )
 
 
 def TextEditToChunks( request_data, uri, text_edit ):

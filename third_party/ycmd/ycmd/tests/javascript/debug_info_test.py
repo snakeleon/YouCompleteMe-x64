@@ -1,4 +1,4 @@
-# Copyright (C) 2016-2017 ycmd contributors
+# Copyright (C) 2018 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -22,40 +22,52 @@ from __future__ import absolute_import
 # Not installing aliases from python-future; it's unreliable and slow.
 from builtins import *  # noqa
 
-from hamcrest import ( assert_that, contains, empty, has_entries, has_entry,
-                       instance_of )
+from mock import patch
+from hamcrest import ( any_of, assert_that, contains, has_entries, has_entry,
+                       instance_of, none )
 
-from ycmd.tests.javascript import SharedYcmd
+from ycmd.tests.javascript import IsolatedYcmd, SharedYcmd
 from ycmd.tests.test_utils import BuildRequest
 
 
 @SharedYcmd
-def DebugInfo_test( app ):
+def DebugInfo_TypeScriptCompleter_test( app ):
   request_data = BuildRequest( filetype = 'javascript' )
   assert_that(
     app.post_json( '/debug_info', request_data ).json,
     has_entry( 'completer', has_entries( {
-      'name': 'JavaScript',
+      'name': 'TypeScript',
       'servers': contains( has_entries( {
-        'name': 'Tern',
-        'is_running': instance_of( bool ),
+        'name': 'TSServer',
+        'is_running': True,
         'executable': instance_of( str ),
         'pid': instance_of( int ),
-        'address': instance_of( str ),
-        'port': instance_of( int ),
-        'logfiles': contains( instance_of( str ),
-                              instance_of( str ) ),
-        'extras': contains(
-          has_entries( {
-            'key': 'configuration file',
-            'value': instance_of( str )
-          } ),
-          has_entries( {
-            'key': 'working directory',
-            'value': instance_of( str )
-          } )
-        ),
+        'address': None,
+        'port': None,
+        'logfiles': contains( instance_of( str ) ),
+        'extras': contains( has_entries( {
+          'key': 'version',
+          'value': any_of( None, instance_of( str ) )
+        } ) )
       } ) ),
-      'items': empty()
+      'items': contains(
+        has_entries( {
+          'key': 'Node executable',
+          'value': instance_of( str )
+        } )
+      )
     } ) )
+  )
+
+
+@patch( 'ycmd.completers.typescript.typescript_completer.'
+        'ShouldEnableTypeScriptCompleter', return_value = False )
+@patch( 'ycmd.completers.javascript.tern_completer.'
+        'ShouldEnableTernCompleter', return_value = False )
+@IsolatedYcmd
+def DebugInfo_NoCompleter_test( app, *args ):
+  request_data = BuildRequest( filetype = 'javascript' )
+  assert_that(
+    app.post_json( '/debug_info', request_data ).json,
+    has_entry( 'completer', none() )
   )

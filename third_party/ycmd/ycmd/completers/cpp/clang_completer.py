@@ -35,7 +35,6 @@ from ycmd import responses
 from ycmd.utils import re, ToBytes, ToCppStringCompatible, ToUnicode
 from ycmd.completers.completer import Completer
 from ycmd.completers.cpp.flags import ( Flags, PrepareFlagsForClang,
-                                        NoCompilationDatabase,
                                         UserIncludePaths )
 from ycmd.completers.cpp.ephemeral_values_set import EphemeralValuesSet
 from ycmd.completers.cpp.include_cache import IncludeCache, IncludeList
@@ -55,8 +54,6 @@ INCLUDE_REGEX = re.compile( '(\s*#\s*(?:include|import)\s*)(?:"[^"]*|<[^>]*)' )
 class ClangCompleter( Completer ):
   def __init__( self, user_options ):
     super( ClangCompleter, self ).__init__( user_options )
-    self._max_diagnostics_to_display = user_options[
-      'max_diagnostics_to_display' ]
     self._completer = ycm_core.ClangCompleter()
     self._flags = Flags()
     self._include_cache = IncludeCache()
@@ -309,7 +306,7 @@ class ClangCompleter( Completer ):
         column,
         files,
         flags,
-        reparse)
+        reparse )
 
     if not message:
       message = "No semantic information available"
@@ -358,8 +355,9 @@ class ClangCompleter( Completer ):
 
     diagnostics = _FilterDiagnostics( diagnostics )
     self._diagnostic_store = DiagnosticsToDiagStructure( diagnostics )
-    return [ responses.BuildDiagnosticData( x ) for x in
-             diagnostics[ : self._max_diagnostics_to_display ] ]
+    return responses.BuildDiagnosticResponse( diagnostics,
+                                              request_data[ 'filepath' ],
+                                              self.max_diagnostics_to_display )
 
 
   def OnBufferUnload( self, request_data ):
@@ -416,11 +414,8 @@ class ClangCompleter( Completer ):
       flags = []
       filename = request_data[ 'filepath' ]
 
-    try:
-      database_directory = self._flags.FindCompilationDatabase(
-          os.path.dirname( filename ) ).database_directory
-    except NoCompilationDatabase:
-      database_directory = None
+    database = self._flags.FindCompilationDatabase( filename )
+    database_directory = database.database_directory if database else None
 
     database_item = responses.DebugInfoItem(
       key = 'compilation database path',

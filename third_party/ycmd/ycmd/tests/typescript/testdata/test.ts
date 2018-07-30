@@ -13,7 +13,7 @@ class Foo {
 
 var foo = new Foo();
 
-// line 12, column 6
+// line 17, column 6
 foo.m
 
 
