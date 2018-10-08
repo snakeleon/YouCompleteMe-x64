@@ -29,9 +29,17 @@ setup(name='jedi',
       keywords='python completion refactoring vim',
       long_description=readme,
       packages=find_packages(exclude=['test', 'test.*']),
-      python_requires='>=2.7, !=3.0.*, !=3.1.*, !=3.2.*',
+      python_requires='>=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*',
       install_requires=install_requires,
-      extras_require={'dev': ['docopt']},
+      extras_require={
+          'testing': [
+              'pytest>=2.3.5',
+              # docopt for sith doctests
+              'docopt',
+              # coloroma for colored debug output
+              'colorama',
+          ],
+      },
       package_data={'jedi': ['evaluate/compiled/fake/*.pym']},
       platforms=['any'],
       classifiers=[
@@ -43,7 +51,6 @@ setup(name='jedi',
           'Programming Language :: Python :: 2',
           'Programming Language :: Python :: 2.7',
           'Programming Language :: Python :: 3',
-          'Programming Language :: Python :: 3.3',
           'Programming Language :: Python :: 3.4',
           'Programming Language :: Python :: 3.5',
           'Programming Language :: Python :: 3.6',

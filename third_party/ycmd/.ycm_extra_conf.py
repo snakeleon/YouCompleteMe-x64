@@ -125,8 +125,20 @@ def FindCorrespondingSourceFile( filename ):
   return filename
 
 
+def PathToPythonUsedDuringBuild():
+  try:
+    filepath = os.path.join( DIR_OF_THIS_SCRIPT, 'PYTHON_USED_DURING_BUILDING' )
+    with open( filepath ) as f:
+      return f.read().strip()
+  # We need to check for IOError for Python 2 and OSError for Python 3.
+  except ( IOError, OSError ):
+    return None
+
+
 def Settings( **kwargs ):
-  if kwargs[ 'language' ] == 'cfamily':
+  language = kwargs[ 'language' ]
+
+  if language == 'cfamily':
     # If the file is a header, try to find the corresponding source file and
     # retrieve its flags from the compilation database if using one. This is
     # necessary since compilation databases don't have entries for header files.
@@ -163,18 +175,27 @@ def Settings( **kwargs ):
       'include_paths_relative_to_dir': compilation_info.compiler_working_dir_,
       'override_filename': filename
     }
+
+  if language == 'python':
+    return {
+      'interpreter_path': PathToPythonUsedDuringBuild()
+    }
+
   return {}
 
 
 def GetStandardLibraryIndexInSysPath( sys_path ):
-  for path in sys_path:
+  for index, path in enumerate( sys_path ):
     if os.path.isfile( os.path.join( path, 'os.py' ) ):
-      return sys_path.index( path )
+      return index
   raise RuntimeError( 'Could not find standard library path in Python path.' )
 
 
 def PythonSysPath( **kwargs ):
   sys_path = kwargs[ 'sys_path' ]
+
+  sys_path.insert( 0, DIR_OF_THIS_SCRIPT )
+
   for folder in os.listdir( DIR_OF_THIRD_PARTY ):
     if folder == 'python-future':
       folder = os.path.join( folder, 'src' )

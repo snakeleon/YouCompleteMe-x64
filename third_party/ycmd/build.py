@@ -9,6 +9,7 @@ from __future__ import absolute_import
 
 from shutil import rmtree
 from tempfile import mkdtemp
+import argparse
 import errno
 import hashlib
 import multiprocessing
@@ -38,15 +39,13 @@ for folder in os.listdir( DIR_OF_THIRD_PARTY ):
   abs_folder_path = p.join( DIR_OF_THIRD_PARTY, folder )
   if p.isdir( abs_folder_path ) and not os.listdir( abs_folder_path ):
     sys.exit(
-      'ERROR: some folders in {0} are empty; you probably forgot to run:\n'
-      '\tgit submodule update --init --recursive\n'.format(
-        DIR_OF_THIRD_PARTY )
+      'ERROR: folder {} in {} is empty; you probably forgot to run:\n'
+      '\tgit submodule update --init --recursive\n'.format( folder,
+                                                            DIR_OF_THIRD_PARTY )
     )
 
-sys.path.insert( 1, p.abspath( p.join( DIR_OF_THIRD_PARTY, 'argparse' ) ) )
 sys.path.insert( 1, p.abspath( p.join( DIR_OF_THIRD_PARTY, 'requests' ) ) )
 
-import argparse
 import requests
 
 NO_DYNAMIC_PYTHON_ERROR = (
@@ -56,6 +55,7 @@ NO_DYNAMIC_PYTHON_ERROR = (
   '  export PYTHON_CONFIGURE_OPTS="{flag}"\n'
   'before installing a Python version.' )
 NO_PYTHON_LIBRARY_ERROR = 'ERROR: unable to find an appropriate Python library.'
+NO_PYTHON_HEADERS_ERROR = 'ERROR: Python headers are missing in {include_dir}.'
 
 # Regular expressions used to find static and dynamic Python libraries.
 # Notes:
@@ -79,10 +79,10 @@ DYNAMIC_PYTHON_LIBRARY_REGEX = """
   )$
 """
 
-JDTLS_MILESTONE = '0.18.0'
-JDTLS_BUILD_STAMP = '201805010001'
+JDTLS_MILESTONE = '0.25.0'
+JDTLS_BUILD_STAMP = '201809172205'
 JDTLS_SHA256 = (
-  '9253d4222519442b65b4a01516c9496354b59813d906357a5f3f265601cc77db'
+  '7eb952056243f8ac7cd43405d8ed29dc111395866fee9fe895a80efcc2a8140c'
 )
 
 BUILD_ERROR_MESSAGE = (
@@ -232,6 +232,9 @@ def GetPossiblePythonLibraryDirectories():
 
 def FindPythonLibraries():
   include_dir = sysconfig.get_config_var( 'INCLUDEPY' )
+  if not p.isfile( p.join( include_dir, 'Python.h' ) ):
+    sys.exit( NO_PYTHON_HEADERS_ERROR.format( include_dir = include_dir ) )
+
   library_dirs = GetPossiblePythonLibraryDirectories()
 
   # Since ycmd is compiled as a dynamic library, we can't link it to a Python
@@ -363,8 +366,9 @@ def ParseArguments():
                        help = "Don't build the regex module" )
   parser.add_argument( '--clang-tidy',
                        action = 'store_true',
-                       help = "Run clang-tidy static analysis" )
-
+                       help = 'Run clang-tidy static analysis' )
+  parser.add_argument( '--core-tests', nargs = '?', const = '*',
+                       help = 'Run core tests and optionally filter them.' )
 
   # These options are deprecated.
   parser.add_argument( '--omnisharp-completer', action = 'store_true',
@@ -384,6 +388,11 @@ def ParseArguments():
   if not OnWindows() and args.enable_coverage:
     # We always want a debug build when running with coverage enabled
     args.enable_debug = True
+
+  if args.core_tests:
+    os.environ[ 'YCM_TESTRUN' ] = '1'
+  elif os.environ.get( 'YCM_TESTRUN' ):
+    args.core_tests = '*'
 
   if not args.clang_tidy and os.environ.get( 'YCM_CLANG_TIDY' ):
     args.clang_tidy = True
@@ -450,7 +459,10 @@ def RunYcmdTests( args, build_dir ):
   else:
     new_env[ 'LD_LIBRARY_PATH' ] = DIR_OF_THIS_SCRIPT
 
-  CheckCall( p.join( tests_dir, 'ycm_core_tests' ),
+  tests_cmd = [ p.join( tests_dir, 'ycm_core_tests' ) ]
+  if args.core_tests != '*':
+    tests_cmd.append( '--gtest_filter={}'.format( args.core_tests ) )
+  CheckCall( tests_cmd,
              env = new_env,
              quiet = args.quiet,
              status_message = 'Running ycmd tests' )
@@ -522,7 +534,7 @@ def BuildYcmdLib( cmake, cmake_common_args, script_args ):
                status_message = 'Generating ycmd build configuration' )
 
     build_targets = [ 'ycm_core' ]
-    if 'YCM_TESTRUN' in os.environ:
+    if script_args.core_tests:
       build_targets.append( 'ycm_core_tests' )
     if 'YCM_BENCHMARK' in os.environ:
       build_targets.append( 'ycm_core_benchmarks' )
@@ -538,7 +550,7 @@ def BuildYcmdLib( cmake, cmake_common_args, script_args ):
                  status_message = 'Compiling ycmd target: {0}'.format(
                    target ) )
 
-    if 'YCM_TESTRUN' in os.environ:
+    if script_args.core_tests:
       RunYcmdTests( script_args, build_dir )
     if 'YCM_BENCHMARK' in os.environ:
       RunYcmdBenchmarks( build_dir )
@@ -596,12 +608,17 @@ def EnableCsCompleter( args ):
 def EnableGoCompleter( args ):
   go = FindExecutableOrDie( 'go', 'go is required to build gocode.' )
 
-  os.chdir( p.join( DIR_OF_THIS_SCRIPT, 'third_party', 'gocode' ) )
+  go_dir = p.join( DIR_OF_THIS_SCRIPT, 'third_party', 'go' )
+  os.chdir( p.join( go_dir, 'src', 'github.com', 'mdempsky', 'gocode' ) )
+  new_env = os.environ.copy()
+  new_env[ 'GOPATH' ] = go_dir
   CheckCall( [ go, 'build' ],
+             env = new_env,
              quiet = args.quiet,
              status_message = 'Building gocode for go completion' )
-  os.chdir( p.join( DIR_OF_THIS_SCRIPT, 'third_party', 'godef' ) )
-  CheckCall( [ go, 'build', 'godef.go' ],
+  os.chdir( p.join( go_dir, 'src', 'github.com', 'rogpeppe', 'godef' ) )
+  CheckCall( [ go, 'build' ],
+             env = new_env,
              quiet = args.quiet,
              status_message = 'Building godef for go definition' )
 
@@ -625,11 +642,8 @@ def EnableRustCompleter( args ):
 
 
 def EnableJavaScriptCompleter( args ):
-  # On Debian-based distributions, node is by default installed as nodejs.
-  node = PathToFirstExistingExecutable( [ 'nodejs', 'node' ] )
-  if not node:
-    sys.exit( 'ERROR: node is required to set up Tern.' )
-  npm = FindExecutableOrDie( 'npm', 'ERROR: npm is required to set up Tern.' )
+  node = FindExecutableOrDie( 'node', 'node is required to set up Tern.' )
+  npm = FindExecutableOrDie( 'npm', 'npm is required to set up Tern.' )
 
   # We install Tern into a runtime directory. This allows us to control
   # precisely the version (and/or git commit) that is used by ycmd.  We use a

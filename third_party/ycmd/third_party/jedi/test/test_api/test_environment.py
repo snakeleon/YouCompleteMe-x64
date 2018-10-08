@@ -1,6 +1,5 @@
 import os
 import sys
-from contextlib import contextmanager
 
 import pytest
 
@@ -8,7 +7,7 @@ import jedi
 from jedi._compatibility import py_version
 from jedi.api.environment import get_default_environment, find_virtualenvs, \
     InvalidPythonEnvironment, find_system_environments, \
-    get_system_environment, create_environment
+    get_system_environment, create_environment, get_cached_default_environment
 
 
 def test_sys_path():
@@ -44,7 +43,7 @@ def test_versions(version):
 
 def test_load_module(evaluator):
     access_path = evaluator.compiled_subprocess.load_module(
-        name=u'math',
+        dotted_name=u'math',
         sys_path=evaluator.get_sys_path()
     )
     name, access_handle = access_path.accesses[0]
@@ -85,34 +84,22 @@ def test_killed_subprocess(evaluator, Script):
     assert def_.name == 'str'
 
 
-@contextmanager
-def set_environment_variable(name, value):
-    tmp = os.environ.get(name)
-    try:
-        os.environ[name] = value
-        yield
-    finally:
-        if tmp is None:
-            del os.environ[name]
-        else:
-            os.environ[name] = tmp
-
-
-def test_not_existing_virtualenv():
+def test_not_existing_virtualenv(monkeypatch):
     """Should not match the path that was given"""
     path = '/foo/bar/jedi_baz'
-    with set_environment_variable('VIRTUAL_ENV', path):
-        assert get_default_environment().executable != path
+    monkeypatch.setenv('VIRTUAL_ENV', path)
+    assert get_default_environment().executable != path
 
 
-def test_working_venv(venv_path):
-    with set_environment_variable('VIRTUAL_ENV', venv_path):
-        assert get_default_environment().path == venv_path
+def test_working_venv(venv_path, monkeypatch):
+    monkeypatch.setenv('VIRTUAL_ENV', venv_path)
+    assert get_default_environment().path == venv_path
 
 
 def test_scanning_venvs(venv_path):
     parent_dir = os.path.dirname(venv_path)
-    assert any(venv.path == venv_path for venv in find_virtualenvs([parent_dir]))
+    assert any(venv.path == venv_path
+               for venv in find_virtualenvs([parent_dir]))
 
 
 def test_create_environment_venv_path(venv_path):
@@ -123,3 +110,29 @@ def test_create_environment_venv_path(venv_path):
 def test_create_environment_executable():
     environment = create_environment(sys.executable)
     assert environment.executable == sys.executable
+
+
+def test_get_default_environment_from_env_does_not_use_safe(tmpdir, monkeypatch):
+    fake_python = os.path.join(str(tmpdir), 'fake_python')
+    with open(fake_python, 'w') as f:
+        f.write('')
+
+    def _get_subprocess(self):
+        if self._start_executable != fake_python:
+            raise RuntimeError('Should not get called!')
+        self.executable = fake_python
+        self.path = 'fake'
+
+    monkeypatch.setattr('jedi.api.environment.Environment._get_subprocess',
+                        _get_subprocess)
+
+    monkeypatch.setenv('VIRTUAL_ENV', fake_python)
+    env = get_default_environment()
+    assert env.path == 'fake'
+
+
+def test_changing_venv(venv_path, monkeypatch):
+    monkeypatch.setitem(os.environ, 'VIRTUAL_ENV', venv_path)
+    get_cached_default_environment()
+    monkeypatch.setitem(os.environ, 'VIRTUAL_ENV', sys.executable)
+    assert get_cached_default_environment().executable == sys.executable

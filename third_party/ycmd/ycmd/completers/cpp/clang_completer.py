@@ -32,7 +32,11 @@ from xml.etree.ElementTree import ParseError as XmlParseError
 
 import ycm_core
 from ycmd import responses
-from ycmd.utils import re, ToBytes, ToCppStringCompatible, ToUnicode
+from ycmd.utils import ( PathLeftSplit,
+                         re,
+                         ToBytes,
+                         ToCppStringCompatible,
+                         ToUnicode )
 from ycmd.completers.completer import Completer
 from ycmd.completers.cpp.flags import ( Flags, PrepareFlagsForClang,
                                         UserIncludePaths )
@@ -41,8 +45,8 @@ from ycmd.completers.cpp.include_cache import IncludeCache, IncludeList
 from ycmd.responses import NoExtraConfDetected, UnknownExtraConf
 
 CLANG_FILETYPES = { 'c', 'cpp', 'cuda', 'objc', 'objcpp' }
-PARSING_FILE_MESSAGE = 'Still parsing file, no completions yet.'
-NO_COMPILE_FLAGS_MESSAGE = 'Still no compile flags, no completions yet.'
+PARSING_FILE_MESSAGE = 'Still parsing file.'
+NO_COMPILE_FLAGS_MESSAGE = 'Still no compile flags.'
 NO_COMPLETIONS_MESSAGE = 'No completions found; errors in the file?'
 NO_DIAGNOSTIC_MESSAGE = 'No diagnostic for current line!'
 PRAGMA_DIAG_TEXT_TO_IGNORE = '#pragma once in main file'
@@ -111,14 +115,26 @@ class ClangCompleter( Completer ):
     # We do what GCC does for <> versus "":
     # http://gcc.gnu.org/onlinedocs/cpp/Include-Syntax.html
     flags, filepath = self._FlagsForRequest( request_data )
-    quoted_include_paths, include_paths = UserIncludePaths( flags, filepath )
+    ( quoted_include_paths,
+      include_paths,
+      framework_paths ) = UserIncludePaths( flags, filepath )
     if quoted_include:
       include_paths.extend( quoted_include_paths )
 
     includes = IncludeList()
+
     for include_path in include_paths:
       unicode_path = ToUnicode( os.path.join( include_path, path_dir ) )
       includes.AddIncludes( self._include_cache.GetIncludes( unicode_path ) )
+
+    if framework_paths:
+      if path_dir:
+        head, tail = PathLeftSplit( path_dir )
+        path_dir = os.path.join( head + '.framework', 'Headers', tail )
+      for framework_path in framework_paths:
+        unicode_path = ToUnicode( os.path.join( framework_path, path_dir ) )
+        includes.AddIncludes( self._include_cache.GetIncludes(
+            unicode_path, is_framework = not path_dir ) )
 
     return includes.GetIncludes()
 
@@ -197,6 +213,10 @@ class ClangCompleter( Completer ):
     if not flags:
       raise ValueError( NO_COMPILE_FLAGS_MESSAGE )
 
+    if self._completer.UpdatingTranslationUnit(
+        ToCppStringCompatible( filename ) ):
+      raise RuntimeError( PARSING_FILE_MESSAGE )
+
     files = self.GetUnsavedFilesVector( request_data )
     line = request_data[ 'line_num' ]
     column = request_data[ 'column_num' ]
@@ -260,21 +280,28 @@ class ClangCompleter( Completer ):
       return None
 
     flags, current_file_path = self._FlagsForRequest( request_data )
-    quoted_include_paths, include_paths = UserIncludePaths( flags,
-                                                            current_file_path )
+    ( quoted_include_paths,
+      include_paths,
+      framework_paths ) = UserIncludePaths( flags, current_file_path )
+
+    include_file_path = None
     if quoted_include:
       include_file_path = _GetAbsolutePath( include_file_name,
                                             quoted_include_paths )
-      if include_file_path:
-        return responses.BuildGoToResponse( include_file_path,
-                                            line_num = 1,
-                                            column_num = 1 )
 
-    include_file_path = _GetAbsolutePath( include_file_name, include_paths )
+    if not include_file_path:
+      include_file_path = _GetAbsolutePath( include_file_name, include_paths )
+
+    if not include_file_path and framework_paths:
+      head, tail = PathLeftSplit( include_file_name )
+      include_file_name = os.path.join( head + '.framework', 'Headers', tail )
+      include_file_path = _GetAbsolutePath( include_file_name, framework_paths )
+
     if include_file_path:
       return responses.BuildGoToResponse( include_file_path,
                                           line_num = 1,
                                           column_num = 1 )
+
     raise RuntimeError( 'Include file not found.' )
 
 
@@ -294,6 +321,10 @@ class ClangCompleter( Completer ):
     flags, filename = self._FlagsForRequest( request_data )
     if not flags:
       raise ValueError( NO_COMPILE_FLAGS_MESSAGE )
+
+    if self._completer.UpdatingTranslationUnit(
+        ToCppStringCompatible( filename ) ):
+      raise RuntimeError( PARSING_FILE_MESSAGE )
 
     files = self.GetUnsavedFilesVector( request_data )
     line = request_data[ 'line_num' ]
@@ -322,6 +353,10 @@ class ClangCompleter( Completer ):
     flags, filename = self._FlagsForRequest( request_data )
     if not flags:
       raise ValueError( NO_COMPILE_FLAGS_MESSAGE )
+
+    if self._completer.UpdatingTranslationUnit(
+        ToCppStringCompatible( filename ) ):
+      raise RuntimeError( PARSING_FILE_MESSAGE )
 
     files = self.GetUnsavedFilesVector( request_data )
     line = request_data[ 'line_num' ]

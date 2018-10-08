@@ -1,6 +1,6 @@
 # encoding: utf-8
 #
-# Copyright (C) 2015 ycmd contributors
+# Copyright (C) 2015-2018 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -25,15 +25,21 @@ from __future__ import division
 from builtins import *  # noqa
 
 from hamcrest import ( assert_that, calling, contains, contains_string,
-                       empty, equal_to, has_entry, has_entries, raises )
+                       empty, equal_to, has_entry, has_entries, raises,
+                       matches_regexp )
+from mock import patch
 from nose.tools import eq_
 from pprint import pprint
 from webtest import AppError
 import requests
 import os.path
 
-from ycmd.completers.cpp.clang_completer import NO_DOCUMENTATION_MESSAGE
-from ycmd.tests.clang import PathToTestFile, SharedYcmd
+from ycmd import handlers
+from ycmd.completers.cpp.clang_completer import ( NO_DOCUMENTATION_MESSAGE,
+                                                  PARSING_FILE_MESSAGE )
+from ycmd.tests.clang import ( MockCoreClangCompleter,
+                               PathToTestFile,
+                               SharedYcmd )
 from ycmd.tests.test_utils import ( BuildRequest,
                                     ErrorMatcher,
                                     ChunkMatcher,
@@ -345,6 +351,14 @@ def Subcommands_GoToInclude_test():
     { 'request': [ 3, 1 ], 'response': os.path.join( 'quote',  'b.hpp' ) },
     { 'request': [ 5, 1 ], 'response': os.path.join( 'system', 'c.hpp' ) },
     { 'request': [ 6, 1 ], 'response': os.path.join( 'system', 'c.hpp' ) },
+    { 'request': [ 7, 1 ], 'response': os.path.join( 'Frameworks',
+                                                     'OpenGL.framework',
+                                                     'Headers',
+                                                     'gl.h' ) },
+    { 'request': [ 8, 1 ], 'response': os.path.join( 'Frameworks',
+                                                     'OpenGL.framework',
+                                                     'Headers',
+                                                     'gl.h' ) },
   ]
   for test in tests:
     yield RunGoToIncludeTest, 'GoToInclude', test
@@ -364,7 +378,7 @@ def Subcommands_GoToInclude_Fail_test():
     calling( RunGoToIncludeTest ).with_args( 'GoToImprecise', test ),
     raises( AppError, 'Include file not found.' ) )
 
-  test = { 'request': [ 7, 1 ], 'response': '' }
+  test = { 'request': [ 9, 1 ], 'response': '' }
   assert_that(
     calling( RunGoToIncludeTest ).with_args( 'GoToInclude', test ),
     raises( AppError, 'Not an include/import line.' ) )
@@ -376,7 +390,7 @@ def Subcommands_GoToInclude_Fail_test():
     raises( AppError, r'Can\\\'t jump to definition or declaration.' ) )
 
   # Unclosed #include statement.
-  test = { 'request': [ 10, 13 ], 'response': '' }
+  test = { 'request': [ 12, 13 ], 'response': '' }
   assert_that(
     calling( RunGoToIncludeTest ).with_args( 'GoToInclude', test ),
     raises( AppError, 'Not an include/import line.' ) )
@@ -441,13 +455,13 @@ def RunGetSemanticTest( app, filepath, filetype, test, command ):
 
   response = app.post_json( '/run_completer_command', request_data ).json
   pprint( response )
-  eq_( { 'message': expected }, response )
+  assert_that( response, has_entry( 'message', expected ) )
 
 
 def Subcommands_GetType_test():
   tests = [
     # Basic pod types
-    [ { 'line_num': 20, 'column_num':  3 }, 'Foo' ],
+    [ { 'line_num': 24, 'column_num':  3 }, 'Foo' ],
     [ { 'line_num':  1, 'column_num':  1 }, 'Internal error: '
                                             'cursor not valid' ],
     [ { 'line_num': 12, 'column_num':  2 }, 'Foo' ],
@@ -459,64 +473,73 @@ def Subcommands_GetType_test():
     [ { 'line_num': 15, 'column_num':  7 }, 'char' ],
 
     # Function
-    [ { 'line_num': 18, 'column_num':  2 }, 'int ()' ],
-    [ { 'line_num': 18, 'column_num':  6 }, 'int ()' ],
+    [ { 'line_num': 22, 'column_num':  2 }, 'int ()' ],
+    [ { 'line_num': 22, 'column_num':  6 }, 'int ()' ],
 
     # Declared and canonical type
     # On Ns:: (Unknown)
-    [ { 'line_num': 21, 'column_num':  3 }, 'Unknown type' ], # sic
+    [ { 'line_num': 25, 'column_num':  3 }, 'Unknown type' ], # sic
     # On Type (Type)
-    [ { 'line_num': 21, 'column_num':  8 }, 'Ns::Type => Ns::BasicType<char>' ],
+    [ { 'line_num': 25, 'column_num':  8 }, 'Ns::Type => Ns::BasicType<char>' ],
     # On "a" (Ns::Type)
-    [ { 'line_num': 21, 'column_num': 15 }, 'Ns::Type => Ns::BasicType<char>' ],
-    [ { 'line_num': 22, 'column_num': 13 }, 'Ns::Type => Ns::BasicType<char>' ],
+    [ { 'line_num': 25, 'column_num': 15 }, 'Ns::Type => Ns::BasicType<char>' ],
+    [ { 'line_num': 26, 'column_num': 13 }, 'Ns::Type => Ns::BasicType<char>' ],
 
     # Cursor on decl for refs & pointers
-    [ { 'line_num': 35, 'column_num':  3 }, 'Foo' ],
-    [ { 'line_num': 35, 'column_num': 11 }, 'Foo &' ],
-    [ { 'line_num': 35, 'column_num': 15 }, 'Foo' ],
-    [ { 'line_num': 36, 'column_num':  3 }, 'Foo' ],
-    [ { 'line_num': 36, 'column_num': 11 }, 'Foo *' ],
-    [ { 'line_num': 36, 'column_num': 18 }, 'Foo' ],
-    [ { 'line_num': 38, 'column_num':  3 }, 'const Foo &' ],
-    [ { 'line_num': 38, 'column_num': 16 }, 'const Foo &' ],
-    [ { 'line_num': 39, 'column_num':  3 }, 'const Foo *' ],
-    [ { 'line_num': 39, 'column_num': 16 }, 'const Foo *' ],
+    [ { 'line_num': 39, 'column_num':  3 }, 'Foo' ],
+    [ { 'line_num': 39, 'column_num': 11 }, 'Foo &' ],
+    [ { 'line_num': 39, 'column_num': 15 }, 'Foo' ],
+    [ { 'line_num': 40, 'column_num':  3 }, 'Foo' ],
+    [ { 'line_num': 40, 'column_num': 11 }, 'Foo *' ],
+    [ { 'line_num': 40, 'column_num': 18 }, 'Foo' ],
+    [ { 'line_num': 42, 'column_num':  3 }, 'const Foo &' ],
+    [ { 'line_num': 42, 'column_num': 16 }, 'const Foo &' ],
+    [ { 'line_num': 43, 'column_num':  3 }, 'const Foo *' ],
+    [ { 'line_num': 43, 'column_num': 16 }, 'const Foo *' ],
 
     # Cursor on usage
-    [ { 'line_num': 41, 'column_num': 13 }, 'const Foo' ],
-    [ { 'line_num': 41, 'column_num': 19 }, 'const int' ],
-    [ { 'line_num': 42, 'column_num': 13 }, 'const Foo *' ],
-    [ { 'line_num': 42, 'column_num': 20 }, 'const int' ],
-    [ { 'line_num': 43, 'column_num': 12 }, 'Foo' ],
-    [ { 'line_num': 43, 'column_num': 17 }, 'int' ],
-    [ { 'line_num': 44, 'column_num': 12 }, 'Foo *' ],
-    [ { 'line_num': 44, 'column_num': 18 }, 'int' ],
+    [ { 'line_num': 45, 'column_num': 13 }, 'const Foo' ],
+    [ { 'line_num': 45, 'column_num': 19 }, 'const int' ],
+    [ { 'line_num': 46, 'column_num': 13 }, 'const Foo *' ],
+    [ { 'line_num': 46, 'column_num': 20 }, 'const int' ],
+    [ { 'line_num': 47, 'column_num': 12 }, 'Foo' ],
+    [ { 'line_num': 47, 'column_num': 17 }, 'int' ],
+    [ { 'line_num': 48, 'column_num': 12 }, 'Foo *' ],
+    [ { 'line_num': 48, 'column_num': 18 }, 'int' ],
 
     # Auto in declaration
-    [ { 'line_num': 24, 'column_num':  3 }, 'Foo &' ],
-    [ { 'line_num': 24, 'column_num': 11 }, 'Foo &' ],
-    [ { 'line_num': 24, 'column_num': 18 }, 'Foo' ],
-    [ { 'line_num': 25, 'column_num':  3 }, 'Foo *' ],
-    [ { 'line_num': 25, 'column_num': 11 }, 'Foo *' ],
-    [ { 'line_num': 25, 'column_num': 18 }, 'Foo' ],
-    [ { 'line_num': 27, 'column_num':  3 }, 'const Foo &' ],
-    [ { 'line_num': 27, 'column_num': 16 }, 'const Foo &' ],
-    [ { 'line_num': 28, 'column_num':  3 }, 'const Foo *' ],
-    [ { 'line_num': 28, 'column_num': 16 }, 'const Foo *' ],
+    [ { 'line_num': 28, 'column_num':  3 }, 'Foo &' ],
+    [ { 'line_num': 28, 'column_num': 11 }, 'Foo &' ],
+    [ { 'line_num': 28, 'column_num': 18 }, 'Foo' ],
+    [ { 'line_num': 29, 'column_num':  3 }, 'Foo *' ],
+    [ { 'line_num': 29, 'column_num': 11 }, 'Foo *' ],
+    [ { 'line_num': 29, 'column_num': 18 }, 'Foo' ],
+    [ { 'line_num': 31, 'column_num':  3 }, 'const Foo &' ],
+    [ { 'line_num': 31, 'column_num': 16 }, 'const Foo &' ],
+    [ { 'line_num': 32, 'column_num':  3 }, 'const Foo *' ],
+    [ { 'line_num': 32, 'column_num': 16 }, 'const Foo *' ],
 
     # Auto in usage
-    [ { 'line_num': 30, 'column_num': 14 }, 'const Foo' ],
-    [ { 'line_num': 30, 'column_num': 21 }, 'const int' ],
-    [ { 'line_num': 31, 'column_num': 14 }, 'const Foo *' ],
-    [ { 'line_num': 31, 'column_num': 22 }, 'const int' ],
-    [ { 'line_num': 32, 'column_num': 13 }, 'Foo' ],
-    [ { 'line_num': 32, 'column_num': 19 }, 'int' ],
-    [ { 'line_num': 33, 'column_num': 13 }, 'Foo *' ],
-    [ { 'line_num': 33, 'column_num': 20 }, 'int' ],
+    [ { 'line_num': 34, 'column_num': 14 }, 'const Foo' ],
+    [ { 'line_num': 34, 'column_num': 21 }, 'const int' ],
+    [ { 'line_num': 35, 'column_num': 14 }, 'const Foo *' ],
+    [ { 'line_num': 35, 'column_num': 22 }, 'const int' ],
+    [ { 'line_num': 36, 'column_num': 13 }, 'Foo' ],
+    [ { 'line_num': 36, 'column_num': 19 }, 'int' ],
+    [ { 'line_num': 37, 'column_num': 13 }, 'Foo *' ],
+    [ { 'line_num': 37, 'column_num': 20 }, 'int' ],
 
     # Unicode
-    [ { 'line_num': 47, 'column_num': 13 }, 'Unicøde *' ],
+    [ { 'line_num': 51, 'column_num': 13 }, 'Unicøde *' ],
+
+    # Bound methods
+    # On Win32, methods pick up an __attribute__((thiscall)) to annotate their
+    # calling convention.  This shows up in the type, which isn't ideal, but
+    # also prohibitively complex to try and strip out.
+    [ { 'line_num': 53, 'column_num': 15 },
+      matches_regexp( r'int \(int\)(?: __attribute__\(\(thiscall\)\))?' ) ],
+    [ { 'line_num': 54, 'column_num': 18 },
+      matches_regexp( r'int \(int\)(?: __attribute__\(\(thiscall\)\))?' ) ],
   ]
 
   for test in tests:
@@ -1519,3 +1542,42 @@ Type: void ()
 Name: kernel
 ---
 This is a test kernel""" } )
+
+
+@SharedYcmd
+def Subcommands_StillParsingError( app, command ):
+  filepath = PathToTestFile( 'test.cpp' )
+
+  data = BuildRequest( command_arguments = [ command ],
+                       compilation_flags = [ '-x', 'c++' ],
+                       line_num = 1,
+                       column_num = 1,
+                       filepath = filepath,
+                       contents = '',
+                       filetype = 'cpp' )
+
+  response = app.post_json( '/run_completer_command',
+                            data,
+                            expect_errors = True )
+
+  eq_( response.status_code, requests.codes.internal_server_error )
+
+  pprint( response.json )
+
+  assert_that( response.json, ErrorMatcher( RuntimeError,
+                                            PARSING_FILE_MESSAGE ) )
+
+
+def Subcommands_StillParsingError_test():
+  completer = handlers._server_state.GetFiletypeCompleter( [ 'cpp' ] )
+  with patch.object( completer, '_completer', MockCoreClangCompleter() ):
+    yield Subcommands_StillParsingError, 'FixIt'
+    yield Subcommands_StillParsingError, 'GetDoc'
+    yield Subcommands_StillParsingError, 'GetDocImprecise'
+    yield Subcommands_StillParsingError, 'GetParent'
+    yield Subcommands_StillParsingError, 'GetType'
+    yield Subcommands_StillParsingError, 'GetTypeImprecise'
+    yield Subcommands_StillParsingError, 'GoTo'
+    yield Subcommands_StillParsingError, 'GoToDeclaration'
+    yield Subcommands_StillParsingError, 'GoToDefinition'
+    yield Subcommands_StillParsingError, 'GoToImprecise'

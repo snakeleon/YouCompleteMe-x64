@@ -41,6 +41,8 @@ _logger = logging.getLogger( __name__ )
 
 SERVER_LOG_PREFIX = 'Server reported: '
 
+NO_HOVER_INFORMATION = 'No hover information.'
+
 # All timeout values are in seconds
 REQUEST_TIMEOUT_COMPLETION = 5
 REQUEST_TIMEOUT_INITIALISE = 30
@@ -1304,7 +1306,10 @@ class LanguageServerCompleter( Completer ):
       lsp.Hover( request_id, request_data ),
       REQUEST_TIMEOUT_COMMAND )
 
-    return response[ 'result' ][ 'contents' ]
+    result = response[ 'result' ]
+    if result:
+      return result[ 'contents' ]
+    raise RuntimeError( NO_HOVER_INFORMATION )
 
 
   def GoToDeclaration( self, request_data ):
@@ -1490,6 +1495,12 @@ class LanguageServerCompleter( Completer ):
 
 
 def _CompletionItemToCompletionData( insertion_text, item, fixits ):
+  # Since we send completionItemKind capabilities, we guarantee to handle
+  # values outside our value set and fall back to a default.
+  try:
+    kind = lsp.ITEM_KIND[ item.get( 'kind', 0 ) ]
+  except IndexError:
+    kind = lsp.ITEM_KIND[ 0 ] # Fallback to None for unsupported kinds.
   return responses.BuildCompletionData(
     insertion_text,
     extra_menu_info = item.get( 'detail', None ),
@@ -1497,7 +1508,7 @@ def _CompletionItemToCompletionData( insertion_text, item, fixits ):
                       '\n\n' +
                       item.get( 'documentation', '' ) ),
     menu_text = item[ 'label' ],
-    kind = lsp.ITEM_KIND[ item.get( 'kind', 0 ) ],
+    kind = kind,
     extra_data = fixits )
 
 
