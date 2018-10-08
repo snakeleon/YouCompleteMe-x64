@@ -3398,7 +3398,7 @@ This software is licensed under the [GPL v3 license][gpl].
 > (PS: 此项目仓库中已经集成了编译好的基于 Windows 系统的 ycmd 引擎，所以同时支持 Windows 版的 Emacs 的使用。
    Linux系统安装编译非常方便，请按照官方文档中的说明进行编译。)
 
-###关于版本
+### 关于版本
 
 - ycmd  核心版本: 40 (08 October 2018) 静态编译
 - libclang  版本: 3.9.1 (23 December 2016) [Clang][Clang]
@@ -3420,7 +3420,7 @@ This software is licensed under the [GPL v3 license][gpl].
 
 > NOTE: 该版本已经集成编译好的基于 Windows 系统的二进制文件，直接安装加以配置就可正常使用；同时可用于 Windows 版的 Emacs。
 
-###脚本配置
+### 脚本配置
 
 自用的 .ycm_extra_conf.py 模板文件在 python目录下，可以默认全局加载该文件，参考 [使用技巧](#使用技巧) 第2条。
 配置中相关的编译器编译开关项请参考clang编译器手册自己增补。
@@ -3435,7 +3435,7 @@ This software is licensed under the [GPL v3 license][gpl].
 
 其中 search starts here --- End of search list 之间的内容就是编译器默认的头文件搜索路径。
 
-###使用技巧
+### 使用技巧
 
 - 1. 我自己使用的加载配置项(Vimrc中配置)片段:
 
@@ -3468,7 +3468,7 @@ This software is licensed under the [GPL v3 license][gpl].
 - 3. 如果你使用的 VIM for Windows 版本太低或支持的特性不满足自己的需求，自己编译又麻烦；那么特别推荐一个大神编译好的 [Vim builds for Windows][Vim builds for Windows] 此版本更新维护较频繁，官方更新补丁时都会及时跟上。如果大家喜欢或者有任何疑问，可以在页面下方有编译者的E-Mail可以联系，或者对其赞助支持。
 
 
-###Visual C Runtime 问题
+### Visual C Runtime 问题
 
 如果各位在启动遇到如下错误提示:
 
