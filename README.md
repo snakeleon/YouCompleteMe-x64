@@ -218,8 +218,8 @@ The following additional language support options are available:
   `install.py`.
 - Go support: install [Go][go-install] and add `--go-completer` when calling
   `install.py`.
-- JavaScript and TypeScript support: install [Node.js and npm][npm-install] then
-  install the TypeScript SDK with `npm install -g typescript`.
+- JavaScript and TypeScript support: install [Node.js and npm][npm-install] and
+  add `--ts-completer` when calling `install.py`.
 - Rust support: install [Rust][rust-install] and add
   `--rust-completer` when calling `install.py`.
 - Java support: install [JDK8 (version 8 required)][jdk-install] and add
@@ -291,8 +291,8 @@ The following additional language support options are available:
   when calling `install.py`.
 - Go support: install [Go][go-install] and add `--go-completer` when calling
   `install.py`.
-- JavaScript and TypeScript support: install [Node.js and npm][npm-install] then
-  install the TypeScript SDK with `npm install -g typescript`.
+- JavaScript and TypeScript support: install [Node.js and npm][npm-install] and
+  add `--ts-completer` when calling `install.py`.
 - Rust support: install [Rust][rust-install] and add `--rust-completer` when
   calling `install.py`.
 - Java support: install [JDK8 (version 8 required)][jdk-install] and add
@@ -382,8 +382,8 @@ The following additional language support options are available:
   Be sure that [the build utility `msbuild` is in your PATH][add-msbuild-to-path].
 - Go support: install [Go][go-install] and add `--go-completer` when calling
   `install.py`.
-- JavaScript and TypeScript support: install [Node.js and npm][npm-install] then
-  install the TypeScript SDK with `npm install -g typescript`.
+- JavaScript and TypeScript support: install [Node.js and npm][npm-install] and
+  add `--ts-completer` when calling `install.py`.
 - Rust support: install [Rust][rust-install] and add `--rust-completer` when
   calling `install.py`.
 - Java support: install [JDK8 (version 8 required)][jdk-install] and add
@@ -454,8 +454,8 @@ The following additional language support options are available:
   `./install.py`.
 - Go support: install [Go][go-install] and add `--go-completer` when calling
   `./install.py`.
-- JavaScript and TypeScript support: install [Node.js and npm][npm-install] then
-  install the TypeScript SDK with `npm install -g typescript`.
+- JavaScript and TypeScript support: install [Node.js and npm][npm-install] and
+  add `--ts-completer` when calling `install.py`.
 - Rust support: install [Rust][rust-install] and add `--rust-completer` when
   calling `./install.py`.
 - Java support: install [JDK8 (version 8 required)][jdk-install] and add
@@ -530,9 +530,9 @@ process.
     **Download the latest version of `libclang`**. Clang is an open-source
     compiler that can compile C-family languages. The `libclang` library it
     provides is used to power the YCM semantic completion engine for those
-    languages. YCM is designed to work with libclang version 3.9 or higher.
+    languages. YCM is designed to work with libclang version 7.0.0 or higher.
 
-    You can use the system libclang _only if you are sure it is version 3.9 or
+    You can use the system libclang _only if you are sure it is version 7.0.0 or
     higher_, otherwise don't. Even if it is, we recommend using the [official
     binaries from llvm.org][clang-download] if at all possible. Make sure you
     download the correct archive file for your OS.
@@ -664,9 +664,9 @@ process.
     - Go support: install [Go][go-install] and add it to your path. Navigate to
       `YouCompleteMe/third_party/ycmd/third_party/gocode` and run `go build`.
 
-    - JavaScript and TypeScript support: as with the quick installation, simply
-      `npm install -g typescript` after successfully installing [Node.js and
-      npm][npm-install].
+    - JavaScript and TypeScript support: install [Node.js and npm][npm-install],
+      navigate to `YouCompleteMe/third_party/ycmd` and run
+      `npm install -g --prefix third_party/tsserver typescript`.
 
     - Rust support: install [Rust][rust-install]. Navigate to
       `YouCompleteMe/third_party/ycmd/third_party/racerd` and run `cargo build
@@ -701,7 +701,7 @@ Quick Feature Summary
 
 ### C-family languages (C, C++, Objective C, Objective C++, CUDA)
 
-* Semantic auto-completion
+* Semantic auto-completion with automatic fixes
 * Real-time diagnostic display
 * Go to include/declaration/definition (`GoTo`, etc.)
 * Semantic type information for identifiers (`GetType`)
@@ -1295,11 +1295,10 @@ installation. Further instructions on how to setup YCM with [Tern][] are
 available on [the wiki][tern-instructions].
 
 All JavaScript and TypeScript features are provided by the [TSServer][] engine,
-which is included in the TypeScript SDK. To get the SDK, install [Node.js and
-npm][npm-install] and run the command:
-```
-npm install -g typescript
-```
+which is included in the TypeScript SDK. To enable these features, install
+[Node.js and npm][npm-install] and call the `install.py` script with the
+`--ts-completer` flag.
+
 [TSServer][] relies on [the `jsconfig.json` file][jsconfig.json] for JavaScript
 and [the `tsconfig.json` file][tsconfig.json] for TypeScript to analyze your
 project. Ensure the file exists at the root of your project.
@@ -1313,11 +1312,6 @@ To get diagnostics in JavaScript, set the `checkJs` option to `true` in your
     }
 }
 ```
-
-TypeScript 2.8.1 or later is recommended. Some features will be missing on older
-versions. You can check which version you are currently using by looking at the
-output of [`:YcmDebugInfo` ](#the-ycmdebuginfo-command). If the version is
-`None`, your TypeScript is too old and should be updated.
 
 ### Semantic Completion for Other Languages
 
@@ -3040,21 +3034,13 @@ version of libpython on your machine (for instance,
 `-DPYTHON_LIBRARY=/usr/lib/libpython2.7.so`). Naturally, this means you'll have
 to go through the full installation guide by hand.
 
-### I get `Vim: Caught deadly signal SEGV` on Vim startup
+### I see `undefined symbol: clang_getCompletionFixIt` in the server logs.
 
-This can happen on some Linux distros. If you encounter this situation, run Vim
-under `gdb`. You'll probably see something like this in the output when Vim
-crashes:
-
-```
-undefined symbol: clang_CompileCommands_dispose
-```
-
-This means that Vim is trying to load a `libclang.so` that is too old. You need
-at least a 3.9 libclang. Just go through the installation guide and make sure
-you are using a correct `libclang.so`. We recommend downloading prebuilt
-binaries from llvm.org.
-
+This means that the server is trying to load a version of libclang that is too
+old. You need at least libclang 7.0.0. We recommend running the `install.py`
+script without `--system-libclang` or downloading the [latest prebuilt binaries
+from llvm.org][clang-download] when going through the [full installation
+guide](#full-installation-guide).
 
 ### I get `Fatal Python error: PyThreadState_Get: no current thread` on startup
 
@@ -3380,7 +3366,7 @@ The latest version of the plugin is available at
 The author's homepage is <http://val.markovic.io>.
 
 Please do **NOT** go to #vim on freenode for support. Please contact the
-YouCompleteMe maintainers directly using the [contact details](#contact) below.
+YouCompleteMe maintainers directly using the [contact details](#contact).
 
 License
 -------
@@ -3400,14 +3386,12 @@ This software is licensed under the [GPL v3 license][gpl].
 
 ### 关于版本
 
-- ycmd  核心版本: 40 (08 October 2018) 静态编译
-- libclang  版本: 3.9.1 (23 December 2016) [Clang][Clang]
-- Python    支持: 3.7.0 (27 June 2018) [Python][python-win-download]
+- ycm_core  核心版本: 41 (20 December 2018) 静态编译
+- libclang  版本: 7.0.0 (19 September 2018) [Clang][Clang]
+- Python    支持: 3.7.1 (20 October 2018) [Python][python-win-download]
 
 支持操作系统:
 
-- Windows 2000
-- Windows XP
 - Windows Vista
 - Windows 7
 - Windows 8
@@ -3422,22 +3406,22 @@ This software is licensed under the [GPL v3 license][gpl].
 
 ### 脚本配置
 
-自用的 .ycm_extra_conf.py 模板文件在 python目录下，可以默认全局加载该文件，参考 [使用技巧](#使用技巧) 第2条。
-配置中相关的编译器编译开关项请参考clang编译器手册自己增补。
-关于头文件的搜索路径配置方法如下:
+自用的 `.ycm_extra_conf.py` 模板文件在 python 目录下，作为默认的全局配置加载，参考 [使用技巧](#使用技巧) 第2条。
+配置中相关的编译器编译开关项请参考 `Clang` 编译器手册自己增补。
+最新版 `libclang`（4.0或更高）加入了目标平台开关来确定依赖哪个工具链后端的标准库文件，配置方法如下:
 
-    GCC:
-        POSIX shell: g++ -E -x c++ - -v < /dev/null
-        windows: g++ -E -x c++ - -v < nul
-    LLVM/Clang:
-        POSIX shell: clang++ -E -x c++ - -v < /dev/null
-        windows: clang++ -E -x c++ - -v < nul
+    Minw64:
+	    --target=x86_64-pc-mingw32
+    Minw32:
+	    --target=i686-pc-mingw32
+    MSVC:
+        默认为MSVC的标准库，请忽略此选项
 
-其中 search starts here --- End of search list 之间的内容就是编译器默认的头文件搜索路径。
+> `libclang` 目标格式为<arch><sub>-<vendor>-<sys>-<abi>, 相关参数请查阅 `Clang` 文档中`Target Triple`的选项。
 
 ### 使用技巧
 
-- 1. 我自己使用的加载配置项(Vimrc中配置)片段:
+- 1. 自己使用的加载配置项(Vimrc中配置)片段:
 
 " 按操作系统选择使用版本:
 
