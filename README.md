@@ -3417,7 +3417,7 @@ This software is licensed under the [GPL v3 license][gpl].
     MSVC:
         默认为MSVC的标准库，请忽略此选项
 
-> `libclang` 目标格式为<arch><sub>-<vendor>-<sys>-<abi>, 相关参数请查阅 `Clang` 文档中`Target Triple`的选项。
+> `libclang` 目标格式为 `<arch><sub>-<vendor>-<sys>-<abi>`, 相关参数请查阅 `Clang` 文档中 `Target Triple`的说明。
 
 ### 使用技巧
 
