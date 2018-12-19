@@ -23,7 +23,6 @@ from __future__ import absolute_import
 from builtins import *  # noqa
 
 from future.utils import iterkeys
-import contextlib
 import vim
 import os
 import json
@@ -31,7 +30,6 @@ import re
 from collections import defaultdict, namedtuple
 from ycmd.utils import ( ByteOffsetToCodepointOffset, GetCurrentDirectory,
                          JoinLinesAsUnicode, ToBytes, ToUnicode )
-from ycmd import user_options_store
 
 BUFFER_COMMAND_MAP = { 'same-buffer'      : 'edit',
                        'split'            : 'split',
@@ -58,6 +56,13 @@ SIGN_ID_FOR_BUFFER = defaultdict( lambda: SIGN_BUFFER_ID_INITIAL_VALUE )
 
 SIGN_PLACE_REGEX = re.compile(
   r"^.*=(?P<line>\d+).*=(?P<id>\d+).*=(?P<name>Ycm\w+)$" )
+
+NO_COMPLETIONS = {
+  'line': -1,
+  'column': -1,
+  'completion_start_column': -1,
+  'completions': []
+}
 
 
 def CurrentLineAndColumn():
@@ -257,16 +262,16 @@ def GetDiagnosticMatchPattern( line_num,
   line_num, column_num = LineAndColumnNumbersClamped( line_num, column_num )
 
   if not line_end_num or not column_end_num:
-    return '\%{}l\%{}c'.format( line_num, column_num )
+    return '\\%{}l\\%{}c'.format( line_num, column_num )
 
   # -1 and then +1 to account for column end not included in the range.
   line_end_num, column_end_num = LineAndColumnNumbersClamped(
       line_end_num, column_end_num - 1 )
   column_end_num += 1
-  return '\%{}l\%{}c\_.\\{{-}}\%{}l\%{}c'.format( line_num,
-                                                  column_num,
-                                                  line_end_num,
-                                                  column_end_num )
+  return '\\%{}l\\%{}c\\_.\\{{-}}\\%{}l\\%{}c'.format( line_num,
+                                                       column_num,
+                                                       line_end_num,
+                                                       column_end_num )
 
 
 # Clamps the line and column numbers so that they are not past the contents of
@@ -504,7 +509,7 @@ def JumpToFile( filename, command, modifiers ):
 
 
 # Both |line| and |column| need to be 1-based
-def JumpToLocation( filename, line, column, modifiers ):
+def JumpToLocation( filename, line, column, modifiers, command ):
   # Add an entry to the jumplist
   vim.command( "normal! m'" )
 
@@ -515,24 +520,22 @@ def JumpToLocation( filename, line, column, modifiers ):
     # location, not to the start of the newly opened file.
     # Sadly this fails on random occasions and the undesired jump remains in the
     # jumplist.
-    user_command = user_options_store.Value( 'goto_buffer_command' )
-
-    if user_command == 'split-or-existing-window':
+    if command == 'split-or-existing-window':
       if 'tab' in modifiers:
         if TryJumpLocationInTabs( filename, line, column ):
           return
       elif TryJumpLocationInTab( vim.current.tabpage, filename, line, column ):
         return
-      user_command = 'split'
+      command = 'split'
 
     # This command is kept for backward compatibility. :tab should be used with
     # the 'split-or-existing-window' command instead.
-    if user_command == 'new-or-existing-tab':
+    if command == 'new-or-existing-tab':
       if TryJumpLocationInTabs( filename, line, column ):
         return
-      user_command = 'new-tab'
+      command = 'new-tab'
 
-    if not JumpToFile( filename, user_command, modifiers ):
+    if not JumpToFile( filename, command, modifiers ):
       return
 
   vim.current.window.cursor = ( line, column - 1 )
@@ -993,13 +996,13 @@ def InsertNamespace( namespace ):
       vim.eval( expr )
       return
 
-  pattern = '^\s*using\(\s\+[a-zA-Z0-9]\+\s\+=\)\?\s\+[a-zA-Z0-9.]\+\s*;\s*'
+  pattern = r'^\s*using\(\s\+[a-zA-Z0-9]\+\s\+=\)\?\s\+[a-zA-Z0-9.]\+\s*;\s*'
   existing_indent = ''
   line = SearchInCurrentBuffer( pattern )
   if line:
     existing_line = LineTextInCurrentBuffer( line )
-    existing_indent = re.sub( r"\S.*", "", existing_line )
-  new_line = "{0}using {1};\n".format( existing_indent, namespace )
+    existing_indent = re.sub( r'\S.*', '', existing_line )
+  new_line = '{0}using {1};\n'.format( existing_indent, namespace )
   replace_pos = { 'line_num': line + 1, 'column_num': 1 }
   ReplaceChunk( replace_pos, replace_pos, new_line, vim.current.buffer )
   PostVimMessage( 'Add namespace: {0}'.format( namespace ), warning = False )
@@ -1212,42 +1215,6 @@ def BuildRange( start_line, end_line ):
       }
     }
   }
-
-
-@contextlib.contextmanager
-def AutocommandEventsIgnored( events = [ 'all' ] ):
-  """Context manager to perform operations without triggering autocommand
-  events. |events| is a list of events to ignore. By default, all events are
-  ignored."""
-  old_eventignore = vim.options[ 'eventignore' ]
-  ignored_events = {
-    event for event in ToUnicode( old_eventignore ).split( ',' ) if event }
-  ignored_events.update( events )
-  vim.options[ 'eventignore' ] = ','.join( ignored_events )
-  try:
-    yield
-  finally:
-    vim.options[ 'eventignore' ] = old_eventignore
-
-
-@contextlib.contextmanager
-def CurrentWindow():
-  """Context manager to perform operations on other windows than the current one
-  without triggering autocommands related to window movement. Use the
-  SwitchWindow function to move to other windows while under the context."""
-  current_window = vim.current.window
-  with AutocommandEventsIgnored( [ 'WinEnter', 'Winleave' ] ):
-    try:
-      yield
-    finally:
-      vim.current.window = current_window
-
-
-def SwitchWindow( window ):
-  """Move to the window object |window|. This function should be called under
-  the CurrentWindow context if you are going to switch back to the original
-  window."""
-  vim.current.window = window
 
 
 # Expects version_string in 'MAJOR.MINOR.PATCH' format, e.g. '8.1.278'

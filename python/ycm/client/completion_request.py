@@ -23,11 +23,11 @@ from __future__ import absolute_import
 from builtins import *  # noqa
 
 import logging
-from future.utils import iteritems
 from ycmd.utils import ToUnicode
 from ycm.client.base_request import ( BaseRequest, DisplayServerException,
                                       MakeServerException )
 from ycm import vimsupport
+from ycm.vimsupport import NO_COMPLETIONS
 
 _logger = logging.getLogger( __name__ )
 
@@ -37,12 +37,6 @@ class CompletionRequest( BaseRequest ):
     super( CompletionRequest, self ).__init__()
     self.request_data = request_data
     self._response_future = None
-    self._complete_done_hooks = {
-      'cs': self._OnCompleteDone_Csharp,
-      'java': self._OnCompleteDone_FixIt,
-      'javascript': self._OnCompleteDone_FixIt,
-      'typescript': self._OnCompleteDone_FixIt,
-    }
 
 
   def Start( self ):
@@ -56,12 +50,12 @@ class CompletionRequest( BaseRequest ):
 
   def RawResponse( self ):
     if not self._response_future:
-      return { 'completions': [], 'completion_start_column': -1 }
+      return NO_COMPLETIONS
 
     response = self.HandleFuture( self._response_future,
                                   truncate_message = True )
     if not response:
-      return { 'completions': [], 'completion_start_column': -1 }
+      return NO_COMPLETIONS
 
     # Vim may not be able to convert the 'errors' entry to its internal format
     # so we remove it from the response.
@@ -71,6 +65,8 @@ class CompletionRequest( BaseRequest ):
       _logger.error( exception )
       DisplayServerException( exception, truncate_message = True )
 
+    response[ 'line' ] = self.request_data[ 'line_num' ]
+    response[ 'column' ] = self.request_data[ 'column_num' ]
     return response
 
 
@@ -85,16 +81,10 @@ class CompletionRequest( BaseRequest ):
     if not self.Done():
       return
 
-    complete_done_actions = self._GetCompleteDoneHooks()
-    for action in complete_done_actions:
-      action()
-
-
-  def _GetCompleteDoneHooks( self ):
-    filetypes = vimsupport.CurrentFiletypes()
-    for key, value in iteritems( self._complete_done_hooks ):
-      if key in filetypes:
-        yield value
+    if 'cs' in vimsupport.CurrentFiletypes():
+      self._OnCompleteDone_Csharp()
+    else:
+      self._OnCompleteDone_FixIt()
 
 
   def _GetCompletionsUserMayHaveCompleted( self ):
@@ -187,48 +177,42 @@ def _FilterToMatchingCompletions( completed_item, completions ):
   return matched_completions
 
 
+def _GetCompletionInfoField( completion_data ):
+  info = completion_data.get( 'detailed_info', '' )
+
+  if 'extra_data' in completion_data:
+    docstring = completion_data[ 'extra_data' ].get( 'doc_string', '' )
+    if docstring:
+      if info:
+        info += '\n' + docstring
+      else:
+        info = docstring
+
+  # This field may contain null characters e.g. \x00 in Python docstrings. Vim
+  # cannot evaluate such characters so they are removed.
+  return info.replace( '\x00', '' )
+
+
 def _ConvertCompletionDataToVimData( completion_identifier, completion_data ):
-  # see :h complete-items for a description of the dictionary fields
-  vim_data = {
-    'word'  : '',
-    'dup'   : 1,
-    'empty' : 1,
+  # See :h complete-items for a description of the dictionary fields.
+  return {
+    'word'     : completion_data[ 'insertion_text' ],
+    'abbr'     : completion_data.get( 'menu_text', '' ),
+    'menu'     : completion_data.get( 'extra_menu_info', '' ),
+    'info'     : _GetCompletionInfoField( completion_data ),
+    'kind'     : ToUnicode( completion_data.get( 'kind', '' ) )[ :1 ].lower(),
+    'dup'      : 1,
+    'empty'    : 1,
+    # We store the completion item index as a string in the completion
+    # user_data. This allows us to identify the _exact_ item that was completed
+    # in the CompleteDone handler, by inspecting this item from v:completed_item
+    #
+    # We convert to string because completion user data items must be strings.
+    #
+    # Note: Not all versions of Vim support this (added in 8.0.1483), but adding
+    # the item to the dictionary is harmless in earlier Vims.
+    'user_data': str( completion_identifier )
   }
-
-  if ( 'extra_data' in completion_data and
-       'doc_string' in completion_data[ 'extra_data' ] ):
-    doc_string = completion_data[ 'extra_data' ][ 'doc_string' ]
-  else:
-    doc_string = ""
-
-  if 'insertion_text' in completion_data:
-    vim_data[ 'word' ] = completion_data[ 'insertion_text' ]
-  if 'menu_text' in completion_data:
-    vim_data[ 'abbr' ] = completion_data[ 'menu_text' ]
-  if 'extra_menu_info' in completion_data:
-    vim_data[ 'menu' ] = completion_data[ 'extra_menu_info' ]
-  if 'kind' in completion_data:
-    kind = ToUnicode( completion_data[ 'kind' ] )
-    if kind:
-      vim_data[ 'kind' ] = kind[ 0 ].lower()
-  if 'detailed_info' in completion_data:
-    vim_data[ 'info' ] = completion_data[ 'detailed_info' ]
-    if doc_string:
-      vim_data[ 'info' ] += '\n' + doc_string
-  elif doc_string:
-    vim_data[ 'info' ] = doc_string
-
-  # We store the completion item index as a string in the completion user_data.
-  # This allows us to identify the _exact_ item that was completed in the
-  # CompleteDone handler, by inspecting this item from v:completed_item
-  #
-  # We convert to string because completion user data items must be strings.
-  #
-  # Note: Not all versions of Vim support this (added in 8.0.1483), but adding
-  # the item to the dictionary is harmless in earlier Vims.
-  vim_data[ 'user_data' ] = str( completion_identifier )
-
-  return vim_data
 
 
 def _ConvertCompletionDatasToVimDatas( response_data ):

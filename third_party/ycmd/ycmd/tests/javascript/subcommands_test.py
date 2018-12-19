@@ -27,7 +27,6 @@ from builtins import *  # noqa
 from hamcrest import ( assert_that,
                        contains,
                        contains_inanyorder,
-                       contains_string,
                        has_entries,
                        matches_regexp )
 from nose.tools import eq_
@@ -39,7 +38,6 @@ from ycmd.tests.test_utils import ( BuildRequest,
                                     ChunkMatcher,
                                     CombineRequest,
                                     ErrorMatcher,
-                                    ExpectedFailure,
                                     LocationMatcher,
                                     MessageMatcher )
 from ycmd.utils import ReadFile
@@ -503,8 +501,8 @@ def Subcommands_FixIt_test( app ):
               ChunkMatcher(
                 matches_regexp(
                   '^\r?\n'
-                  '    nonExistingMethod\(\) {\r?\n'
-                  '        throw new Error\("Method not implemented."\);\r?\n'
+                  '    nonExistingMethod\\(\\) {\r?\n'
+                  '        throw new Error\\("Method not implemented."\\);\r?\n'
                   '    }$',
                 ),
                 LocationMatcher( filepath, 22, 12 ),
@@ -535,7 +533,7 @@ def Subcommands_OrganizeImports_test( app ):
           'chunks': contains(
             ChunkMatcher(
               matches_regexp(
-                'import \* as lib from "library";\r?\n'
+                'import \\* as lib from "library";\r?\n'
                 'import func, { func1, func2 } from "library";\r?\n' ),
               LocationMatcher( filepath,  1, 1 ),
               LocationMatcher( filepath,  2, 1 ) ),
@@ -573,9 +571,6 @@ def Subcommands_RefactorRename_Missing_test( app ):
   } )
 
 
-@ExpectedFailure( 'TSServer 3.1.1 regression',
-                  contains_string( "Cannot read property "
-                                   "'start' of undefined" ) )
 @SharedYcmd
 def Subcommands_RefactorRename_NotPossible_test( app ):
   RunTest( app, {
