@@ -35,6 +35,9 @@ import ycm_core
 # compilation database set (by default, one is not set).
 # CHANGE THIS LIST OF FLAGS. YES, THIS IS THE DROID YOU HAVE BEEN LOOKING FOR.
 flags = [
+# The libclang version 7.0.0 or higher add platform switch with Back-end
+# toolchain, For GNU you would set this.
+    '--target=x86_64-w64-mingw32',
     '-Wall',
     '-Wextra',
     # '-Werror',
@@ -68,9 +71,9 @@ flags = [
     'c++',
     '-I',
     '.',
-# Global configuration removes the header file search path at the back end of
-# the toolchain. the latest version of libclang's (7.0.0 or higher) new feature
-# does not require this content.
+# Global configuration removes the header file search path at the back-end
+# of the toolchain. the latest version of libclang's (7.0 or higher) new
+# feature does not require this content.
         # '-isystem',
     # 'd:/MSYS64/mingw64/include',
         # '-isystem',
