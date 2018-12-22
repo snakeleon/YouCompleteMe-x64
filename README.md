@@ -3422,6 +3422,7 @@ This software is licensed under the [GPL v3 license][gpl].
 ### 使用技巧
 
 1.  自己使用的加载配置项(Vimrc中配置)片段:
+
 " 按操作系统选择使用版本:
 
     if has("win64")
@@ -3433,6 +3434,7 @@ This software is licensed under the [GPL v3 license][gpl].
     endif
 
 2.  加载默认全局python脚本 `.ycm_extra_conf.py`(libclang工作方式)，在Vimrc中配置:
+
 " 加载默认全局脚本配置文件:
 
     if has("win64")
