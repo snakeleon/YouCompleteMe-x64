@@ -70,7 +70,6 @@ Contents
 	- [关于版本](#关于版本)
 	- [脚本配置](#脚本配置)
 	- [使用技巧](#使用技巧)
-    - [Visual C Runtime 问题](#Visual-C-Runtime-问题)
 
 
 Intro
@@ -330,7 +329,7 @@ can check the version and which Python is supported by typing `:version` inside
 Vim. Look at the features included: `+python/dyn` for Python 2 and
 `+python3/dyn` for Python 3. Take note of the Vim architecture, i.e. 32 or
 64-bit. It will be important when choosing the Python installer. We recommend
-using a 64-bit client. [Daily updated copies of 32-bit and 64-bit Vim with
+using a 64-bit client. [Daily updated installers of 32-bit and 64-bit Vim with
 Python 2 and Python 3 support][vim-win-download] are available.
 
 Add the line:
@@ -3312,10 +3311,10 @@ augroup END
 
 YCM relies on the `VimLeave` event to shut down the [ycmd server][ycmd]. Some
 plugins prevent this event from triggering by exiting Vim through an autocommand
-without using the `nested` keyword (see `:h autocmd-nested`). One of these
-plugins is [vim-nerdtree-tabs][]. You should identify which plugin is
-responsible for the issue and report it to the plugin author. Note that when
-this happens, [ycmd][] will automatically shut itself down after 30 minutes.
+without using the `nested` keyword (see `:h autocmd-nested`). You should
+identify which plugin is responsible for the issue and report it to the plugin
+author. Note that when this happens, [ycmd][] will automatically shut itself
+down after 30 minutes.
 
 ### YCM does not work with my Anaconda Python setup
 
@@ -3452,23 +3451,6 @@ This software is licensed under the [GPL v3 license][gpl].
 3.  如果你使用的 VIM for Windows 版本太低或支持的特性不满足自己的需求，自己编译又麻烦；那么特别推荐一个大神编译好的 [Vim builds for Windows][Vim builds for Windows] 此版本更新维护较频繁，官方更新补丁时都会及时跟上。如果大家喜欢或者有任何疑问，可以在页面下方有编译者的E-Mail可以联系，或者对其赞助支持。
 
 
-### Visual C Runtime 问题
-
-如果在启动遇到如下错误提示:
-
-    Runtime Error!
-    Program: $VIM\gvim.exe
-
-    R6034
-    An application has made an attempt to load the C runtime
-    library incorrectly.
-    Please contact the application's support team for more
-    information.
-
-引起这个头痛问题的是因为 `msvcr90.dll` 版本兼容性，首先确保已经更新了官方最新的 Visual C 运行库，默认 Win7 SP1 已经带有此运行库，
-再排查你的系统环境变量 PATH 中，有没有其它的 `msvcr90.dll` 文件存在；如果有，请将其删除或者备份改名，大可放心，你的相关程序
-都依然能够很好的工作(前提是你的系统已经更新了最新的相关运行库文件)。
-
 [ycmd]: https://github.com/Valloric/ycmd
 [Clang]: http://clang.llvm.org/
 [vundle]: https://github.com/VundleVim/Vundle.vim#about
@@ -3513,7 +3495,7 @@ This software is licensed under the [GPL v3 license][gpl].
 [TSServer]: https://github.com/Microsoft/TypeScript/tree/master/src/server
 [jsconfig.json]: https://code.visualstudio.com/docs/languages/jsconfig
 [tsconfig.json]: https://www.typescriptlang.org/docs/handbook/tsconfig-json.html
-[vim-win-download]: https://bintray.com/micbou/generic/vim
+[vim-win-download]: https://github.com/vim/vim-win32-installer/releases
 [python-win-download]: https://www.python.org/downloads/windows/
 [visual-studio-download]: https://www.visualstudio.com/downloads/
 [7z-download]: http://www.7-zip.org/download.html
@@ -3534,7 +3516,6 @@ This software is licensed under the [GPL v3 license][gpl].
 [vim_win-python2.7.11-bug_workaround]: https://github.com/vim/vim-win32-installer/blob/a27bbdba9bb87fa0e44c8a00d33d46be936822dd/appveyor.bat#L86-L88
 [gitter]: https://gitter.im/Valloric/YouCompleteMe
 [ninja-compdb]: https://ninja-build.org/manual.html
-[vim-nerdtree-tabs]: https://github.com/jistr/vim-nerdtree-tabs
 [++enc]: http://vimdoc.sourceforge.net/htmldoc/editing.html#++enc
 [rustup]: https://www.rustup.rs/
 [contributing-md]: https://github.com/Valloric/YouCompleteMe/blob/master/CONTRIBUTING.md
