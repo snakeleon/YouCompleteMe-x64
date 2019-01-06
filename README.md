@@ -3416,7 +3416,7 @@ This software is licensed under the [GPL v3 license][gpl].
     MSVC:
         默认为MSVC的标准库，请忽略此选项
 
-> `libclang` `--target`目标平台格式为 `<arch><sub>-<vendor>-<sys>-<abi>`, 相关参数请查阅 `Clang` 文档中 `Target Triple`的说明。
+> `libclang` `--target`目标平台格式为 `<arch><sub>-<vendor>-<sys>-<abi>`, 相关参数请查阅 `Clang` 文档中 [Target Triple](#Target Triple)的说明。
 
 ### 使用技巧
 
@@ -3535,3 +3535,4 @@ This software is licensed under the [GPL v3 license][gpl].
 [YouCompleteMe-x86]: https://github.com/snakeleon/YouCompleteMe-x86
 [YouCompleteMe-x64]: https://github.com/snakeleon/YouCompleteMe-x64
 [Vim builds for Windows]: https://tuxproject.de/projects/vim/
+[Target Triple]: http://clang.llvm.org/docs/CrossCompilation.html
