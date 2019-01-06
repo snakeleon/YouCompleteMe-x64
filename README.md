@@ -3416,7 +3416,7 @@ This software is licensed under the [GPL v3 license][gpl].
     MSVC:
         默认为MSVC的标准库，请忽略此选项
 
-> `libclang` `--target`目标平台格式为 `<arch><sub>-<vendor>-<sys>-<abi>`, 相关参数请查阅 `Clang` 文档中 [Target Triple](#Target Triple)的说明。
+> `libclang`的基本选项`--target`是定义目标平台结构，通用格式为 `<arch><sub>-<vendor>-<sys>-<abi>`, 相关参数请查阅 `Clang` 文档中 [Target Triple][Target Triple]的说明。
 
 ### 使用技巧
 
