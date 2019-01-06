@@ -3386,8 +3386,8 @@ This software is licensed under the [GPL v3 license][gpl].
 ### 关于版本
 
 - ycm_core  核心版本: 41 (20 December 2018) 静态编译
-- libclang  版本: 7.0.0 (19 September 2018) [Clang][Clang]
-- Python    支持: 3.7.1 (20 October 2018) [Python][python-win-download]
+- libclang  版本: 7.0.1 (17  December 2018) [Clang][Clang]
+- Python    支持: 3.7.2 (20 October 2018) [Python][python-win-download]
 
 支持操作系统:
 
