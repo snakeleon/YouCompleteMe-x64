@@ -1424,8 +1424,15 @@ You can also style the line that has the warning/error with these groups:
 - `YcmWarningLine`, which falls back to group `SyntasticWarningLine` if it
   exists
 
-Note that the line highlighting groups only work when gutter signs are turned
-on.
+Note that the line highlighting groups only work when the
+[`g:ycm_enable_diagnostic_signs`](#the-gycm_enable_diagnostic_signs-option)
+option is set. If you want highlighted lines but no signs in the Vim gutter,
+ensure that your Vim version is 7.4.2201 or later and set the `signcolumn`
+option to `off` in your vimrc:
+
+```viml
+set signcolumn=off
+```
 
 The syntax groups used to highlight regions of text with errors/warnings:
 - `YcmErrorSection`, which falls back to group `SyntasticError` if it exists and
@@ -2564,8 +2571,10 @@ let g:ycm_autoclose_preview_window_after_insertion = 0
 ### The `g:ycm_max_diagnostics_to_display` option
 
 This option controls the maximum number of diagnostics shown to the user when
-errors or warnings are detected in the file. This option is only relevant if you
-are using the C-family semantic completion engine.
+errors or warnings are detected in the file. This option is only relevant for
+the C-family, C#, Java, JavaScript, and TypeScript languages.
+
+A special value of `0` means there is no limit.
 
 Default: `30`
 
@@ -3449,7 +3458,6 @@ This software is licensed under the [GPL v3 license][gpl].
 	其中编译特性使用了c++11 (-std=c++11), 使用时请根据您的项目具体情况进行调整。
 
 3.  如果你使用的 VIM for Windows 版本太低或支持的特性不满足自己的需求，自己编译又麻烦；那么特别推荐一个编译好的项目：[Vim builds for Windows][Vim builds for Windows] 此版本更新维护较频繁，官方更新补丁时都会及时跟上。如果大家喜欢或者有任何疑问，可以在页面下方有编译者的 E-Mail 可以联系，或者对其赞助支持。
-
 
 [ycmd]: https://github.com/Valloric/ycmd
 [Clang]: http://clang.llvm.org/
