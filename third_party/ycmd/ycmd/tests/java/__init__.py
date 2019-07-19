@@ -1,4 +1,4 @@
-# Copyright (C) 2017 ycmd contributors
+# Copyright (C) 2017-2019 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -24,11 +24,10 @@ from builtins import *  # noqa
 
 import functools
 import os
-import time
-from pprint import pformat
 
 from ycmd.tests.test_utils import ( BuildRequest,
                                     ClearCompletionsCache,
+                                    IgnoreExtraConfOutsideTestsFolder,
                                     IsolatedApp,
                                     SetUpApp,
                                     StopCompleterServer,
@@ -54,8 +53,9 @@ def setUpPackage():
   shared_app = SetUpApp()
   # By default, we use the eclipse project for convenience. This means we don't
   # have to @IsolatedYcmdInDirectory( DEFAULT_PROJECT_DIR ) for every test
-  StartJavaCompleterServerInDirectory( shared_app,
-                                       PathToTestFile( DEFAULT_PROJECT_DIR ) )
+  with IgnoreExtraConfOutsideTestsFolder():
+    StartJavaCompleterServerInDirectory( shared_app,
+                                         PathToTestFile( DEFAULT_PROJECT_DIR ) )
 
 
 def tearDownPackage():
@@ -72,7 +72,7 @@ def StartJavaCompleterServerInDirectory( app, directory ):
                    filepath = os.path.join( directory, 'test.java' ),
                    event_name = 'FileReadyToParse',
                    filetype = 'java' ) )
-  WaitUntilCompleterServerReady( shared_app, 'java', SERVER_STARTUP_TIMEOUT )
+  WaitUntilCompleterServerReady( app, 'java', SERVER_STARTUP_TIMEOUT )
 
 
 def SharedYcmd( test ):
@@ -85,11 +85,12 @@ def SharedYcmd( test ):
   @functools.wraps( test )
   def Wrapper( *args, **kwargs ):
     ClearCompletionsCache()
-    return test( shared_app, *args, **kwargs )
+    with IgnoreExtraConfOutsideTestsFolder():
+      return test( shared_app, *args, **kwargs )
   return Wrapper
 
 
-def IsolatedYcmd( test ):
+def IsolatedYcmd( custom_options = {} ):
   """Defines a decorator to be attached to tests of this package. This decorator
   passes a unique ycmd application as a parameter. It should be used on tests
   that change the server state in a irreversible way (ex: a semantic subserver
@@ -97,48 +98,13 @@ def IsolatedYcmd( test ):
   started, no .ycm_extra_conf.py loaded, etc).
 
   Do NOT attach it to test generators but directly to the yielded tests."""
-  @functools.wraps( test )
-  def Wrapper( *args, **kwargs ):
-    with IsolatedApp() as app:
-      try:
-        test( app, *args, **kwargs )
-      finally:
-        StopCompleterServer( app, 'java' )
-  return Wrapper
-
-
-class PollForMessagesTimeoutException( Exception ):
-  pass
-
-
-def PollForMessages( app, request_data, timeout = 30 ):
-  expiration = time.time() + timeout
-  while True:
-    if time.time() > expiration:
-      raise PollForMessagesTimeoutException(
-        'Waited for diagnostics to be ready for {0} seconds, aborting.'.format(
-          timeout ) )
-
-    default_args = {
-      'filetype'  : 'java',
-      'line_num'  : 1,
-      'column_num': 1,
-    }
-    args = dict( default_args )
-    args.update( request_data )
-
-    response = app.post_json( '/receive_messages', BuildRequest( **args ) ).json
-
-    print( 'poll response: {0}'.format( pformat( response ) ) )
-
-    if isinstance( response, bool ):
-      if not response:
-        raise RuntimeError( 'The message poll was aborted by the server' )
-    elif isinstance( response, list ):
-      for message in response:
-        yield message
-    else:
-      raise AssertionError( 'Message poll response was wrong type: {0}'.format(
-        type( response ).__name__ ) )
-
-    time.sleep( 0.25 )
+  def Decorator( test ):
+    @functools.wraps( test )
+    def Wrapper( *args, **kwargs ):
+      with IsolatedApp( custom_options ) as app:
+        try:
+          test( app, *args, **kwargs )
+        finally:
+          StopCompleterServer( app, 'java' )
+    return Wrapper
+  return Decorator

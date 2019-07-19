@@ -1,4 +1,4 @@
-# Copyright (C) 2013 Google Inc.
+# Copyright (C) 2013-2019 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -25,7 +25,7 @@ import sys
 import os
 
 sys.path.insert( 0, os.path.dirname( os.path.abspath( __file__ ) ) )
-from server_utils import SetUpPythonPath, CompatibleWithCurrentCore
+from server_utils import SetUpPythonPath
 SetUpPythonPath()
 
 # Not installing aliases from python-future; it's unreliable and slow.
@@ -42,7 +42,10 @@ import base64
 
 from ycmd import extra_conf_store, user_options_store, utils
 from ycmd.hmac_plugin import HmacPlugin
-from ycmd.utils import ToBytes, ReadFile, OpenForStdHandle
+from ycmd.utils import ( ImportAndCheckCore,
+                         OpenForStdHandle,
+                         ReadFile,
+                         ToBytes )
 from ycmd.wsgi_server import StoppableWSGIServer
 
 
@@ -160,7 +163,7 @@ def Main():
   YcmCoreSanityCheck()
   extra_conf_store.CallGlobalExtraConfYcmCorePreloadIfExists()
 
-  code = CompatibleWithCurrentCore()
+  code = ImportAndCheckCore()
   if code:
     sys.exit( code )
 

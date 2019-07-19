@@ -73,7 +73,7 @@ def YouCompleteMe_InvalidPythonInterpreterPath_test( post_vim_message ):
       post_vim_message.assert_called_once_with(
         "Unable to start the ycmd server. "
         "Path in 'g:ycm_server_python_interpreter' option does not point "
-        "to a valid Python 2.7 or 3.4+. "
+        "to a valid Python 2.7 or 3.5+. "
         "Correct the error then restart the server with ':YcmRestartServer'." )
 
       post_vim_message.reset_mock()
@@ -100,7 +100,7 @@ def YouCompleteMe_NoPythonInterpreterFound_test( post_vim_message, *args ):
 
       assert_that( ycm.IsServerAlive(), equal_to( False ) )
       post_vim_message.assert_called_once_with(
-        "Unable to start the ycmd server. Cannot find Python 2.7 or 3.4+. "
+        "Unable to start the ycmd server. Cannot find Python 2.7 or 3.5+. "
         "Set the 'g:ycm_server_python_interpreter' option to a Python "
         "interpreter path. "
         "Correct the error then restart the server with ':YcmRestartServer'." )
@@ -214,15 +214,11 @@ def YouCompleteMe_DebugInfo_ServerRunning_test( ycm ):
         'Client logfile: .+\n'
         'Server Python interpreter: .+\n'
         'Server Python version: .+\n'
-        'Server has Clang support compiled in: '
-        '(?P<CLANG>True)?(?(CLANG)|False)\n'
+        'Server has Clang support compiled in: (False|True)\n'
         'Clang version: .+\n'
         'Extra configuration file found and loaded\n'
         'Extra configuration path: .*testdata[/\\\\]\\.ycm_extra_conf\\.py\n'
-        '(?(CLANG)C-family completer debug information:\n'
-        '  Compilation database path: None\n'
-        '  Flags: \\[u?\'_TEMP_FILE_\'.*\\]\n'
-        '  Translation unit: .+\n)'
+        '[\\w\\W]*'
         'Server running at: .+\n'
         'Server process ID: \\d+\n'
         'Server logfiles:\n'

@@ -149,6 +149,14 @@ endif()
 
 #############################################################################
 
+# MSVC has snprintf since version 14 which is newer than what we support.
+# *NOT* defining HAVE_SNPRINTF will break compiling the bundled boost libraries.
+if ( MSVC )
+  add_definitions( -DHAVE_SNPRINTF )
+endif()
+
+#############################################################################
+
 # Force release build by default, speed is of the essence
 if ( NOT CMAKE_BUILD_TYPE )
   set( CMAKE_BUILD_TYPE Release )
@@ -197,20 +205,12 @@ endif()
 
 #############################################################################
 
-# When used with Clang, adding the -std=c++11 flag to CMAKE_CXX_FLAGS will cause
-# the compiler to output a warning during linking:
-#  clang: warning: argument unused during compilation: '-std=c++11'
-# This is caused by cmake passing this flag to the linking stage which it
-# shouldn't do. It's ignored so it does no harm, but the warning is annoying.
-#
-# Putting the flag in add_definitions() works around the issue, even though it
-# shouldn't in theory go there.
 if ( CPP11_AVAILABLE )
   # Cygwin needs its hand held a bit; see issue #473
   if ( CYGWIN AND CMAKE_COMPILER_IS_GNUCXX )
-    add_definitions( -std=gnu++11 )
+    set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=gnu++11" )
   elseif( NOT MSVC )
-    add_definitions( -std=c++11 )
+    set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11" )
   endif()
 else()
   # Platform-specific advice goes here. In particular, we have plenty of users
@@ -253,8 +253,8 @@ if ( USE_PYTHON2 )
       "necessary python2 headers & libraries." )
   endif()
 else()
-  set( Python_ADDITIONAL_VERSIONS 3.7 3.6 3.5 3.4 )
-  find_package( PythonLibs 3.4 REQUIRED )  # 3.4 is ONLY the mininum
+  set( Python_ADDITIONAL_VERSIONS 3.7 3.6 3.5 )
+  find_package( PythonLibs 3.5 REQUIRED )  # 3.5 is ONLY the mininum
 endif()
 
 #############################################################################

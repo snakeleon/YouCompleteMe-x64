@@ -1,9 +1,7 @@
 ycmd: a code-completion & comprehension server
 ==============================================
 
-[![Linux build status](https://img.shields.io/travis/Valloric/ycmd/master.svg?label=Linux)](https://travis-ci.org/Valloric/ycmd)
-[![macOS build status](https://img.shields.io/circleci/project/github/Valloric/ycmd/master.svg?label=macOS)](https://circleci.com/gh/Valloric/ycmd)
-[![Windows build status](https://img.shields.io/appveyor/ci/Valloric/ycmd/master.svg?label=Windows)](https://ci.appveyor.com/project/Valloric/ycmd)
+[![Build status](https://dev.azure.com/YouCompleteMe/YCM/_apis/build/status/Valloric.ycmd?branchName=master)](https://dev.azure.com/YouCompleteMe/YCM/_build/latest?definitionId=2&branchName=master)
 [![Coverage status](https://img.shields.io/codecov/c/github/Valloric/ycmd/master.svg)](https://codecov.io/gh/Valloric/ycmd)
 
 ycmd is a server that provides APIs for code-completion and other
@@ -41,7 +39,7 @@ tests][test-setup].**
 
 This is all for Ubuntu Linux. Details on getting ycmd running on other OS's can
 be found in [YCM's instructions][ycm-install] (ignore the Vim-specific parts).
-Note that **ycmd runs on Python 2.7.1+ and 3.4+.**
+Note that **ycmd runs on Python 2.7.1+ and 3.5.1+.**
 
 First, install the minimal dependencies:
 ```
@@ -52,7 +50,6 @@ Next, install the language specific dependencies you need:
 - `sudo apt install golang-go` for Go.
 - `sudo apt install npm` for JavaScript and TypeScript.
 - `sudo apt install mono-devel` for C#.
-- install Cargo and rustc with [rustup][] for Rust.
 - `sudo apt install openjdk-8-jre` for Java.
 
 When you first clone the repository you'll need to update the submodules:
@@ -98,12 +95,14 @@ provided previously and any tags files produced by ctags. This engine is
 non-semantic.
 
 There are also several semantic engines in YCM. There's a libclang-based
-completer that provides semantic completion for C-family languages.  There's
-also a Jedi-based completer for semantic completion for Python, an
-OmniSharp-based completer for C#, a [Gocode][gocode]-based completer for Go
-(using [Godef][godef] for jumping to definitions), a TSServer-based completer
-for JavaScript and TypeScript, and a [jdt.ls][jdtls]-based server for Java. More
-will be added with time.
+completer and [clangd][clangd]-based completer that both provide semantic
+completion for C-family languages. [clangd][clangd] support is currently
+**experimental** and changes in the near future might break backwards
+compatibility. There's also a Jedi-based completer for semantic completion for
+Python, an OmniSharp-based completer for C#, a [Gocode][gocode]-based completer
+for Go (using [Godef][godef] for jumping to definitions), a TSServer-based
+completer for JavaScript and TypeScript, a [jdt.ls][jdtls]-based server for
+Java, and a [RLS][]-based completer for Rust.  More will be added with time.
 
 There are also other completion engines, like the filepath completer (part of
 the identifier completer).
@@ -183,8 +182,8 @@ of the following return codes if unsuccessful:
 
 - 3: unexpected error while loading the library;
 - 4: the `ycm_core` library is missing;
-- 5: the `ycm_core` library is compiled for Python 3 but loaded in Python 2;
-- 6: the `ycm_core` library is compiled for Python 2 but loaded in Python 3;
+- 5: the `ycm_core` library is compiled for Python 2 but loaded in Python 3;
+- 6: the `ycm_core` library is compiled for Python 3 but loaded in Python 2;
 - 7: the version of the `ycm_core` library is outdated.
 
 User-level customization
@@ -216,8 +215,8 @@ The `.ycm_extra_conf.py` module may define the following functions:
 #### `Settings( **kwargs )`
 
 This function allows users to configure the language completers on a per project
-basis or globally. Currently, it is required by the C-family completer and
-optional for the Python completer. The following arguments can be retrieved from
+basis or globally. Currently, it is required by the libclang-based completer and
+optional for other completers. The following arguments can be retrieved from
 the `kwargs` dictionary and are common to all completers:
 
 - `language`: an identifier of the completer that called the function. Its value
@@ -230,7 +229,7 @@ the `kwargs` dictionary and are common to all completers:
     language = kwargs[ 'language' ]
     if language == 'cfamily':
       return {
-        # Settings for the C-family completer.
+        # Settings for the libclang and clangd-based completer.
       }
     if language == 'python':
       return {
@@ -239,35 +238,87 @@ the `kwargs` dictionary and are common to all completers:
     return {}
   ```
 
+- `filename`: absolute path of the file currently edited.
+
 - `client_data`: any additional data supplied by the client application.
   See the [YouCompleteMe documentation][extra-conf-vim-data-doc] for an
   example.
 
 The return value is a dictionary whose content depends on the completer.
 
+#### LSP based completers
+
+LSP servers often support user configuration via the initialise request. These
+are usually presented as options in the UI. Ycmd supports this using the
+`.ycm_extra_conf.py` by allowing the user to specify the exact dictionary of
+settings that are passed in the server initialise message. These options are
+returned from `Settings` under the `ls` key. The python dictionary is converted
+to json and included verbatim in the LSP initialize request. In order to
+determine the set of options for a server, consult the server's documentation or
+`package.json` file.
+
+Example of LSP configuration:
+```python
+def Settings( **kwargs ):
+  if kwargs[ 'language' ] == 'java':
+    return { 'ls': { 'java.rename.enabled' : False } }
+```
+
+In addition, ycmd can use any language server, given a file type and a command
+line. A user option `language_server` can be used to plug in a LSP server ycmd
+wouldn't usually know about. The value is a list of dictionaries containing:
+
+- `name`: the string representing the name of the server
+- `cmdline`: the list representing the command line to execute the server
+- `filetypes`: list of supported filetypes.
+
+```json
+{
+  "language_server": [ {
+    "name": "gopls",
+    "cmdline": [ "/path/to/gopls", "-rpc.trace" ],
+    "filetypes": [ "go" ]
+  } ]
+}
+```
+
+When plugging in a completer in this way, the `kwargs[ 'language' ]` will be set
+to the value of the `name` key, i.e. `gopls` in the above example.
+
+LSP completers currecntly supported without `language_server`:
+
+- Java
+- Rust
+- Go
+- C-family
+
 ##### C-family settings
 
-The `Settings` function is called by the C-family completer to get the compiler
-flags to use when compiling the current file. The absolute path of this file is
-accessible under the `filename` key of the `kwargs` dictionary.
+The `Settings` function is called by the libclang and clangd-based completers to
+get the compiler flags to use when compiling the current file. The absolute path
+of this file is accessible under the `filename` key of the `kwargs` dictionary.
 
-The return value expected by the completer is a dictionary containing the
+The return value expected by both completers is a dictionary containing the
 following items:
 
-- `flags`: (mandatory) a list of compiler flags.
+- `flags`: (mandatory for libclang, optional for clangd) a list of compiler
+  flags.
 
-- `include_paths_relative_to_dir`: (optional) the directory to which the
-  include paths in the list of flags are relative. Defaults to ycmd working
-  directory.
-
-- `override_filename`: (optional) a string indicating the name of the file to
-  parse as the translation unit for the supplied file name. This fairly
-  advanced feature allows for projects that use a 'unity'-style build, or
-  for header files which depend on other includes in other files.
+- `include_paths_relative_to_dir`: (optional) the directory to which the include
+  paths in the list of flags are relative. Defaults to ycmd working directory
+  for the libclang completer and `.ycm_extra_conf.py`'s directory for the
+  clangd completer.
 
 - `do_cache`: (optional) a boolean indicating whether or not the result of
   this call (i.e. the list of flags) should be cached for this file name.
   Defaults to `True`. If unsure, the default is almost always correct.
+
+The libclang-based completer also supports the following items:
+
+- `override_filename`: (optional) a string indicating the name of the file to
+  parse as the translation unit for the supplied file name. This fairly advanced
+  feature allows for projects that use a 'unity'-style build, or for header
+  files which depend on other includes in other files.
 
 - `flags_ready`: (optional) a boolean indicating that the flags should be
   used. Defaults to `True`. If unsure, the default is almost always correct.
@@ -388,7 +439,7 @@ License
 -------
 
 This software is licensed under the [GPL v3 license][gpl].
-© 2015-2018 ycmd contributors
+© 2015-2019 ycmd contributors
 
 [ycmd-users]: https://groups.google.com/forum/?hl=en#!forum/ycmd-users
 [ycm]: http://valloric.github.io/YouCompleteMe/
@@ -423,4 +474,5 @@ This software is licensed under the [GPL v3 license][gpl].
 [jdtls]: https://github.com/eclipse/eclipse.jdt.ls
 [api-docs]: https://valloric.github.io/ycmd/
 [ycmd-extra-conf]: https://github.com/Valloric/ycmd/blob/master/.ycm_extra_conf.py
-[rustup]: https://www.rustup.rs/
+[clangd]: https://clang.llvm.org/extra/clangd.html
+[RLS]: https://github.com/rust-lang-nursery/rls

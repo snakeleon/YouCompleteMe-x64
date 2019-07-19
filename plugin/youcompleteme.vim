@@ -58,7 +58,7 @@ elseif ( v:version > 800 || ( v:version == 800 && has( 'patch1436' ) ) ) &&
      \ !has( 'python_compiled' ) && !has( 'python3_compiled' )
   echohl WarningMsg |
         \ echomsg "YouCompleteMe unavailable: requires Vim compiled with " .
-        \ "Python (2.7.1+ or 3.4+) support." |
+        \ "Python (2.7.1+ or 3.5.1+) support." |
         \ echohl None
   call s:restore_cpo()
   finish
@@ -91,7 +91,6 @@ let g:ycm_filetype_whitelist =
 let g:ycm_filetype_blacklist =
       \ get( g:, 'ycm_filetype_blacklist', {
       \   'tagbar': 1,
-      \   'qf': 1,
       \   'notes': 1,
       \   'markdown': 1,
       \   'netrw': 1,
@@ -258,21 +257,27 @@ let g:ycm_use_ultisnips_completer =
 let g:ycm_csharp_server_port =
       \ get( g:, 'ycm_csharp_server_port', 0 )
 
+let g:ycm_use_clangd =
+      \ get( g:, 'ycm_use_clangd', 1 )
+
+let g:ycm_clangd_binary_path =
+      \ get( g:, 'ycm_clangd_binary_path', '' )
+
+let g:ycm_clangd_args =
+      \ get( g:, 'ycm_clangd_args', [] )
+
+let g:ycm_clangd_uses_ycmd_caching =
+      \ get( g:, 'ycm_clangd_uses_ycmd_caching', 1 )
+
 " These options are not documented.
-let g:ycm_gocode_binary_path =
-      \ get( g:, 'ycm_gocode_binary_path', '' )
-
-let g:ycm_godef_binary_path =
-      \ get( g:, 'ycm_godef_binary_path', '' )
-
-let g:ycm_rust_src_path =
-      \ get( g:, 'ycm_rust_src_path', '' )
-
-let g:ycm_racerd_binary_path =
-      \ get( g:, 'ycm_racerd_binary_path', '' )
+let g:ycm_java_jdtls_extension_path =
+      \ get( g:, 'ycm_java_jdtls_extension_path', [] )
 
 let g:ycm_java_jdtls_use_clean_workspace =
       \ get( g:, 'ycm_java_jdtls_use_clean_workspace', 1 )
+
+let g:ycm_java_jdtls_workspace_root_path =
+      \ get( g:, 'ycm_java_jdtls_workspace_root_path', '' )
 
 " This option is deprecated.
 let g:ycm_python_binary_path =

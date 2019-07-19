@@ -1,6 +1,6 @@
 # encoding: utf-8
 #
-# Copyright (C) 2017-2018 ycmd contributors
+# Copyright (C) 2017-2019 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -93,23 +93,23 @@ def RunTest( app, test ):
 
 
 PUBLIC_OBJECT_METHODS = [
-  CompletionEntryMatcher( 'equals', 'Object', { 'kind': 'Function' } ),
-  CompletionEntryMatcher( 'getClass', 'Object', { 'kind': 'Function' } ),
-  CompletionEntryMatcher( 'hashCode', 'Object', { 'kind': 'Function' } ),
-  CompletionEntryMatcher( 'notify', 'Object', { 'kind': 'Function' } ),
-  CompletionEntryMatcher( 'notifyAll', 'Object', { 'kind': 'Function' } ),
-  CompletionEntryMatcher( 'toString', 'Object', { 'kind': 'Function' } ),
+  CompletionEntryMatcher( 'equals', 'Object', { 'kind': 'Method' } ),
+  CompletionEntryMatcher( 'getClass', 'Object', { 'kind': 'Method' } ),
+  CompletionEntryMatcher( 'hashCode', 'Object', { 'kind': 'Method' } ),
+  CompletionEntryMatcher( 'notify', 'Object', { 'kind': 'Method' } ),
+  CompletionEntryMatcher( 'notifyAll', 'Object', { 'kind': 'Method' } ),
+  CompletionEntryMatcher( 'toString', 'Object', { 'kind': 'Method' } ),
   CompletionEntryMatcher( 'wait', 'Object', {
     'menu_text': matches_regexp( 'wait\\(long .*, int .*\\) : void' ),
-    'kind': 'Function',
+    'kind': 'Method',
   } ),
   CompletionEntryMatcher( 'wait', 'Object', {
     'menu_text': matches_regexp( 'wait\\(long .*\\) : void' ),
-    'kind': 'Function',
+    'kind': 'Method',
   } ),
   CompletionEntryMatcher( 'wait', 'Object', {
     'menu_text': 'wait() : void',
-    'kind': 'Function',
+    'kind': 'Method',
   } ),
 ]
 
@@ -180,6 +180,35 @@ def GetCompletions_WithQuery_test( app ):
       } )
     },
   } )
+
+
+@SharedYcmd
+def GetCompletions_DetailFromCache_test( app ):
+  for i in range( 0, 2 ):
+    RunTest( app, {
+      'description': 'completion works when the elements come from the cache',
+      'request': {
+        'filetype'  : 'java',
+        'filepath'  : ProjectPath( 'TestLauncher.java' ),
+        'line_num'  : 32,
+        'column_num': 15,
+      },
+      'expect': {
+        'response': requests.codes.ok,
+        'data': has_entries( {
+          'completion_start_column': 11,
+          'completions': has_item(
+            CompletionEntryMatcher( 'doSomethingVaguelyUseful',
+                                    'AbstractTestWidget', {
+                                      'kind': 'Method',
+                                      'menu_text':
+                                        'doSomethingVaguelyUseful() : void',
+                                    } )
+          ),
+          'errors': empty(),
+        } )
+      },
+    } )
 
 
 @SharedYcmd
@@ -259,11 +288,11 @@ def GetCompletions_Import_Classes_test( app ):
           } ),
           CompletionEntryMatcher( 'Waggle;', None, {
             'menu_text': 'Waggle - com.test.wobble',
-            'kind': 'Class',
+            'kind': 'Interface',
           } ),
           CompletionEntryMatcher( 'Wibble;', None, {
             'menu_text': 'Wibble - com.test.wobble',
-            'kind': 'Class',
+            'kind': 'Enum',
           } ),
         ),
         'errors': empty(),
@@ -321,33 +350,15 @@ def GetCompletions_WithFixIt_test( app ):
         'completions': contains_inanyorder(
           CompletionEntryMatcher( 'CUTHBERT', 'com.test.wobble.Wibble',
           {
-            'kind': 'Field',
+            'kind': 'EnumMember',
             'extra_data': has_entries( {
               'fixits': contains( has_entries( {
                 'chunks': contains(
-                  # For some reason, jdtls feels it's OK to replace the text
-                  # before the cursor. Perhaps it does this to canonicalise the
-                  # path ?
                   ChunkMatcher( 'Wibble',
                                 LocationMatcher( filepath, 19, 15 ),
                                 LocationMatcher( filepath, 19, 21 ) ),
-                  # When doing an import, eclipse likes to add two newlines
-                  # after the package. I suppose this is config in real eclipse,
-                  # but there's no mechanism to configure this in jdtl afaik.
-                  ChunkMatcher( '\n\n',
-                                LocationMatcher( filepath, 1, 18 ),
-                                LocationMatcher( filepath, 1, 18 ) ),
                   # OK, so it inserts the import
-                  ChunkMatcher( 'import com.test.wobble.Wibble;',
-                                LocationMatcher( filepath, 1, 18 ),
-                                LocationMatcher( filepath, 1, 18 ) ),
-                  # More newlines. Who doesn't like newlines?!
-                  ChunkMatcher( '\n\n',
-                                LocationMatcher( filepath, 1, 18 ),
-                                LocationMatcher( filepath, 1, 18 ) ),
-                  # For reasons known only to the eclipse JDT developers, it
-                  # seems to want to delete the lines after the package first.
-                  ChunkMatcher( '',
+                  ChunkMatcher( '\n\nimport com.test.wobble.Wibble;\n\n',
                                 LocationMatcher( filepath, 1, 18 ),
                                 LocationMatcher( filepath, 3, 1 ) ),
                 ),
@@ -480,7 +491,7 @@ def GetCompletions_ResolveFailed_test( app ):
 
 
 @SharedYcmd
-def Subcommands_ServerNotReady_test( app ):
+def GetCompletions_ServerNotInitialized_test( app ):
   filepath = PathToTestFile( 'simple_eclipse_project',
                              'src',
                              'com',
@@ -489,7 +500,7 @@ def Subcommands_ServerNotReady_test( app ):
 
   completer = handlers._server_state.GetFiletypeCompleter( [ 'java' ] )
 
-  with patch.object( completer, 'ServerIsReady', return_value = False ):
+  with patch.object( completer, '_ServerIsInitialized', return_value = False ):
     RunTest( app, {
       'description': 'Completion works for unicode identifier',
       'request': {
@@ -511,9 +522,10 @@ def Subcommands_ServerNotReady_test( app ):
 
 
 @SharedYcmd
-def GetCompletions_MoreThan100NoResolve_test( app ):
+def GetCompletions_MoreThan100FilteredResolve_test( app ):
   RunTest( app, {
-    'description': 'We guess the right start codepoint without resolving',
+    'description': 'More that 100 match, but filtered set is fewer as this '
+                   'depends on max_num_candidates',
     'request': {
       'filetype'  : 'java',
       'filepath'  : ProjectPath( 'TestLauncher.java' ),
@@ -524,8 +536,9 @@ def GetCompletions_MoreThan100NoResolve_test( app ):
       'response': requests.codes.ok,
       'data': has_entries( {
         'completions': has_item(
-          CompletionEntryMatcher( 'com.youcompleteme', None, {
-            'kind': 'Module'
+          CompletionEntryMatcher( 'com.youcompleteme.*;', None, {
+            'kind': 'Module',
+            'detailed_info': 'com.youcompleteme\n\n',
           } ),
         ),
         'completion_start_column': 8,
@@ -626,7 +639,7 @@ def GetCompletions_ForceAtTopLevel_WithImport_test( app ):
       'filetype'  : 'java',
       'filepath'  : filepath,
       'line_num'  : 34,
-      'column_num': 15,
+      'column_num': 16,
       'force_semantic': True,
     },
     'expect': {
@@ -639,16 +652,7 @@ def GetCompletions_ForceAtTopLevel_WithImport_test( app ):
             'extra_data': has_entries( {
               'fixits': contains( has_entries( {
                 'chunks': contains(
-                  ChunkMatcher( '\n\n',
-                                LocationMatcher( filepath, 1, 18 ),
-                                LocationMatcher( filepath, 1, 18 ) ),
-                  ChunkMatcher( 'import java.io.InputStreamReader;',
-                                LocationMatcher( filepath, 1, 18 ),
-                                LocationMatcher( filepath, 1, 18 ) ),
-                  ChunkMatcher( '\n\n',
-                                LocationMatcher( filepath, 1, 18 ),
-                                LocationMatcher( filepath, 1, 18 ) ),
-                  ChunkMatcher( '',
+                  ChunkMatcher( '\n\nimport java.io.InputStreamReader;\n\n',
                                 LocationMatcher( filepath, 1, 18 ),
                                 LocationMatcher( filepath, 3, 1 ) ),
                 ),
@@ -660,4 +664,32 @@ def GetCompletions_ForceAtTopLevel_WithImport_test( app ):
         'errors': empty(),
       } )
     },
+  } )
+
+
+@SharedYcmd
+def GetCompletions_UseServerTriggers_test( app ):
+  filepath = ProjectPath( 'TestWidgetImpl.java' )
+
+  RunTest( app, {
+    'description': 'We use the semantic triggers from the server (@ here)',
+    'request': {
+      'filetype'  : 'java',
+      'filepath'  : filepath,
+      'line_num'  : 24,
+      'column_num': 7,
+      'force_semantic': False,
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': has_entries( {
+        'completion_start_column': 4,
+        'completions': has_item(
+          CompletionEntryMatcher( 'Override', None, {
+            'kind': 'Interface',
+            'menu_text': 'Override - java.lang',
+          } )
+        )
+      } )
+    }
   } )

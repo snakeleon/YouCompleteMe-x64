@@ -27,7 +27,7 @@ from builtins import *  # noqa
 from ycm.tests import PathToTestFile
 from ycm.tests.test_utils import ( CurrentWorkingDirectory, ExtendedMock,
                                    MockVimBuffers, MockVimModule, Version,
-                                   VimBuffer, VimError )
+                                   VimBuffer, VimError, WindowsAndMacOnly )
 MockVimModule()
 
 from ycm import vimsupport
@@ -165,7 +165,11 @@ def OpenLocationList_test( vim_command, fitting_height, variable_exists ):
   vimsupport.OpenLocationList( focus = False, autoclose = True )
   vim_command.assert_has_exact_calls( [
     call( 'lopen' ),
-    call( 'au WinLeave <buffer> q' ),
+    call( 'augroup ycmlocation' ),
+    call( 'autocmd! * <buffer>' ),
+    call( 'autocmd WinLeave <buffer> '
+          'if bufnr( "%" ) == expand( "<abuf>" ) | q | endif' ),
+    call( 'augroup END' ),
     call( 'doautocmd User YcmLocationOpened' ),
     call( 'silent! wincmd p' )
   ] )
@@ -1369,6 +1373,24 @@ def AddDiagnosticSyntaxMatch_UnicodeAtEndOfLine_test():
     )
 
 
+def AddDiagnosticSyntaxMatch_NonPositivePosition_test():
+  current_buffer = VimBuffer(
+    'some_file',
+    contents = [ 'Some contents' ]
+  )
+
+  with patch( 'vim.current.buffer', current_buffer ):
+    assert_that(
+      vimsupport.GetDiagnosticMatchPattern( 0, 0, 0, 0 ),
+      equal_to( '\\%1l\\%1c\\_.\\{-}\\%1l\\%1c' )
+    )
+
+    assert_that(
+      vimsupport.GetDiagnosticMatchPattern( -1, -2, -3, -4 ),
+      equal_to( '\\%1l\\%1c\\_.\\{-}\\%1l\\%1c' )
+    )
+
+
 @patch( 'vim.command', new_callable=ExtendedMock )
 @patch( 'vim.current', new_callable=ExtendedMock )
 def WriteToPreviewWindow_test( vim_current, vim_command ):
@@ -1848,6 +1870,35 @@ def JumpToLocation_DifferentFile_Split_CurrentTab_AlreadyOpened_test(
     assert_that( vim.current.tabpage, equal_to( current_tab ) )
     assert_that( vim.current.window, equal_to( different_window ) )
     assert_that( vim.current.window.cursor, equal_to( ( 2, 4 ) ) )
+    vim_command.assert_has_exact_calls( [
+      call( 'normal! m\'' ),
+      call( 'normal! zz' )
+    ] )
+
+
+@WindowsAndMacOnly
+@patch( 'vim.command', new_callable = ExtendedMock )
+def JumpToLocation_DifferentFile_Split_CurrentTab_AlreadyOpened_Case_test(
+    vim_command ):
+
+  current_buffer = VimBuffer( 'current_buffer' )
+  different_buffer = VimBuffer( 'AnotHer_buFfeR' )
+  current_window = MagicMock( buffer = current_buffer )
+  different_window = MagicMock( buffer = different_buffer )
+  current_tab = MagicMock( windows = [ current_window, different_window ] )
+  with MockVimBuffers( [ current_buffer, different_buffer ],
+                       [ current_buffer ] ) as vim:
+    vim.current.tabpage = current_tab
+
+    vimsupport.JumpToLocation( os.path.realpath( 'anOther_BuffEr' ),
+                               4,
+                               1,
+                               'belowright',
+                               'split-or-existing-window' )
+
+    assert_that( vim.current.tabpage, equal_to( current_tab ) )
+    assert_that( vim.current.window, equal_to( different_window ) )
+    assert_that( vim.current.window.cursor, equal_to( ( 4, 0 ) ) )
     vim_command.assert_has_exact_calls( [
       call( 'normal! m\'' ),
       call( 'normal! zz' )

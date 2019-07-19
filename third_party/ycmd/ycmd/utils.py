@@ -1,6 +1,6 @@
 # encoding: utf-8
 #
-# Copyright (C) 2011-2018 ycmd contributors
+# Copyright (C) 2011-2019 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -25,7 +25,6 @@ from __future__ import absolute_import
 from builtins import *  # noqa
 
 from future.utils import PY2, native
-import collections
 import copy
 import json
 import logging
@@ -37,7 +36,11 @@ import tempfile
 import time
 import threading
 
-_logger = logging.getLogger( __name__ )
+LOGGER = logging.getLogger( 'ycmd' )
+ROOT_DIR = os.path.normpath( os.path.join( os.path.dirname( __file__ ), '..' ) )
+DIR_OF_THIRD_PARTY = os.path.join( ROOT_DIR, 'third_party' )
+LIBCLANG_DIR = os.path.join( DIR_OF_THIRD_PARTY, 'clang', 'lib' )
+
 
 # Idiom to import pathname2url, url2pathname, urljoin, and urlparse on Python 2
 # and 3. By exposing these functions here, we can import them directly from this
@@ -46,9 +49,11 @@ _logger = logging.getLogger( __name__ )
 #   from ycmd.utils import pathname2url, url2pathname, urljoin, urlparse
 #
 if PY2:
+  from collections import Mapping
   from urlparse import urljoin, urlparse, unquote
   from urllib import pathname2url, url2pathname, quote
 else:
+  from collections.abc import Mapping  # noqa
   from urllib.parse import urljoin, urlparse, unquote, quote  # noqa
   from urllib.request import pathname2url, url2pathname  # noqa
 
@@ -69,6 +74,45 @@ except ImportError: # pragma: no cover
 CREATE_NO_WINDOW = 0x08000000
 
 EXECUTABLE_FILE_MASK = os.F_OK | os.X_OK
+
+CORE_MISSING_ERROR_REGEX = re.compile( "No module named '?ycm_core'?" )
+CORE_PYTHON2_ERROR_REGEX = re.compile(
+  'dynamic module does not define (?:init|module export) '
+  'function \\(PyInit_ycm_core\\)|'
+  'Module use of python2[0-9]\\.dll conflicts with this version of Python\\.$' )
+CORE_PYTHON3_ERROR_REGEX = re.compile(
+  'dynamic module does not define init function \\(initycm_core\\)|'
+  'Module use of python3[0-9]\\.dll conflicts with this version of Python\\.$' )
+
+CORE_MISSING_MESSAGE = (
+  'ycm_core library not detected; you need to compile it by running the '
+  'build.py script. See the documentation for more details.' )
+CORE_PYTHON2_MESSAGE = (
+  'ycm_core library compiled for Python 2 but loaded in Python 3.' )
+CORE_PYTHON3_MESSAGE = (
+  'ycm_core library compiled for Python 3 but loaded in Python 2.' )
+CORE_OUTDATED_MESSAGE = (
+  'ycm_core library too old; PLEASE RECOMPILE by running the build.py script. '
+  'See the documentation for more details.' )
+
+# Exit statuses returned by the CompatibleWithCurrentCore function:
+#  - CORE_COMPATIBLE_STATUS: ycm_core is compatible;
+#  - CORE_UNEXPECTED_STATUS: unexpected error while loading ycm_core;
+#  - CORE_MISSING_STATUS   : ycm_core is missing;
+#  - CORE_PYTHON2_STATUS   : ycm_core is compiled with Python 2 but loaded with
+#    Python 3;
+#  - CORE_PYTHON3_STATUS   : ycm_core is compiled with Python 3 but loaded with
+#    Python 2;
+#  - CORE_OUTDATED_STATUS  : ycm_core version is outdated.
+# Values 1 and 2 are not used because 1 is for general errors and 2 has often a
+# special meaning for Unix programs. See
+# https://docs.python.org/2/library/sys.html#sys.exit
+CORE_COMPATIBLE_STATUS  = 0
+CORE_UNEXPECTED_STATUS  = 3
+CORE_MISSING_STATUS     = 4
+CORE_PYTHON2_STATUS     = 5
+CORE_PYTHON3_STATUS     = 6
+CORE_OUTDATED_STATUS    = 7
 
 
 # Python 3 complains on the common open(path).read() idiom because the file
@@ -92,6 +136,17 @@ def OpenForStdHandle( filepath ):
   if PY2:
     return open( filepath, mode = 'wb', buffering = 0 )
   return open( filepath, mode = 'w', buffering = 1 )
+
+
+def MakeSafeFileNameString( s ):
+  """Return a representation of |s| that is safe for use in a file name.
+  Explicitly, returns s converted to lowercase with all non alphanumeric
+  characters replaced with '_'."""
+  def is_ascii( c ):
+    return ord( c ) < 128
+
+  return "".join( c if c.isalnum() and is_ascii( c ) else '_'
+                  for c in ToUnicode( s ).lower() )
 
 
 def CreateLogfile( prefix = '' ):
@@ -496,7 +551,7 @@ def StartThread( func, *args ):
   return thread
 
 
-class HashableDict( collections.Mapping ):
+class HashableDict( Mapping ):
   """An immutable dictionary that can be used in dictionary's keys. The
   dictionary must be JSON-encodable; in particular, all keys must be strings."""
 
@@ -541,7 +596,7 @@ def ListDirectory( path ):
     # Path must be a Unicode string to get Unicode strings out of listdir.
     return os.listdir( ToUnicode( path ) )
   except Exception:
-    _logger.exception( 'Error while listing %s folder.', path )
+    LOGGER.exception( 'Error while listing %s folder', path )
     return []
 
 
@@ -549,5 +604,70 @@ def GetModificationTime( path ):
   try:
     return os.path.getmtime( path )
   except OSError:
-    _logger.exception( 'Cannot get modification time for path %s.', path )
+    LOGGER.exception( 'Cannot get modification time for path %s', path )
     return 0
+
+
+def ExpectedCoreVersion():
+  return int( ReadFile( os.path.join( ROOT_DIR, 'CORE_VERSION' ) ) )
+
+
+def LoadYcmCoreDependencies():
+  for name in ListDirectory( LIBCLANG_DIR ):
+    if name.startswith( 'libclang' ):
+      libclang_path = os.path.join( LIBCLANG_DIR, name )
+      if os.path.isfile( libclang_path ):
+        import ctypes
+        ctypes.cdll.LoadLibrary( libclang_path )
+        return
+
+
+def ImportCore():
+  """Imports and returns the ycm_core module. This function exists for easily
+  mocking this import in tests."""
+  import ycm_core as ycm_core
+  return ycm_core
+
+
+def ImportAndCheckCore():
+  """Checks if ycm_core library is compatible and returns with an exit
+  status."""
+  try:
+    LoadYcmCoreDependencies()
+    ycm_core = ImportCore()
+  except ImportError as error:
+    message = str( error )
+    if CORE_MISSING_ERROR_REGEX.match( message ):
+      LOGGER.exception( CORE_MISSING_MESSAGE )
+      return CORE_MISSING_STATUS
+    if CORE_PYTHON2_ERROR_REGEX.match( message ):
+      LOGGER.exception( CORE_PYTHON2_MESSAGE )
+      return CORE_PYTHON2_STATUS
+    if CORE_PYTHON3_ERROR_REGEX.match( message ):
+      LOGGER.exception( CORE_PYTHON3_MESSAGE )
+      return CORE_PYTHON3_STATUS
+    LOGGER.exception( message )
+    return CORE_UNEXPECTED_STATUS
+
+  try:
+    current_core_version = ycm_core.YcmCoreVersion()
+  except AttributeError:
+    LOGGER.exception( CORE_OUTDATED_MESSAGE )
+    return CORE_OUTDATED_STATUS
+
+  if ExpectedCoreVersion() != current_core_version:
+    LOGGER.error( CORE_OUTDATED_MESSAGE )
+    return CORE_OUTDATED_STATUS
+
+  return CORE_COMPATIBLE_STATUS
+
+
+def GetClangResourceDir():
+  resource_dir = os.path.join( LIBCLANG_DIR, 'clang' )
+  for version in ListDirectory( resource_dir ):
+    return os.path.join( resource_dir, version )
+
+  raise RuntimeError( 'Cannot find Clang resource directory.' )
+
+
+CLANG_RESOURCE_DIR = GetClangResourceDir()

@@ -22,7 +22,7 @@ from distutils.spawn import find_executable
 
 try:
   import lzma
-except:
+except ImportError:
   from backports import lzma
 
 DIR_OF_THIS_SCRIPT = p.dirname( p.abspath( __file__ ) )
@@ -36,7 +36,14 @@ def GetStandardLibraryIndexInSysPath():
   raise RuntimeError( 'Could not find standard library path in Python path.' )
 
 
-sys.path.insert( 0, p.abspath( p.join( DIR_OF_THIRD_PARTY, 'requests' ) ) )
+sys.path[ 0:0 ] = [ p.join( DIR_OF_THIRD_PARTY, 'requests_deps', 'requests' ),
+                    p.join( DIR_OF_THIRD_PARTY,
+                            'requests_deps',
+                            'urllib3',
+                            'src' ),
+                    p.join( DIR_OF_THIRD_PARTY, 'requests_deps', 'chardet' ),
+                    p.join( DIR_OF_THIRD_PARTY, 'requests_deps', 'certifi' ),
+                    p.join( DIR_OF_THIRD_PARTY, 'requests_deps', 'idna' ) ]
 sys.path.insert( GetStandardLibraryIndexInSysPath() + 1,
                  p.abspath( p.join( DIR_OF_THIRD_PARTY, 'python-future',
                                     'src' ) ) )
@@ -257,8 +264,8 @@ def UploadBundleToBintray( user_name,
       headers = {
         'X-Bintray-Package': 'libclang',
         'X-Bintray-Version': version,
-        'X-Bintray-Publish': 1,
-        'X-Bintray-Override': 1,
+        'X-Bintray-Publish': '1',
+        'X-Bintray-Override': '1',
       } )
     request.raise_for_status()
 
@@ -400,7 +407,7 @@ def UpdateClangHeaders( args, temp_dir ):
 
   print( 'Updating Clang headers...' )
   includes_dir = os.path.join(
-    DIR_OF_THIS_SCRIPT, 'clang_includes', 'include' )
+    DIR_OF_THIRD_PARTY, 'clang', 'lib', 'clang', args.version, 'include' )
   Overwrite( os.path.join( src, 'lib', 'Headers' ), includes_dir )
   os.remove( os.path.join( includes_dir, 'CMakeLists.txt' ) )
 
@@ -415,7 +422,7 @@ def Main():
   output_dir = args.output_dir if args.output_dir else tempfile.mkdtemp()
 
   try:
-    hashes = dict()
+    hashes = {}
     with TemporaryDirectory() as temp_dir:
       license_file_name = DownloadClangLicense( args.version, temp_dir )
       for os_name, download_data in iteritems( LLVM_DOWNLOAD_DATA ):

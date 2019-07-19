@@ -1,4 +1,4 @@
-# Copyright (C) 2011-2018 ycmd contributors
+# Copyright (C) 2011-2019 ycmd contributors
 #
 # This file is part of YouCompleteMe.
 #
@@ -30,54 +30,53 @@ if ( USE_CLANG_COMPLETER AND
      NOT PATH_TO_LLVM_ROOT AND
      NOT EXTERNAL_LIBCLANG_PATH )
 
-  set( CLANG_VERSION 7.0.0 )
+  set( CLANG_VERSION 8.0.0 )
 
   if ( APPLE )
     set( LIBCLANG_DIRNAME "libclang-${CLANG_VERSION}-x86_64-apple-darwin" )
     set( LIBCLANG_SHA256
-         "db84d5a622390300af76d73221ffba8c6923a477bce069e85763c046b207eb80" )
+         "0900559a7aff8a1156949a53b811d6711f8493938e47f0587c2e5e6a5c4972e8" )
   elseif ( WIN32 )
     if( 64_BIT_PLATFORM )
       set( LIBCLANG_DIRNAME "libclang-${CLANG_VERSION}-win64" )
       set( LIBCLANG_SHA256
-           "a9f2a1641bcb195f5ccdfff6d2bc88fc1777fe4bd4e194243d8b232b5221f9c2" )
+           "8f4387a734b664330ecbea1a0edd9871c1040e56180aaeb775d6a9c3dec9484d" )
     else()
       set( LIBCLANG_DIRNAME "libclang-${CLANG_VERSION}-win32" )
       set( LIBCLANG_SHA256
-           "141726ed3cef0bc5319eafa9843ca6dc5863514823803dbc33b978f8045d9a2d" )
+           "93c2b64a4083889bbc630edcd300168dfabccb4ac941e0c5cbddf21d07f99c68" )
     endif()
   elseif ( SYSTEM_IS_FREEBSD )
     if ( 64_BIT_PLATFORM )
       set( LIBCLANG_DIRNAME
            "libclang-${CLANG_VERSION}-amd64-unknown-freebsd11" )
       set( LIBCLANG_SHA256
-           "6aefd23494f46ac9bef3d7ab99a5a0af03553c2f9aa625e9fc0d04a1e1b2f345" )
+           "0e65ce226c2bb8001b3413e44152b8befefc0664a70efeec11a69a4277ac56fc" )
     else()
       set( LIBCLANG_DIRNAME
            "libclang-${CLANG_VERSION}-i386-unknown-freebsd11" )
       set( LIBCLANG_SHA256
-           "cf1e064227f51298a57726f58a5260b44281ec97256a493e9e298380e7624283" )
+           "760edb036f28a9eef29d85530f8453eaa035d9c12a1c648c4c23fc9956e3f379" )
     endif()
   elseif ( CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64.*|AARCH64.*)" )
     set( LIBCLANG_DIRNAME "libclang-${CLANG_VERSION}-aarch64-linux-gnu" )
     set( LIBCLANG_SHA256
-         "8af2559d6f7b829a01f79a004e8c34766ff09d88f9e9c8f6f1c87180e538b47b" )
+         "b3ebeb36425cabf0766bdc6f568d6b531f50e58678707c6f3b9d7d944cba111f" )
   elseif ( CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm.*|ARM.*)" )
     set( LIBCLANG_DIRNAME "libclang-${CLANG_VERSION}-armv7a-linux-gnueabihf" )
     set( LIBCLANG_SHA256
-         "2b3fd40630e9edc20da868a1e12aedef18bf244fddda20b6ed04809adacd00ca" )
+         "aad51be92d6ef4c19a51f322f80434634dd63684452c30b2abf9337dd2afdb73" )
+  elseif ( CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64)" )
+    set( LIBCLANG_DIRNAME
+         "libclang-${CLANG_VERSION}-x86_64-unknown-linux-gnu" )
+    set( LIBCLANG_SHA256
+         "e81a186cd1180ae80c17d67d8d0c101248f8ee032d138cf6f1e95001e733249c" )
   else()
-    if ( 64_BIT_PLATFORM )
-      set( LIBCLANG_DIRNAME
-           "libclang-${CLANG_VERSION}-x86_64-unknown-linux-gnu" )
-      set( LIBCLANG_SHA256
-           "54198c9f941cb32f5915698d3ce11effc5a2985fcfe58c3b42532233bc942a23" )
-    else()
-      message( FATAL_ERROR
-        "No prebuilt Clang ${CLANG_VERSION} binaries for 32-bit Linux. "
-        "You'll have to compile Clang ${CLANG_VERSION} from source. "
-        "See the YCM docs for details on how to use a user-compiled libclang." )
-    endif()
+    message( FATAL_ERROR
+      "No prebuilt Clang ${CLANG_VERSION} binaries for this system. "
+      "You'll have to compile Clang ${CLANG_VERSION} from source "
+      "or use your system libclang. "
+      "See the YCM docs for details on how to use a user-compiled libclang." )
   endif()
 
   set( LIBCLANG_FILENAME "${LIBCLANG_DIRNAME}.tar.bz2" )
@@ -193,7 +192,7 @@ if ( APPLE )
 endif()
 
 if ( USE_SYSTEM_BOOST )
-  set( Boost_COMPONENTS filesystem regex system )
+  set( Boost_COMPONENTS filesystem regex )
   find_package( Boost REQUIRED COMPONENTS ${Boost_COMPONENTS} )
 else()
   set( Boost_INCLUDE_DIR ${BoostParts_SOURCE_DIR} )
@@ -289,7 +288,6 @@ if ( EXTERNAL_LIBCLANG_PATH OR USE_SYSTEM_LIBCLANG )
                   /Library/Developer/CommandLineTools/usr/lib )
     set( EXTERNAL_LIBCLANG_PATH ${TEMP} )
   else()
-    # For Macs, we do things differently; look further in this file.
     if ( NOT APPLE AND NOT MSVC )
       # Setting this to true makes sure that libraries we build will have our
       # rpath set even without having to do "make install"
@@ -340,50 +338,26 @@ target_link_libraries( ${PROJECT_NAME}
                      )
 
 if( LIBCLANG_TARGET )
+  set( LIBCLANG_DIR "${CMAKE_SOURCE_DIR}/../third_party/clang/lib" )
+  # Remove all previous libclang libraries.
+  file( GLOB LIBCLANG_FILEPATHS "${LIBCLANG_DIR}/libclang*" )
+  foreach( FILEPATH ${LIBCLANG_FILEPATHS} )
+    file( REMOVE ${FILEPATH} )
+  endforeach()
   # When building with MSVC, we need to copy libclang.dll instead of libclang.lib
   if( MSVC )
     add_custom_command(
       TARGET ${PROJECT_NAME}
       POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy "${PATH_TO_LLVM_ROOT}/bin/libclang.dll" "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+      COMMAND ${CMAKE_COMMAND} -E copy "${PATH_TO_LLVM_ROOT}/bin/libclang.dll" "${LIBCLANG_DIR}"
     )
   else()
     add_custom_command(
       TARGET ${PROJECT_NAME}
       POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E copy "${LIBCLANG_TARGET}" "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+      COMMAND ${CMAKE_COMMAND} -E copy "${LIBCLANG_TARGET}" "${LIBCLANG_DIR}"
     )
   endif()
-endif()
-
-
-#############################################################################
-
-# Things are a bit different on Macs when using an external libclang.dylib; here
-# we want to make sure we use @loader_path/libclang.dylib instead of
-# @rpath/libclang.dylib in the final ycm_core.so. If we use the
-# @rpath version, then it may load the system libclang which the user
-# explicitely does not want (otherwise the user would specify
-# USE_SYSTEM_LIBCLANG). If we hardcode with `@loader_path/libclang.dylib`,
-# it guarantees to search `@loader_path` for libclang.dylib first and use it
-# only. So with `@loader_path`, we make sure that only the libclang.dylib
-# present in the same directory as our ycm_core.so is used.
-# And the extra `rpath` is helpful to find libclang.dylib's dependencies
-# if it is built with `--enable-shared` flag.
-if ( EXTERNAL_LIBCLANG_PATH AND APPLE AND NOT USE_SYSTEM_LIBCLANG)
-  get_filename_component(EXTRA_LIB_PATH ${EXTERNAL_LIBCLANG_PATH} DIRECTORY)
-
-  set_target_properties(${PROJECT_NAME}
-    PROPERTIES LINK_FLAGS "-Wl,-rpath,${EXTRA_LIB_PATH}")
-
-  add_custom_command( TARGET ${PROJECT_NAME}
-                      POST_BUILD
-                      COMMAND install_name_tool
-                      "-change"
-                      "@rpath/libclang.dylib"
-                      "@loader_path/libclang.dylib"
-                      "$<TARGET_FILE:${PROJECT_NAME}>"
-                    )
 endif()
 
 
@@ -465,7 +439,7 @@ if( USE_CLANG_TIDY )
 
   if ( CLANG_TIDY )
     message( STATUS "clang-tidy executable found: ${CLANG_TIDY}" )
-    set( CLANG_TIDY_ARGS "${CLANG_TIDY}")
+    set( CLANG_TIDY_ARGS "${CLANG_TIDY}" )
     set_target_properties( ycm_core PROPERTIES
                            CXX_CLANG_TIDY "${CLANG_TIDY_ARGS}" )
   else()

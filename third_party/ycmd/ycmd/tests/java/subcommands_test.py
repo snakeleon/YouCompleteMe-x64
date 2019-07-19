@@ -1,4 +1,4 @@
-# Copyright (C) 2017-2018 ycmd contributors
+# Copyright (C) 2017-2019 ycmd contributors
 # encoding: utf-8
 #
 # This file is part of ycmd.
@@ -30,16 +30,19 @@ from hamcrest import ( assert_that,
                        empty,
                        has_entries,
                        instance_of,
+                       is_not,
                        matches_regexp )
 from nose.tools import eq_
 from pprint import pformat
 import requests
+import json
 
 from ycmd.utils import ReadFile
 from ycmd.completers.java.java_completer import NO_DOCUMENTATION_MESSAGE
 from ycmd.tests.java import ( DEFAULT_PROJECT_DIR,
                               PathToTestFile,
-                              SharedYcmd )
+                              SharedYcmd,
+                              IsolatedYcmd )
 from ycmd.tests.test_utils import ( BuildRequest,
                                     ChunkMatcher,
                                     CombineRequest,
@@ -48,12 +51,13 @@ from ycmd.tests.test_utils import ( BuildRequest,
                                     LocationMatcher,
                                     WithRetry )
 from mock import patch
-from ycmd.completers.language_server import language_server_protocol as lsp
 from ycmd import handlers
+from ycmd.completers.language_server import language_server_protocol as lsp
 from ycmd.completers.language_server.language_server_completer import (
   ResponseTimeoutException,
   ResponseFailedException
 )
+from ycmd.responses import UnknownExtraConf
 
 
 
@@ -63,21 +67,25 @@ def Subcommands_DefinedSubcommands_test( app ):
   subcommands_data = BuildRequest( completer_target = 'java' )
 
   eq_( sorted( [ 'FixIt',
+                 'ExecuteCommand',
                  'Format',
                  'GoToDeclaration',
                  'GoToDefinition',
                  'GoTo',
                  'GetDoc',
                  'GetType',
+                 'GoToImplementation',
                  'GoToReferences',
+                 'GoToType',
                  'OpenProject',
                  'OrganizeImports',
                  'RefactorRename',
-                 'RestartServer' ] ),
+                 'RestartServer',
+                 'WipeWorkspace' ] ),
        app.post_json( '/defined_subcommands', subcommands_data ).json )
 
 
-def Subcommands_ServerNotReady_test():
+def Subcommands_ServerNotInitialized_test():
   filepath = PathToTestFile( 'simple_eclipse_project',
                              'src',
                              'com',
@@ -88,7 +96,7 @@ def Subcommands_ServerNotReady_test():
 
   @WithRetry
   @SharedYcmd
-  @patch.object( completer, 'ServerIsReady', return_value = False )
+  @patch.object( completer, '_ServerIsInitialized', return_value = False )
   def Test( app, cmd, arguments, *args ):
     RunTest( app, {
       'description': 'Subcommand ' + cmd + ' handles server not ready',
@@ -782,45 +790,32 @@ def Subcommands_FixIt_SingleDiag_MultipleOption_Insertion_test():
       has_entries( {
         'text': "Import 'Wibble' (com.test.wobble)",
         'chunks': contains(
-          # When doing an import, eclipse likes to add two newlines
-          # after the package. I suppose this is config in real eclipse,
-          # but there's no mechanism to configure this in jdtl afaik.
-          ChunkMatcher( '\n\n',
-                        LocationMatcher( filepath, 1, 18 ),
-                        LocationMatcher( filepath, 1, 18 ) ),
-          # OK, so it inserts the import
-          ChunkMatcher( 'import com.test.wobble.Wibble;',
-                        LocationMatcher( filepath, 1, 18 ),
-                        LocationMatcher( filepath, 1, 18 ) ),
-          # More newlines. Who doesn't like newlines?!
-          ChunkMatcher( '\n\n',
-                        LocationMatcher( filepath, 1, 18 ),
-                        LocationMatcher( filepath, 1, 18 ) ),
-          # For reasons known only to the eclipse JDT developers, it
-          # seems to want to delete the lines after the package first.
-          ChunkMatcher( '',
-                        LocationMatcher( filepath, 1, 18 ),
+          ChunkMatcher( 'package com.test;\n\n'
+                        'import com.test.wobble.Wibble;\n\n',
+                        LocationMatcher( filepath, 1, 1 ),
                         LocationMatcher( filepath, 3, 1 ) ),
-        ),
-      } ),
-      has_entries( {
-        'text': "Create field 'Wibble'",
-        'chunks': contains(
-          ChunkMatcher( '\n\n',
-                        LocationMatcher( filepath, 16, 4 ),
-                        LocationMatcher( filepath, 16, 4 ) ),
-          ChunkMatcher( 'private Object Wibble;',
-                        LocationMatcher( filepath, 16, 4 ),
-                        LocationMatcher( filepath, 16, 4 ) ),
         ),
       } ),
       has_entries( {
         'text': "Create constant 'Wibble'",
         'chunks': contains(
-          ChunkMatcher( '\n\n',
+          ChunkMatcher( '\n\nprivate static final String Wibble = null;',
                         LocationMatcher( filepath, 16, 4 ),
                         LocationMatcher( filepath, 16, 4 ) ),
-          ChunkMatcher( 'private static final String Wibble = null;',
+        ),
+      } ),
+      has_entries( {
+        'text': "Create local variable 'Wibble'",
+        'chunks': contains(
+          ChunkMatcher( 'Object Wibble;\n\t',
+                        LocationMatcher( filepath, 19, 5 ),
+                        LocationMatcher( filepath, 19, 5 ) ),
+        ),
+      } ),
+      has_entries( {
+        'text': "Create field 'Wibble'",
+        'chunks': contains(
+          ChunkMatcher( '\n\nprivate Object Wibble;',
                         LocationMatcher( filepath, 16, 4 ),
                         LocationMatcher( filepath, 16, 4 ) ),
         ),
@@ -828,23 +823,26 @@ def Subcommands_FixIt_SingleDiag_MultipleOption_Insertion_test():
       has_entries( {
         'text': "Create parameter 'Wibble'",
         'chunks': contains(
-          ChunkMatcher( ', ',
-                        LocationMatcher( filepath, 18, 32 ),
-                        LocationMatcher( filepath, 18, 32 ) ),
-          ChunkMatcher( 'Object Wibble',
+          ChunkMatcher( ', Object Wibble',
                         LocationMatcher( filepath, 18, 32 ),
                         LocationMatcher( filepath, 18, 32 ) ),
         ),
       } ),
       has_entries( {
-        'text': "Create local variable 'Wibble'",
+        'text': 'Generate toString()...',
         'chunks': contains(
-          ChunkMatcher( 'Object Wibble;',
-                        LocationMatcher( filepath, 19, 5 ),
-                        LocationMatcher( filepath, 19, 5 ) ),
-          ChunkMatcher( '\n	',
-                        LocationMatcher( filepath, 19, 5 ),
-                        LocationMatcher( filepath, 19, 5 ) ),
+          ChunkMatcher( '\n\n@Override\npublic String toString() {'
+                        '\n\treturn "TestFactory []";\n}',
+                        LocationMatcher( filepath, 32, 4 ),
+                        LocationMatcher( filepath, 32, 4 ) ),
+        ),
+      } ),
+      has_entries( {
+        'text': 'Organize imports',
+        'chunks': contains(
+          ChunkMatcher( '\n\nimport com.test.wobble.Wibble;\n\n',
+                        LocationMatcher( filepath, 1, 18 ),
+                        LocationMatcher( filepath, 3, 1 ) ),
         ),
       } ),
     )
@@ -875,18 +873,30 @@ def Subcommands_FixIt_SingleDiag_SingleOption_Modify_test():
   # FixIt really. Perhaps we should change the client to always ask for
   # confirmation?
   fixits = has_entries( {
-    'fixits': contains(
+    'fixits': contains_inanyorder(
       has_entries( {
         'text': "Change type of 'test' to 'boolean'",
         'chunks': contains(
-          # For some reason, eclipse returns modifies as deletes + adds,
-          # although overlapping ranges aren't allowed.
           ChunkMatcher( 'boolean',
                         LocationMatcher( filepath, 14, 12 ),
-                        LocationMatcher( filepath, 14, 12 ) ),
-          ChunkMatcher( '',
-                        LocationMatcher( filepath, 14, 12 ),
                         LocationMatcher( filepath, 14, 15 ) ),
+        ),
+      } ),
+      has_entries( {
+        'text': 'Generate toString()...',
+        'chunks': contains(
+          ChunkMatcher( '\n\n@Override\npublic String toString() {'
+                        '\n\treturn "TestFactory []";\n}',
+                        LocationMatcher( filepath, 32, 4 ),
+                        LocationMatcher( filepath, 32, 4 ) ),
+        ),
+      } ),
+      has_entries( {
+        'text': 'Organize imports',
+        'chunks': contains(
+          ChunkMatcher( '\n\nimport com.test.wobble.Wibble;\n\n',
+                        LocationMatcher( filepath, 1, 18 ),
+                        LocationMatcher( filepath, 3, 1 ) ),
         ),
       } ),
     )
@@ -910,18 +920,23 @@ def Subcommands_FixIt_SingleDiag_MultiOption_Delete_test():
         'chunks': contains(
           ChunkMatcher( '',
                         LocationMatcher( filepath, 14, 21 ),
-                        LocationMatcher( filepath, 15, 5 ) ),
-          ChunkMatcher( '',
-                        LocationMatcher( filepath, 15, 5 ),
                         LocationMatcher( filepath, 15, 30 ) ),
         ),
       } ),
+      # The edit reported for this is juge and uninteresting really. Manual
+      # testing can show that it works. This test is really about the previous
+      # FixIt (and nonetheless, the previous tests ensure that we correctly
+      # populate the chunks list; the contents all come from jdt.ls)
       has_entries( {
-        'text': "Create getter and setter for 'testString'...",
-        # The edit reported for this is juge and uninteresting really. Manual
-        # testing can show that it works. This test is really about the previous
-        # FixIt (and nonetheless, the previous tests ensure that we correctly
-        # populate the chunks list; the contents all come from jdt.ls)
+        'text': "Create getter and setter for 'testString'",
+        'chunks': instance_of( list )
+      } ),
+      has_entries( {
+        'text': "Organize imports",
+        'chunks': instance_of( list )
+      } ),
+      has_entries( {
+        'text': "Generate Getters and Setters",
         'chunks': instance_of( list )
       } ),
     )
@@ -943,12 +958,7 @@ def Subcommands_FixIt_MultipleDiags_test():
       has_entries( {
         'text': "Change type of 'test' to 'boolean'",
         'chunks': contains(
-          # For some reason, eclipse returns modifies as deletes + adds,
-          # although overlapping ranges aren't allowed.
           ChunkMatcher( 'boolean',
-                        LocationMatcher( filepath, 14, 12 ),
-                        LocationMatcher( filepath, 14, 12 ) ),
-          ChunkMatcher( '',
                         LocationMatcher( filepath, 14, 12 ),
                         LocationMatcher( filepath, 14, 15 ) ),
         ),
@@ -964,19 +974,19 @@ def Subcommands_FixIt_MultipleDiags_test():
       has_entries( {
         'text': "Change method 'doSomethingVaguelyUseful()': Add parameter "
                 "'Bar'",
-        # Again, this produces quite a lot of fussy little changes (that
-        # actually lead to broken code, but we can't really help that), and
-        # having them in this test would just be brittle without proving
-        # anything about our code
         'chunks': instance_of( list ),
       } ),
       has_entries( {
         'text': "Create method 'doSomethingVaguelyUseful(Bar)' in type "
                 "'AbstractTestWidget'",
-        # Again, this produces quite a lot of fussy little changes (that
-        # actually lead to broken code, but we can't really help that), and
-        # having them in this test would just be brittle without proving
-        # anything about our code
+        'chunks': instance_of( list ),
+      } ),
+      has_entries( {
+        'text': "Generate toString()...",
+        'chunks': instance_of( list ),
+      } ),
+      has_entries( {
+        'text': "Organize imports",
         'chunks': instance_of( list ),
       } ),
     )
@@ -1004,7 +1014,11 @@ def Subcommands_FixIt_NoDiagnostics_test():
                              'TestFactory.java' )
 
   yield ( RunFixItTest, "no FixIts means you gotta code it yo' self",
-          filepath, 1, 1, has_entries( { 'fixits': empty() } ) )
+          filepath, 1, 1, has_entries( { 'fixits': contains_inanyorder(
+            has_entries( { 'text': 'Organize imports',
+                           'chunks': instance_of( list ) } ),
+            has_entries( { 'text': 'Generate toString()...',
+                           'chunks': instance_of( list ) } ) ) } ) )
 
 
 def Subcommands_FixIt_Unicode_test():
@@ -1035,13 +1049,14 @@ def Subcommands_FixIt_Unicode_test():
       has_entries( {
         'text': "Create method 'doUnicødeTes(String)'",
         'chunks': contains(
-          ChunkMatcher( 'private void doUnicødeTes(String test2) {\n}',
-                        LocationMatcher( filepath, 20, 3 ),
-                        LocationMatcher( filepath, 20, 3 ) ),
-          ChunkMatcher( '\n\n\n',
+          ChunkMatcher( 'private void doUnicødeTes(String test2) {\n}\n\n\n',
                         LocationMatcher( filepath, 20, 3 ),
                         LocationMatcher( filepath, 20, 3 ) ),
         ),
+      } ),
+      has_entries( {
+        'text': "Generate Getters and Setters",
+        'chunks': instance_of( list ),
       } ),
     )
   } )
@@ -1051,7 +1066,7 @@ def Subcommands_FixIt_Unicode_test():
 
 
 @WithRetry
-@SharedYcmd
+@IsolatedYcmd()
 def Subcommands_FixIt_InvalidURI_test( app ):
   filepath = PathToTestFile( 'simple_eclipse_project',
                              'src',
@@ -1060,18 +1075,30 @@ def Subcommands_FixIt_InvalidURI_test( app ):
                              'TestFactory.java' )
 
   fixits = has_entries( {
-    'fixits': contains(
+    'fixits': contains_inanyorder(
       has_entries( {
         'text': "Change type of 'test' to 'boolean'",
         'chunks': contains(
-          # For some reason, eclipse returns modifies as deletes + adds,
-          # although overlapping ranges aren't allowed.
           ChunkMatcher( 'boolean',
                         LocationMatcher( '', 14, 12 ),
-                        LocationMatcher( '', 14, 12 ) ),
-          ChunkMatcher( '',
-                        LocationMatcher( '', 14, 12 ),
                         LocationMatcher( '', 14, 15 ) ),
+        ),
+      } ),
+      has_entries( {
+        'text': 'Organize imports',
+        'chunks': contains(
+          ChunkMatcher( '\n\nimport com.test.wobble.Wibble;\n\n',
+                        LocationMatcher( '', 1, 1 ),
+                        LocationMatcher( '', 3, 1 ) ),
+        ),
+      } ),
+      has_entries( {
+        'text': 'Generate toString()...',
+        'chunks': contains(
+          ChunkMatcher( '\n\n@Override\npublic String toString() {'
+                        '\n\treturn "TestFactory []";\n}',
+                        LocationMatcher( '', 32, 4 ),
+                        LocationMatcher( '', 32, 4 ) ),
         ),
       } ),
     )
@@ -1443,11 +1470,11 @@ def Subcommands_GoTo_test():
     # Member function local variable
     { 'request': { 'line': 28, 'col': 5, 'filepath': filepath },
       'response': { 'line_num': 27, 'column_num': 18, 'filepath': filepath },
-      'description': 'GoTo works for memeber local variable' },
+      'description': 'GoTo works for member local variable' },
     # Member variable
     { 'request': { 'line': 22, 'col': 7, 'filepath': filepath },
       'response': { 'line_num': 8, 'column_num': 16, 'filepath': filepath },
-      'description': 'GoTo works for memeber variable' },
+      'description': 'GoTo works for member variable' },
     # Method
     { 'request': { 'line': 28, 'col': 7, 'filepath': filepath },
       'response': { 'line_num': 21, 'column_num': 16, 'filepath': filepath },
@@ -1494,6 +1521,70 @@ def Subcommands_GoTo_test():
               has_entries( test[ 'response' ] ) )
 
 
+def Subcommands_GoToType_test():
+  launcher_file = PathToTestFile( 'simple_eclipse_project',
+                                  'src',
+                                  'com',
+                                  'test',
+                                  'TestLauncher.java' )
+  tset_file = PathToTestFile( 'simple_eclipse_project',
+                              'src',
+                              'com',
+                              'youcompleteme',
+                              'testing',
+                              'Tset.java' )
+
+  tests = [
+    # Member function local variable
+    { 'request': { 'line': 28, 'col': 5, 'filepath': launcher_file },
+      'response': { 'line_num': 6, 'column_num': 7, 'filepath': launcher_file },
+      'description': 'GoToType works for member local variable' },
+    # Member variable
+    { 'request': { 'line': 22, 'col': 7, 'filepath': launcher_file },
+      'response': { 'line_num': 6, 'column_num': 14, 'filepath': tset_file },
+      'description': 'GoToType works for member variable' },
+  ]
+
+  for test in tests:
+    yield ( RunGoToTest,
+            test[ 'description' ],
+            test[ 'request' ][ 'filepath' ],
+            test[ 'request' ][ 'line' ],
+            test[ 'request' ][ 'col' ],
+            'GoToType',
+            has_entries( test[ 'response' ] ) )
+
+
+def Subcommands_GoToImplementation_test():
+  filepath = PathToTestFile( 'simple_eclipse_project',
+                             'src',
+                             'com',
+                             'test',
+                             'TestLauncher.java' )
+
+  tests = [
+    # Interface
+    { 'request': { 'line': 17, 'col': 25, 'filepath': filepath },
+      'response': { 'line_num': 28, 'column_num': 16, 'filepath': filepath },
+      'description': 'GoToImplementation on interface '
+                     'jumps to its implementation' },
+    # Interface reference
+    { 'request': { 'line': 21, 'col': 30, 'filepath': filepath },
+      'response': { 'line_num': 28, 'column_num': 16, 'filepath': filepath },
+      'description': 'GoToImplementation on interface reference '
+                     'jumpts to its implementation' },
+  ]
+
+  for test in tests:
+    yield ( RunGoToTest,
+            test[ 'description' ],
+            test[ 'request' ][ 'filepath' ],
+            test[ 'request' ][ 'line' ],
+            test[ 'request' ][ 'col' ],
+            'GoToImplementation',
+            has_entries( test[ 'response' ] ) )
+
+
 @WithRetry
 @SharedYcmd
 def Subcommands_OrganizeImports_test( app ):
@@ -1514,14 +1605,9 @@ def Subcommands_OrganizeImports_test( app ):
       'data': has_entries( {
         'fixits': contains( has_entries( {
           'chunks': contains(
-            ChunkMatcher( 'import com.youcompleteme.Test;',
+            ChunkMatcher( 'import com.youcompleteme.Test;\n'
+                          'import com.youcompleteme.testing.Tset;',
                           LocationMatcher( filepath, 3,  1 ),
-                          LocationMatcher( filepath, 3,  1 ) ),
-            ChunkMatcher( '\n',
-                          LocationMatcher( filepath, 3,  1 ),
-                          LocationMatcher( filepath, 3,  1 ) ),
-            ChunkMatcher( '',
-                          LocationMatcher( filepath, 3, 39 ),
                           LocationMatcher( filepath, 4, 54 ) ),
           )
         } ) )
@@ -1616,7 +1702,9 @@ def Subcommands_IndexOutOfRange_test( app ):
     },
     'expect': {
       'response': requests.codes.ok,
-      'data': has_entries( { 'fixits': empty() } ),
+      'data': has_entries( { 'fixits': contains( has_entries(
+        { 'text': 'Generate Getters and Setters',
+          'chunks': instance_of( list ) } ) ) } ),
     }
   } )
 
@@ -1666,6 +1754,138 @@ def Subcommands_DifferentFileTypesUpdate_test( app ):
     },
     'expect': {
       'response': requests.codes.ok,
-      'data': has_entries( { 'fixits': empty() } ),
+      'data': has_entries( { 'fixits': contains( has_entries(
+        { 'text': 'Generate Getters and Setters',
+          'chunks': instance_of( list ) } ) ) } ),
+    }
+  } )
+
+
+@WithRetry
+@IsolatedYcmd( { 'extra_conf_globlist':
+                 PathToTestFile( 'extra_confs', '*' ) } )
+def Subcommands_ExtraConf_SettingsValid_test( app ):
+  filepath = PathToTestFile( 'extra_confs',
+                             'simple_extra_conf_project',
+                             'src',
+                             'ExtraConf.java' )
+  RunTest( app, {
+    'description': 'RefactorRename is disabled in extra conf.',
+    'request': {
+      'command': 'RefactorRename',
+      'arguments': [ 'renamed_l' ],
+      'filepath': filepath,
+      'line_num': 1,
+      'column_num': 7,
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': has_entries( {
+        'fixits': contains( has_entries( {
+          'chunks': empty(),
+          'location': LocationMatcher( filepath, 1, 7 )
+        } ) )
+      } )
+    }
+  } )
+
+
+@WithRetry
+@IsolatedYcmd()
+def Subcommands_ExtraConf_SettingsValid_UnknownExtraConf_test( app ):
+  filepath = PathToTestFile( 'extra_confs',
+                             'simple_extra_conf_project',
+                             'src',
+                             'ExtraConf.java' )
+  contents = ReadFile( filepath )
+
+  response = app.post_json( '/event_notification',
+                            BuildRequest( **{
+                              'event_name': 'FileReadyToParse',
+                              'contents': contents,
+                              'filepath': filepath,
+                              'line_num': 1,
+                              'column_num': 7,
+                              'filetype': 'java',
+                            } ),
+                            expect_errors = True )
+
+  print( 'FileReadyToParse result: {}'.format( json.dumps( response.json,
+                                                           indent = 2 ) ) )
+
+  eq_( response.status_code, requests.codes.internal_server_error )
+  assert_that( response.json, ErrorMatcher( UnknownExtraConf ) )
+
+  app.post_json(
+    '/ignore_extra_conf_file',
+    { 'filepath': PathToTestFile( 'extra_confs', '.ycm_extra_conf.py' ) } )
+
+  RunTest( app, {
+    'description': 'RefactorRename is disabled in extra conf but ignored.',
+    'request': {
+      'command': 'RefactorRename',
+      'arguments': [ 'renamed_l' ],
+      'filepath': filepath,
+      'contents': contents,
+      'line_num': 1,
+      'column_num': 7,
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': has_entries( {
+        'fixits': contains( has_entries( {
+          # Just prove that we actually got a reasonable result
+          'chunks': is_not( empty() ),
+        } ) )
+      } )
+    }
+  } )
+
+
+@SharedYcmd
+def Subcommands_ExecuteCommand_NoArguments_test( app ):
+  filepath = PathToTestFile( 'simple_eclipse_project',
+                             'src',
+                             'com',
+                             'youcompleteme',
+                             'Test.java' )
+
+  RunTest( app, {
+    'description': 'Running a command without args fails',
+    'request': {
+      'command': 'ExecuteCommand',
+      'line_num': 1,
+      'column_num': 1,
+      'filepath': filepath,
+    },
+    'expect': {
+      'response': requests.codes.internal_server_error,
+      'data': ErrorMatcher( ValueError,
+                            'Must specify a command to execute' ),
+    }
+  } )
+
+
+@SharedYcmd
+def Subcommands_ExecuteCommand_test( app ):
+  filepath = PathToTestFile( 'simple_eclipse_project',
+                             'src',
+                             'com',
+                             'youcompleteme',
+                             'Test.java' )
+
+  RunTest( app, {
+    'description': 'Running a command does what it says it does',
+    'request': {
+      'command': 'ExecuteCommand',
+      'arguments': [ 'java.edit.organizeImports' ],
+      'line_num': 1,
+      'column_num': 1,
+      'filepath': filepath,
+    },
+    'expect': {
+      # We dont specify the path for import organize, and jdt.ls returns shrug
+      'response': requests.codes.ok,
+      'data': ''
     }
   } )

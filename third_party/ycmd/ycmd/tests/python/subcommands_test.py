@@ -22,156 +22,222 @@ from __future__ import division
 # Not installing aliases from python-future; it's unreliable and slow.
 from builtins import *  # noqa
 
-from hamcrest import assert_that, contains, has_entries, has_entry
-import os.path
+from hamcrest import ( assert_that,
+                       contains,
+                       has_entries,
+                       has_entry,
+                       matches_regexp )
+from nose.tools import eq_
+from pprint import pformat
+import requests
 
 from ycmd.utils import ReadFile
 from ycmd.tests.python import PathToTestFile, SharedYcmd
-from ycmd.tests.test_utils import BuildRequest, LocationMatcher, ErrorMatcher
+from ycmd.tests.test_utils import ( BuildRequest,
+                                    CombineRequest,
+                                    LocationMatcher,
+                                    ErrorMatcher )
+
+
+def RunTest( app, test ):
+  contents = ReadFile( test[ 'request' ][ 'filepath' ] )
+
+  # We ignore errors here and check the response code ourself.
+  # This is to allow testing of requests returning errors.
+  response = app.post_json(
+    '/run_completer_command',
+    CombineRequest( test[ 'request' ], {
+      'contents': contents,
+      'filetype': 'python',
+      'command_arguments': ( [ test[ 'request' ][ 'command' ] ]
+                             + test[ 'request' ].get( 'arguments', [] ) )
+    } ),
+    expect_errors = True
+  )
+
+  print( 'completer response: {0}'.format( pformat( response.json ) ) )
+
+  eq_( response.status_code, test[ 'expect' ][ 'response' ] )
+
+  assert_that( response.json, test[ 'expect' ][ 'data' ] )
 
 
 @SharedYcmd
-def RunGoToTest( app, test ):
-  filepath = PathToTestFile( test[ 'request' ][ 'filename' ] )
-  command_data = BuildRequest( command_arguments = [ 'GoTo' ],
-                               line_num = test[ 'request' ][ 'line_num' ],
-                               contents = ReadFile( filepath ),
-                               filetype = 'python',
-                               filepath = filepath )
+def Subcommands_GoTo( app, test, command ):
+  if isinstance( test[ 'response' ], tuple ):
+    expect = {
+      'response': requests.codes.ok,
+      'data': LocationMatcher( PathToTestFile( 'goto',
+                                               test[ 'response' ][ 0 ] ),
+                               test[ 'response' ][ 1 ],
+                               test[ 'response' ][ 2 ] )
+    }
+  else:
+    expect = {
+      'response': requests.codes.internal_server_error,
+      'data': ErrorMatcher( RuntimeError, test[ 'response' ] )
+    }
 
-  assert_that(
-    app.post_json( '/run_completer_command', command_data ).json,
-    test[ 'response' ]
-  )
+  RunTest( app, {
+    'description': command + ' jumps to the right location',
+    'request': {
+      'command'   : command,
+      'filetype'  : 'python',
+      'filepath'  : PathToTestFile( 'goto', test[ 'request' ][ 0 ] ),
+      'line_num'  : test[ 'request' ][ 1 ],
+      'column_num': test[ 'request' ][ 2 ]
+    },
+    'expect': expect,
+  } )
 
 
 def Subcommands_GoTo_test():
-  # Tests taken from https://github.com/Valloric/YouCompleteMe/issues/1236
   tests = [
-    {
-      'request': { 'filename': 'goto_file1.py', 'line_num': 2 },
-      'response': LocationMatcher( PathToTestFile( 'goto_file3.py' ), 1, 5 )
-    },
-    {
-      'request': { 'filename': 'goto_file4.py', 'line_num': 2 },
-      'response': LocationMatcher( PathToTestFile( 'goto_file4.py' ), 1, 18 )
-    }
+    # Nothing
+    { 'request': ( 'basic.py', 3,  5 ), 'response': 'Can\'t jump to '
+                                                    'definition.' },
+    # Keyword
+    { 'request': ( 'basic.py', 4,  3 ), 'response': 'Can\'t jump to '
+                                                    'definition.' },
+    # Builtin
+    { 'request': ( 'basic.py', 1,  4 ), 'response': ( 'basic.py', 1, 1 ) },
+    { 'request': ( 'basic.py', 1, 12 ), 'response': 'Can\'t jump to '
+                                                    'builtin module.' },
+    { 'request': ( 'basic.py', 2,  2 ), 'response': ( 'basic.py', 1, 1 ) },
+    # Class
+    { 'request': ( 'basic.py', 4,  7 ), 'response': ( 'basic.py', 4, 7 ) },
+    { 'request': ( 'basic.py', 4, 11 ), 'response': ( 'basic.py', 4, 7 ) },
+    { 'request': ( 'basic.py', 7, 19 ), 'response': ( 'basic.py', 4, 7 ) },
+    # Instance
+    { 'request': ( 'basic.py', 7,  1 ), 'response': ( 'basic.py', 7, 1 ) },
+    { 'request': ( 'basic.py', 7, 11 ), 'response': ( 'basic.py', 7, 1 ) },
+    { 'request': ( 'basic.py', 8, 23 ), 'response': ( 'basic.py', 7, 1 ) },
+    # Instance reference
+    { 'request': ( 'basic.py', 8,  1 ), 'response': ( 'basic.py', 8, 1 ) },
+    { 'request': ( 'basic.py', 8,  5 ), 'response': ( 'basic.py', 8, 1 ) },
+    { 'request': ( 'basic.py', 9, 12 ), 'response': ( 'basic.py', 8, 1 ) },
+    # Builtin from different file
+    { 'request':  ( 'multifile1.py', 2, 30 ),
+      'response': ( 'multifile3.py', 1,  1 ) },
+    { 'request':  ( 'multifile1.py', 4,  5 ),
+      'response': ( 'multifile3.py', 1,  1 ) },
+    # Function from different file
+    { 'request':  ( 'multifile1.py', 1, 24 ),
+      'response': ( 'multifile3.py', 3,  5 ) },
+    { 'request':  ( 'multifile1.py', 5,  4 ),
+      'response': ( 'multifile3.py', 3,  5 ) },
+    # Alias from different file
+    { 'request':  ( 'multifile1.py', 2, 47 ),
+      'response': ( 'multifile2.py', 1, 51 ) },
+    { 'request':  ( 'multifile1.py', 6, 14 ),
+      'response': ( 'multifile2.py', 1, 51 ) },
   ]
 
   for test in tests:
-    yield RunGoToTest, test
+    # GoTo, GoToDefinition, and GoToDeclaration are identical.
+    yield Subcommands_GoTo, test, 'GoTo'
+    yield Subcommands_GoTo, test, 'GoToDefinition'
+    yield Subcommands_GoTo, test, 'GoToDeclaration'
+
+
+def Subcommands_GoToType_test():
+  tests = [
+    # Nothing
+    { 'request': ( 'basic.py', 3,  5 ), 'response': 'Can\'t jump to '
+                                                    'type definition.' },
+    # Keyword
+    { 'request': ( 'basic.py', 4,  3 ), 'response': 'Can\'t jump to '
+                                                    'type definition.' },
+    # Builtin
+    { 'request': ( 'basic.py', 1,  4 ), 'response': 'Can\'t jump to '
+                                                    'builtin module.' },
+    { 'request': ( 'basic.py', 1, 12 ), 'response': 'Can\'t jump to '
+                                                    'builtin module.' },
+    { 'request': ( 'basic.py', 2,  2 ), 'response': 'Can\'t jump to '
+                                                    'builtin module.' },
+    # Class
+    { 'request': ( 'basic.py', 4,  7 ), 'response': ( 'basic.py', 4, 7 ) },
+    { 'request': ( 'basic.py', 4, 11 ), 'response': ( 'basic.py', 4, 7 ) },
+    { 'request': ( 'basic.py', 7, 19 ), 'response': ( 'basic.py', 4, 7 ) },
+    # Instance
+    { 'request': ( 'basic.py', 7,  1 ), 'response': ( 'basic.py', 4, 7 ) },
+    { 'request': ( 'basic.py', 7, 11 ), 'response': ( 'basic.py', 4, 7 ) },
+    { 'request': ( 'basic.py', 8, 23 ), 'response': ( 'basic.py', 4, 7 ) },
+    # Instance reference
+    { 'request': ( 'basic.py', 8,  1 ), 'response': ( 'basic.py', 4, 7 ) },
+    { 'request': ( 'basic.py', 8,  5 ), 'response': ( 'basic.py', 4, 7 ) },
+    { 'request': ( 'basic.py', 9, 12 ), 'response': ( 'basic.py', 4, 7 ) },
+    # Builtin from different file
+    { 'request':  ( 'multifile1.py', 2, 30 ), 'response': 'Can\'t jump to '
+                                                          'builtin module.' },
+    { 'request':  ( 'multifile1.py', 4,  5 ), 'response': 'Can\'t jump to '
+                                                          'builtin module.' },
+    # Function from different file
+    { 'request':  ( 'multifile1.py', 1, 24 ),
+      'response': ( 'multifile3.py', 3,  5 ) },
+    { 'request':  ( 'multifile1.py', 5,  4 ),
+      'response': ( 'multifile3.py', 3,  5 ) },
+    # Alias from different file
+    { 'request':  ( 'multifile1.py', 2, 47 ),
+      'response': ( 'multifile3.py', 3,  5 ) },
+    { 'request':  ( 'multifile1.py', 6, 14 ),
+      'response': ( 'multifile3.py', 3,  5 ) },
+  ]
+
+  for test in tests:
+    yield Subcommands_GoTo, test, 'GoToType'
 
 
 @SharedYcmd
-def RunGoToTest_Variation_ZeroBasedLineAndColumn( app, test ):
-  # Example taken directly from jedi docs
-  # http://jedi.jedidjah.ch/en/latest/docs/plugin-api.html#examples
-  contents = """
-def my_func():
-  print 'called'
+def Subcommands_GetType( app, position, expected_message ):
+  filepath = PathToTestFile( 'GetType.py' )
+  contents = ReadFile( filepath )
 
-alias = my_func
-my_list = [1, None, alias]
-inception = my_list[2]
-
-inception()
-"""
-
-  command_data = BuildRequest( command_arguments = test[ 'command_arguments' ],
-                               line_num = 9,
-                               contents = contents,
+  command_data = BuildRequest( filepath = filepath,
                                filetype = 'python',
-                               filepath = '/foo.py' )
+                               line_num = position[ 0 ],
+                               column_num = position[ 1 ],
+                               contents = contents,
+                               command_arguments = [ 'GetType' ] )
 
   assert_that(
     app.post_json( '/run_completer_command', command_data ).json,
-    test[ 'response' ]
+    has_entry( 'message', expected_message )
   )
 
 
-def Subcommands_GoTo_Variation_ZeroBasedLineAndColumn_test():
-  tests = [
-    {
-      'command_arguments': [ 'GoToDefinition' ],
-      'response': LocationMatcher( os.path.abspath( '/foo.py' ), 2, 5 )
-    },
-    {
-      'command_arguments': [ 'GoToDeclaration' ],
-      'response': LocationMatcher( os.path.abspath( '/foo.py' ), 7, 1 )
-    }
-  ]
-
+def Subcommands_GetType_test():
+  tests = (
+    ( ( 11,  7 ), 'instance int' ),
+    ( ( 11, 20 ), 'def some_function()' ),
+    ( ( 12, 15 ), 'class SomeClass(*args, **kwargs)' ),
+    ( ( 13,  8 ), 'instance SomeClass' ),
+    ( ( 13, 17 ), 'def SomeMethod(first_param, second_param)' ),
+    ( ( 19,  4 ), matches_regexp( '^(instance str, instance int|'
+                                  'instance int, instance str)$' ) )
+  )
   for test in tests:
-    yield RunGoToTest_Variation_ZeroBasedLineAndColumn, test
+    yield Subcommands_GetType, test[ 0 ], test[ 1 ]
 
 
 @SharedYcmd
-def Subcommands_GoTo_CannotJump_test( app ):
-  filepath = PathToTestFile( 'goto_file5.py' )
-  command_data = BuildRequest( command_arguments = [ 'GoTo' ],
-                               line_num = 3,
-                               column_num = 1,
-                               contents = ReadFile( filepath ),
+def Subcommands_GetType_NoTypeInformation_test( app ):
+  filepath = PathToTestFile( 'GetType.py' )
+  contents = ReadFile( filepath )
+
+  command_data = BuildRequest( filepath = filepath,
                                filetype = 'python',
-                               filepath = filepath )
+                               line_num = 6,
+                               column_num = 3,
+                               contents = contents,
+                               command_arguments = [ 'GetType' ] )
 
   response = app.post_json( '/run_completer_command',
                             command_data,
                             expect_errors = True ).json
+
   assert_that( response,
-               ErrorMatcher( RuntimeError,
-                             "Can\'t jump to definition or declaration." ) )
-
-
-@SharedYcmd
-def Subcommands_GoToDefinition_Keyword_test( app ):
-  filepath = PathToTestFile( 'goto_file5.py' )
-  command_data = BuildRequest( command_arguments = [ 'GoToDefinition' ],
-                               line_num = 2,
-                               column_num = 4,
-                               contents = ReadFile( filepath ),
-                               filetype = 'python',
-                               filepath = filepath )
-
-  response = app.post_json( '/run_completer_command',
-                            command_data,
-                            expect_errors = True ).json
-  assert_that( response,
-               ErrorMatcher( RuntimeError, "Can\'t jump to definition." ) )
-
-
-@SharedYcmd
-def Subcommands_GoToDefinition_CannotJump_test( app ):
-  filepath = PathToTestFile( 'goto_file5.py' )
-  command_data = BuildRequest( command_arguments = [ 'GoToDefinition' ],
-                               line_num = 4,
-                               column_num = 2,
-                               contents = ReadFile( filepath ),
-                               filetype = 'python',
-                               filepath = filepath )
-
-  response = app.post_json( '/run_completer_command',
-                            command_data,
-                            expect_errors = True ).json
-  assert_that( response,
-               ErrorMatcher( RuntimeError, "Can\'t jump to definition." ) )
-
-
-@SharedYcmd
-def Subcommands_GoToDeclaration_CannotJump_test( app ):
-  filepath = PathToTestFile( 'goto_file5.py' )
-  command_data = BuildRequest( command_arguments = [ 'GoToDeclaration' ],
-                               line_num = 2,
-                               column_num = 5,
-                               contents = ReadFile( filepath ),
-                               filetype = 'python',
-                               filepath = filepath )
-
-  response = app.post_json( '/run_completer_command',
-                            command_data,
-                            expect_errors = True ).json
-  assert_that( response,
-               ErrorMatcher( RuntimeError, "Can\'t jump to declaration." ) )
+               ErrorMatcher( RuntimeError, 'No type information available.' ) )
 
 
 @SharedYcmd
@@ -236,7 +302,7 @@ def Subcommands_GetDoc_NoDocumentation_test( app ):
 
 @SharedYcmd
 def Subcommands_GoToReferences_Function_test( app ):
-  filepath = PathToTestFile( 'goto_references.py' )
+  filepath = PathToTestFile( 'goto', 'references.py' )
   contents = ReadFile( filepath )
 
   command_data = BuildRequest( filepath = filepath,
@@ -250,25 +316,25 @@ def Subcommands_GoToReferences_Function_test( app ):
     app.post_json( '/run_completer_command', command_data ).json,
     contains(
       has_entries( {
-        'filepath': PathToTestFile( 'goto_references.py' ),
+        'filepath': filepath,
         'line_num': 1,
         'column_num': 5,
         'description': 'def f'
       } ),
       has_entries( {
-        'filepath': PathToTestFile( 'goto_references.py' ),
+        'filepath': filepath,
         'line_num': 4,
         'column_num': 5,
         'description': 'f'
       } ),
       has_entries( {
-        'filepath': PathToTestFile( 'goto_references.py' ),
+        'filepath': filepath,
         'line_num': 5,
         'column_num': 5,
         'description': 'f'
       } ),
       has_entries( {
-        'filepath': PathToTestFile( 'goto_references.py' ),
+        'filepath': filepath,
         'line_num': 6,
         'column_num': 5,
         'description': 'f'
@@ -279,7 +345,7 @@ def Subcommands_GoToReferences_Function_test( app ):
 
 @SharedYcmd
 def Subcommands_GoToReferences_Builtin_test( app ):
-  filepath = PathToTestFile( 'goto_references.py' )
+  filepath = PathToTestFile( 'goto', 'references.py' )
   contents = ReadFile( filepath )
 
   command_data = BuildRequest( filepath = filepath,
@@ -296,7 +362,7 @@ def Subcommands_GoToReferences_Builtin_test( app ):
         'description': 'Builtin class str',
       } ),
       has_entries( {
-        'filepath': PathToTestFile( 'goto_references.py' ),
+        'filepath': filepath,
         'line_num': 8,
         'column_num': 1,
         'description': 'str'
@@ -307,7 +373,7 @@ def Subcommands_GoToReferences_Builtin_test( app ):
 
 @SharedYcmd
 def Subcommands_GoToReferences_NoReferences_test( app ):
-  filepath = PathToTestFile( 'goto_references.py' )
+  filepath = PathToTestFile( 'goto', 'references.py' )
   contents = ReadFile( filepath )
 
   command_data = BuildRequest( filepath = filepath,

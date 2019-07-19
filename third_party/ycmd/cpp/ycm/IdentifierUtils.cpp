@@ -18,7 +18,6 @@
 #include "IdentifierUtils.h"
 #include "Utils.h"
 
-#include <boost/algorithm/string/regex.hpp>
 #include <boost/regex.hpp>
 #include <unordered_map>
 
@@ -193,7 +192,8 @@ FiletypeIdentifierMap ExtractIdentifiersFromTagsFile(
     fs::path path( matches[ 2 ].str() );
     path = NormalizePath( path, path_to_tag_file.parent_path() );
 
-    filetype_identifier_map[ filetype ][ path.string() ].push_back( identifier );
+    filetype_identifier_map[ std::move( filetype ) ][ path.string() ]
+      .push_back( std::move( identifier ) );
   }
 
   return filetype_identifier_map;

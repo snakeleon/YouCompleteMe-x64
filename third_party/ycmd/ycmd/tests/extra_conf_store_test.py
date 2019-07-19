@@ -1,4 +1,4 @@
-# Copyright (C) 2016 ycmd contributors
+# Copyright (C) 2016-2018 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -57,6 +57,8 @@ def ExtraConfStore_ModuleForSourceFile_NoConfirmation_test( app ):
   assert_that( inspect.getfile( module ), equal_to( PROJECT_EXTRA_CONF ) )
   assert_that( module, has_property( 'is_global_ycm_extra_conf' ) )
   assert_that( module.is_global_ycm_extra_conf, equal_to( False ) )
+  assert_that( extra_conf_store.IsGlobalExtraConfModule( module ),
+               equal_to( False ) )
 
 
 @IsolatedYcmd( { 'extra_conf_globlist': [ PROJECT_EXTRA_CONF ] } )
@@ -67,6 +69,8 @@ def ExtraConfStore_ModuleForSourceFile_Whitelisted_test( app ):
   assert_that( inspect.getfile( module ), equal_to( PROJECT_EXTRA_CONF ) )
   assert_that( module, has_property( 'is_global_ycm_extra_conf' ) )
   assert_that( module.is_global_ycm_extra_conf, equal_to( False ) )
+  assert_that( extra_conf_store.IsGlobalExtraConfModule( module ),
+               equal_to( False ) )
 
 
 @IsolatedYcmd( { 'extra_conf_globlist': [ '!' + PROJECT_EXTRA_CONF ] } )
@@ -84,6 +88,8 @@ def ExtraConfStore_ModuleForSourceFile_UnixVarEnv_test( app ):
   assert_that( inspect.getfile( module ), equal_to( PROJECT_EXTRA_CONF ) )
   assert_that( module, has_property( 'is_global_ycm_extra_conf' ) )
   assert_that( module.is_global_ycm_extra_conf, equal_to( False ) )
+  assert_that( extra_conf_store.IsGlobalExtraConfModule( module ),
+               equal_to( False ) )
 
 
 @WindowsOnly
@@ -96,6 +102,8 @@ def ExtraConfStore_ModuleForSourceFile_WinVarEnv_test( app ):
   assert_that( inspect.getfile( module ), equal_to( PROJECT_EXTRA_CONF ) )
   assert_that( module, has_property( 'is_global_ycm_extra_conf' ) )
   assert_that( module.is_global_ycm_extra_conf, equal_to( False ) )
+  assert_that( extra_conf_store.IsGlobalExtraConfModule( module ),
+               equal_to( False ) )
 
 
 @UnixOnly
@@ -110,6 +118,8 @@ def ExtraConfStore_ModuleForSourceFile_SupportSymlink_test( app ):
     assert_that( inspect.getfile( module ), equal_to( PROJECT_EXTRA_CONF ) )
     assert_that( module, has_property( 'is_global_ycm_extra_conf' ) )
     assert_that( module.is_global_ycm_extra_conf, equal_to( False ) )
+  assert_that( extra_conf_store.IsGlobalExtraConfModule( module ),
+               equal_to( False ) )
 
 
 @IsolatedYcmd( { 'global_ycm_extra_conf': GLOBAL_EXTRA_CONF } )
@@ -120,6 +130,8 @@ def ExtraConfStore_ModuleForSourceFile_GlobalExtraConf_test( app ):
   assert_that( inspect.getfile( module ), equal_to( GLOBAL_EXTRA_CONF ) )
   assert_that( module, has_property( 'is_global_ycm_extra_conf' ) )
   assert_that( module.is_global_ycm_extra_conf, equal_to( True ) )
+  assert_that( extra_conf_store.IsGlobalExtraConfModule( module ),
+               equal_to( True ) )
 
 
 @patch.dict( 'os.environ', { 'YCMD_TEST': GLOBAL_EXTRA_CONF } )
@@ -131,6 +143,8 @@ def ExtraConfStore_ModuleForSourceFile_GlobalExtraConf_UnixEnvVar_test( app ):
   assert_that( inspect.getfile( module ), equal_to( GLOBAL_EXTRA_CONF ) )
   assert_that( module, has_property( 'is_global_ycm_extra_conf' ) )
   assert_that( module.is_global_ycm_extra_conf, equal_to( True ) )
+  assert_that( extra_conf_store.IsGlobalExtraConfModule( module ),
+               equal_to( True ) )
 
 
 @WindowsOnly
@@ -143,58 +157,65 @@ def ExtraConfStore_ModuleForSourceFile_GlobalExtraConf_WinEnvVar_test( app ):
   assert_that( inspect.getfile( module ), equal_to( GLOBAL_EXTRA_CONF ) )
   assert_that( module, has_property( 'is_global_ycm_extra_conf' ) )
   assert_that( module.is_global_ycm_extra_conf, equal_to( True ) )
+  assert_that( extra_conf_store.IsGlobalExtraConfModule( module ),
+               equal_to( True ) )
 
 
 @IsolatedYcmd( { 'global_ycm_extra_conf': NO_EXTRA_CONF } )
-@patch( 'ycmd.extra_conf_store._logger', autospec = True )
+@patch( 'ycmd.extra_conf_store.LOGGER', autospec = True )
 def ExtraConfStore_CallGlobalExtraConfMethod_NoGlobalExtraConf_test( app,
                                                                      logger ):
   extra_conf_store._CallGlobalExtraConfMethod( 'SomeMethod' )
   assert_that( logger.method_calls, has_length( 1 ) )
-  logger.debug.assert_called_with( 'No global extra conf, not calling method '
-                                   'SomeMethod' )
+  logger.debug.assert_called_with(
+    'No global extra conf, not calling method %s',
+    'SomeMethod' )
 
 
 @IsolatedYcmd( { 'global_ycm_extra_conf': GLOBAL_EXTRA_CONF } )
-@patch( 'ycmd.extra_conf_store._logger', autospec = True )
+@patch( 'ycmd.extra_conf_store.LOGGER', autospec = True )
 def CallGlobalExtraConfMethod_NoMethodInGlobalExtraConf_test( app, logger ):
   extra_conf_store._CallGlobalExtraConfMethod( 'MissingMethod' )
   assert_that( logger.method_calls, has_length( 1 ) )
-  logger.debug.assert_called_with( 'Global extra conf not loaded or '
-                                   'no function MissingMethod' )
+  logger.debug.assert_called_with(
+    'Global extra conf not loaded or no function %s',
+    'MissingMethod' )
 
 
 @IsolatedYcmd( { 'global_ycm_extra_conf': GLOBAL_EXTRA_CONF } )
-@patch( 'ycmd.extra_conf_store._logger', autospec = True )
+@patch( 'ycmd.extra_conf_store.LOGGER', autospec = True )
 def CallGlobalExtraConfMethod_NoExceptionFromMethod_test( app, logger ):
   extra_conf_store._CallGlobalExtraConfMethod( 'NoException' )
   assert_that( logger.method_calls, has_length( 1 ) )
-  logger.info.assert_called_with( 'Calling global extra conf method '
-                                  'NoException on conf file '
-                                  '{0}'.format( GLOBAL_EXTRA_CONF ) )
+  logger.info.assert_called_with(
+    'Calling global extra conf method %s on conf file %s',
+    'NoException',
+    GLOBAL_EXTRA_CONF )
 
 
 @IsolatedYcmd( { 'global_ycm_extra_conf': GLOBAL_EXTRA_CONF } )
-@patch( 'ycmd.extra_conf_store._logger', autospec = True )
+@patch( 'ycmd.extra_conf_store.LOGGER', autospec = True )
 def CallGlobalExtraConfMethod_CatchExceptionFromMethod_test( app, logger ):
   extra_conf_store._CallGlobalExtraConfMethod( 'RaiseException' )
   assert_that( logger.method_calls, has_length( 2 ) )
-  logger.info.assert_called_with( 'Calling global extra conf method '
-                                  'RaiseException on conf file '
-                                  '{0}'.format( GLOBAL_EXTRA_CONF ) )
+  logger.info.assert_called_with(
+    'Calling global extra conf method %s on conf file %s',
+    'RaiseException',
+    GLOBAL_EXTRA_CONF )
   logger.exception.assert_called_with(
-    'Error occurred while calling global extra conf method RaiseException '
-    'on conf file {0}'.format( GLOBAL_EXTRA_CONF ) )
+    'Error occurred while calling global extra conf method %s on conf file %s',
+    'RaiseException',
+    GLOBAL_EXTRA_CONF )
 
 
 @IsolatedYcmd( { 'global_ycm_extra_conf': ERRONEOUS_EXTRA_CONF } )
-@patch( 'ycmd.extra_conf_store._logger', autospec = True )
+@patch( 'ycmd.extra_conf_store.LOGGER', autospec = True )
 def CallGlobalExtraConfMethod_CatchExceptionFromExtraConf_test( app, logger ):
   extra_conf_store._CallGlobalExtraConfMethod( 'NoException' )
   assert_that( logger.method_calls, has_length( 1 ) )
-  logger.exception.assert_called_with( 'Error occurred while '
-                                       'loading global extra conf '
-                                       '{0}'.format( ERRONEOUS_EXTRA_CONF ) )
+  logger.exception.assert_called_with(
+    'Error occurred while loading global extra conf %s',
+    ERRONEOUS_EXTRA_CONF )
 
 
 @IsolatedYcmd()
@@ -205,6 +226,8 @@ def Load_DoNotReloadExtraConf_NoForce_test( app ):
     assert_that( inspect.getfile( module ), equal_to( PROJECT_EXTRA_CONF ) )
     assert_that( module, has_property( 'is_global_ycm_extra_conf' ) )
     assert_that( module.is_global_ycm_extra_conf, equal_to( False ) )
+    assert_that( extra_conf_store.IsGlobalExtraConfModule( module ),
+                 equal_to( False ) )
     assert_that(
       extra_conf_store.Load( PROJECT_EXTRA_CONF ),
       same_instance( module )
@@ -219,7 +242,14 @@ def Load_DoNotReloadExtraConf_ForceEqualsTrue_test( app ):
     assert_that( inspect.getfile( module ), equal_to( PROJECT_EXTRA_CONF ) )
     assert_that( module, has_property( 'is_global_ycm_extra_conf' ) )
     assert_that( module.is_global_ycm_extra_conf, equal_to( False ) )
+    assert_that( extra_conf_store.IsGlobalExtraConfModule( module ),
+                 equal_to( False ) )
     assert_that(
       extra_conf_store.Load( PROJECT_EXTRA_CONF, force = True ),
       same_instance( module )
     )
+
+
+def ExtraConfStore_IsGlobalExtraConfStore_NotAExtraConf_test():
+  assert_that( calling( extra_conf_store.IsGlobalExtraConfModule ).with_args(
+    extra_conf_store ), raises( AttributeError ) )

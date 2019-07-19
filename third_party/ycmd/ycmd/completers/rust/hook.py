@@ -1,4 +1,4 @@
-# Copyright (C) 2015 ycmd contributors
+# Copyright (C) 2015-2019 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -22,8 +22,11 @@ from __future__ import absolute_import
 # Not installing aliases from python-future; it's unreliable and slow.
 from builtins import *  # noqa
 
-from ycmd.completers.rust.rust_completer import RustCompleter
+from ycmd.completers.rust.rust_completer import ( ShouldEnableRustCompleter,
+                                                  RustCompleter )
 
 
 def GetCompleter( user_options ):
+  if not ShouldEnableRustCompleter():
+    return None
   return RustCompleter( user_options )

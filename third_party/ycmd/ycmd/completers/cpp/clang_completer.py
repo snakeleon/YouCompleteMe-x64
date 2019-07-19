@@ -24,7 +24,6 @@ from builtins import *  # noqa
 
 from collections import defaultdict
 from future.utils import iteritems
-import logging
 import os.path
 import textwrap
 import xml.etree.ElementTree
@@ -64,7 +63,6 @@ class ClangCompleter( Completer ):
     self._include_cache = IncludeCache()
     self._diagnostic_store = None
     self._files_being_compiled = EphemeralValuesSet()
-    self._logger = logging.getLogger( __name__ )
 
 
   def SupportedFiletypes( self ):
@@ -450,7 +448,7 @@ class ClangCompleter( Completer ):
       flags = []
       filename = request_data[ 'filepath' ]
 
-    database = self._flags.FindCompilationDatabase( filename )
+    database = self._flags.LoadCompilationDatabase( filename )
     database_directory = database.database_directory if database else None
 
     database_item = responses.DebugInfoItem(

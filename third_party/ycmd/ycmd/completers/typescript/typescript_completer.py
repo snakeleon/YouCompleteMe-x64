@@ -37,7 +37,7 @@ from ycmd import responses
 from ycmd import utils
 from ycmd.completers.completer import Completer
 from ycmd.completers.completer_utils import GetFileLines
-from ycmd.utils import re
+from ycmd.utils import LOGGER, re
 
 SERVER_NOT_RUNNING_MESSAGE = 'TSServer is not running.'
 NO_DIAGNOSTIC_MESSAGE = 'No diagnostic for current line!'
@@ -49,8 +49,6 @@ TSSERVER_DIR = os.path.abspath(
                 'tsserver' ) )
 
 LOGFILE_FORMAT = 'tsserver_'
-
-_logger = logging.getLogger( __name__ )
 
 
 class DeferredResponse( object ):
@@ -95,10 +93,10 @@ def FindTSServer():
 def ShouldEnableTypeScriptCompleter():
   tsserver = FindTSServer()
   if not tsserver:
-    _logger.error( 'Not using TypeScript completer: TSServer not installed '
-                   'in %s', TSSERVER_DIR )
+    LOGGER.error( 'Not using TypeScript completer: TSServer not installed '
+                  'in %s', TSSERVER_DIR )
     return False
-  _logger.info( 'Using TypeScript completer with %s', tsserver )
+  LOGGER.info( 'Using TypeScript completer with %s', tsserver )
   return True
 
 
@@ -178,7 +176,7 @@ class TypeScriptCompleter( Completer ):
     self._latest_diagnostics_for_file_lock = threading.Lock()
     self._latest_diagnostics_for_file = defaultdict( list )
 
-    _logger.info( 'Enabling typescript completion' )
+    LOGGER.info( 'Enabling TypeScript completion' )
 
 
   def _SetServerVersion( self ):
@@ -202,7 +200,7 @@ class TypeScriptCompleter( Completer ):
       environ = os.environ.copy()
       utils.SetEnviron( environ, 'TSS_LOG', tsserver_log )
 
-      _logger.info( 'TSServer log file: {0}'.format( self._logfile ) )
+      LOGGER.info( 'TSServer log file: %s', self._logfile )
 
       # We need to redirect the error stream to the output one on Windows.
       self._tsserver_handle = utils.SafePopen( self._tsserver_executable,
@@ -228,7 +226,7 @@ class TypeScriptCompleter( Completer ):
       try:
         message = self._ReadMessage()
       except ( RuntimeError, ValueError ):
-        _logger.exception( 'Error while reading message from server' )
+        LOGGER.exception( 'Error while reading message from server' )
         if not self._ServerIsRunning():
           self._tsserver_is_running.clear()
         continue
@@ -237,10 +235,10 @@ class TypeScriptCompleter( Completer ):
       msgtype = message[ 'type' ]
       if msgtype == 'event':
         eventname = message[ 'event' ]
-        _logger.info( 'Received {0} event from tsserver'.format( eventname ) )
+        LOGGER.info( 'Received %s event from TSServer',  eventname )
         continue
       if msgtype != 'response':
-        _logger.error( 'Unsupported message type {0}'.format( msgtype ) )
+        LOGGER.error( 'Unsupported message type', msgtype )
         continue
 
       seq = message[ 'request_seq' ]
@@ -304,7 +302,7 @@ class TypeScriptCompleter( Completer ):
         self._tsserver_handle.stdin.flush()
       # IOError is an alias of OSError in Python 3.
       except ( AttributeError, IOError ):
-        _logger.exception( SERVER_NOT_RUNNING_MESSAGE )
+        LOGGER.exception( SERVER_NOT_RUNNING_MESSAGE )
         raise RuntimeError( SERVER_NOT_RUNNING_MESSAGE )
 
 
@@ -366,14 +364,6 @@ class TypeScriptCompleter( Completer ):
 
 
   def ComputeCandidatesInner( self, request_data ):
-    def FormatEntry( entry ):
-      if 'source' in entry:
-        return {
-          'name': entry[ 'name' ],
-          'source': entry[ 'source' ]
-        }
-      return entry[ 'name' ]
-
     self._Reload( request_data )
     entries = self._SendRequest( 'completions', {
       'file':                         request_data[ 'filepath' ],
@@ -381,15 +371,48 @@ class TypeScriptCompleter( Completer ):
       'offset':                       request_data[ 'start_codepoint' ],
       'includeExternalModuleExports': True
     } )
+    # Ignore entries with the "warning" kind. They are identifiers from the
+    # current file that TSServer returns sometimes in JavaScript.
+    return [ responses.BuildCompletionData(
+      insertion_text = entry[ 'name' ],
+      # We store the entries returned by TSServer in the extra_data field to
+      # detail the candidates once the filtering is done.
+      extra_data = entry
+    ) for entry in entries if entry[ 'kind' ] != 'warning' ]
+
+
+  def DetailCandidates( self, request_data, candidates ):
+    undetailed_entries = []
+    map_entries_to_candidates = {}
+    for candidate in candidates:
+      undetailed_entry = candidate[ 'extra_data' ]
+      if 'name' not in undetailed_entry:
+        # This candidate is already detailed.
+        continue
+      map_entries_to_candidates[ undetailed_entry[ 'name' ] ] = candidate
+      undetailed_entries.append( undetailed_entry )
+
+    if not undetailed_entries:
+      # All candidates are already detailed.
+      return candidates
 
     detailed_entries = self._SendRequest( 'completionEntryDetails', {
       'file':       request_data[ 'filepath' ],
       'line':       request_data[ 'line_num' ],
       'offset':     request_data[ 'start_codepoint' ],
-      'entryNames': [ FormatEntry( entry ) for entry in entries ]
+      'entryNames': undetailed_entries
     } )
-    return [ _ConvertDetailedCompletionData( request_data, entry )
-             for entry in detailed_entries ]
+    for entry in detailed_entries:
+      candidate = map_entries_to_candidates[ entry[ 'name' ] ]
+      extra_menu_info, detailed_info = _BuildCompletionExtraMenuAndDetailedInfo(
+        request_data, entry )
+      if extra_menu_info:
+        candidate[ 'extra_menu_info' ] = extra_menu_info
+      if detailed_info:
+        candidate[ 'detailed_info' ] = detailed_info
+      candidate[ 'kind' ] = entry[ 'kind' ]
+      candidate[ 'extra_data' ] = _BuildCompletionFixIts( request_data, entry )
+    return candidates
 
 
   def GetSubcommandsMap( self ):
@@ -808,15 +831,15 @@ class TypeScriptCompleter( Completer ):
   def _StopServer( self ):
     with self._tsserver_lock:
       if self._ServerIsRunning():
-        _logger.info( 'Stopping TSServer with PID {0}'.format(
-                          self._tsserver_handle.pid ) )
+        LOGGER.info( 'Stopping TSServer with PID %s',
+                     self._tsserver_handle.pid )
         try:
           self._SendCommand( 'exit' )
           utils.WaitUntilProcessIsTerminated( self._tsserver_handle,
                                               timeout = 5 )
-          _logger.info( 'TSServer stopped' )
+          LOGGER.info( 'TSServer stopped' )
         except Exception:
-          _logger.exception( 'Error while stopping TSServer' )
+          LOGGER.exception( 'Error while stopping TSServer' )
 
       self._CleanUp()
 
@@ -850,14 +873,13 @@ class TypeScriptCompleter( Completer ):
 
 
 def _LogLevel():
-  return 'verbose' if _logger.isEnabledFor( logging.DEBUG ) else 'normal'
+  return 'verbose' if LOGGER.isEnabledFor( logging.DEBUG ) else 'normal'
 
 
-def _ConvertDetailedCompletionData( request_data, completion_data ):
-  name = completion_data[ 'name' ]
-  display_parts = completion_data[ 'displayParts' ]
+def _BuildCompletionExtraMenuAndDetailedInfo( request_data, entry ):
+  display_parts = entry[ 'displayParts' ]
   signature = ''.join( [ part[ 'text' ] for part in display_parts ] )
-  if name == signature:
+  if entry[ 'name' ] == signature:
     extra_menu_info = None
     detailed_info = []
   else:
@@ -866,30 +888,26 @@ def _ConvertDetailedCompletionData( request_data, completion_data ):
     extra_menu_info = re.sub( '\\s+', ' ', signature )
     detailed_info = [ signature ]
 
-  docs = completion_data.get( 'documentation', [] )
+  docs = entry.get( 'documentation', [] )
   detailed_info += [ doc[ 'text' ].strip() for doc in docs if doc ]
   detailed_info = '\n\n'.join( detailed_info )
 
-  fixits = None
-  if 'codeActions' in completion_data:
+  return extra_menu_info, detailed_info
+
+
+def _BuildCompletionFixIts( request_data, entry ):
+  if 'codeActions' in entry:
     location = responses.Location( request_data[ 'line_num' ],
                                    request_data[ 'column_num' ],
                                    request_data[ 'filepath' ] )
-    fixits = responses.BuildFixItResponse( [
+    return responses.BuildFixItResponse( [
       responses.FixIt( location,
                        _BuildFixItForChanges( request_data,
                                               action[ 'changes' ] ),
                        action[ 'description' ] )
-      for action in completion_data[ 'codeActions' ]
+      for action in entry[ 'codeActions' ]
     ] )
-
-  return responses.BuildCompletionData(
-    insertion_text  = name,
-    extra_menu_info = extra_menu_info,
-    detailed_info   = detailed_info,
-    kind            = completion_data[ 'kind' ],
-    extra_data      = fixits
-  )
+  return {}
 
 
 def _BuildFixItChunkForRange( new_name,

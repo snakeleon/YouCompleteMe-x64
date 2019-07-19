@@ -23,6 +23,10 @@ coverage:
   - .*/benchmarks/.*
   - .*/BoostParts/.*
   - .*/pybind11/.*
+  - .*/whereami/.*
+
+fixes:
+  - "utils.py::ycmd/utils.py"
 
 comment:
   layout: "header, diff, changes, uncovered"

@@ -1,4 +1,4 @@
-# Copyright (C) 2011-2018 ycmd contributors
+# Copyright (C) 2011-2019 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -27,14 +27,14 @@ import os
 import inspect
 from future.utils import PY2, native
 from ycmd import extra_conf_store
-from ycmd.utils import ( ListDirectory,
-                         OnMac,
+from ycmd.utils import ( OnMac,
                          OnWindows,
                          PathsToAllParentFolders,
                          re,
                          ToCppStringCompatible,
                          ToBytes,
-                         ToUnicode )
+                         ToUnicode,
+                         CLANG_RESOURCE_DIR )
 from ycmd.responses import NoExtraConfDetected
 
 # -include-pch and --sysroot= must be listed before -include and --sysroot
@@ -42,7 +42,7 @@ from ycmd.responses import NoExtraConfDetected
 # checks prefixes).
 INCLUDE_FLAGS = [ '-isystem', '-I', '-iquote', '-isysroot', '--sysroot',
                   '-gcc-toolchain', '-include-pch', '-include', '-iframework',
-                  '-F', '-imacros', '-idirafter' ]
+                  '-F', '-imacros', '-idirafter', '-B' ]
 INCLUDE_FLAGS_WIN_STYLE = [ '/I' ]
 PATH_FLAGS =  [ '--sysroot=' ] + INCLUDE_FLAGS
 
@@ -86,6 +86,18 @@ EMPTY_FLAGS = {
   'flags': [],
 }
 
+MAC_XCODE_TOOLCHAIN_DIR = (
+  '/Applications/Xcode.app/Contents/Developer/Toolchains'
+  '/XcodeDefault.xctoolchain' )
+MAC_COMMAND_LINE_TOOLCHAIN_DIR = '/Library/Developer/CommandLineTools'
+MAC_XCODE_SYSROOT = (
+  '/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform'
+  '/Developer/SDKs/MacOSX.sdk' )
+MAC_COMMAND_LINE_SYSROOT = (
+  '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk' )
+MAC_FOUNDATION_HEADERS_RELATIVE_DIR = (
+  'System/Library/Frameworks/Foundation.framework/Headers' )
+
 
 class Flags( object ):
   """Keeps track of the flags necessary to compile a file.
@@ -95,7 +107,6 @@ class Flags( object ):
   def __init__( self ):
     # We cache the flags by a tuple of filename and client data.
     self.flags_for_file = {}
-    self.extra_clang_flags = _ExtraClangFlags()
     self.no_extra_conf_file_warning_posted = False
 
     # We cache the compilation database for any given source directory
@@ -103,15 +114,6 @@ class Flags( object ):
     # instances or None. Value is None when it is known there is no compilation
     # database to be found for the directory.
     self.compilation_database_dir_map = {}
-
-    # Sometimes we don't actually know what the flags to use are. Rather than
-    # returning no flags, if we've previously found flags for a file in a
-    # particular directory, return them. These will probably work in a high
-    # percentage of cases and allow new files (which are not yet in the
-    # compilation database) to receive at least some flags.
-    # Keys are directory names and values are ycm_core.CompilationInfo
-    # instances. Values may not be None.
-    self.file_directory_heuristic_map = {}
 
 
   def FlagsForFile( self,
@@ -156,14 +158,10 @@ class Flags( object ):
     if not flags:
       return [], filename
 
-    if add_extra_clang_flags:
-      flags += self.extra_clang_flags
-      flags = _AddMacIncludePaths( flags )
-
     sanitized_flags = PrepareFlagsForClang( flags,
                                             filename,
                                             add_extra_clang_flags,
-                                            _ShouldAllowWinStyleFlags( flags ) )
+                                            ShouldAllowWinStyleFlags( flags ) )
 
     if results.get( 'do_cache', True ):
       self.flags_for_file[ filename, client_data ] = sanitized_flags, filename
@@ -174,11 +172,11 @@ class Flags( object ):
   def _GetFlagsFromExtraConfOrDatabase( self, filename, client_data ):
     # Load the flags from the extra conf file if one is found and is not global.
     module = extra_conf_store.ModuleForSourceFile( filename )
-    if module and not module.is_global_ycm_extra_conf:
+    if module and not extra_conf_store.IsGlobalExtraConfModule( module ):
       return _CallExtraConfFlagsForFile( module, filename, client_data )
 
     # Load the flags from the compilation database if any.
-    database = self.FindCompilationDatabase( filename )
+    database = self.LoadCompilationDatabase( filename )
     if database:
       return self._GetFlagsFromCompilationDatabase( database, filename )
 
@@ -198,11 +196,9 @@ class Flags( object ):
   def Clear( self ):
     self.flags_for_file.clear()
     self.compilation_database_dir_map.clear()
-    self.file_directory_heuristic_map.clear()
 
 
   def _GetFlagsFromCompilationDatabase( self, database, file_name ):
-    file_dir = os.path.dirname( file_name )
     _, file_extension = os.path.splitext( file_name )
 
     compilation_info = _GetCompilationInfoForFile( database,
@@ -210,25 +206,8 @@ class Flags( object ):
                                                    file_extension )
 
     if not compilation_info:
-      # Note: Try-catch here synchronises access to the cache (as this can be
-      # called from multiple threads).
-      try:
-        # We previously saw a file in this directory. As a guess, just
-        # return the flags for that file. Hopefully this will at least give some
-        # meaningful compilation.
-        compilation_info = self.file_directory_heuristic_map[ file_dir ]
-      except KeyError:
-        # No cache for this directory and there are no flags for this file in
-        # the database.
-        return EMPTY_FLAGS
-
-    # If this is the first file we've seen in path file_dir, cache the
-    # compilation_info for it in case we see a file in the same dir with no
-    # flags available.
-    # The following updates file_directory_heuristic_map if and only if file_dir
-    # isn't already there. This works around a race condition where 2 threads
-    # could be executing this method in parallel.
-    self.file_directory_heuristic_map.setdefault( file_dir, compilation_info )
+      # No flags for this file in the database.
+      return EMPTY_FLAGS
 
     return {
       'flags': _MakeRelativePathsInFlagsAbsolute(
@@ -239,7 +218,7 @@ class Flags( object ):
 
   # Return a compilation database object for the supplied path or None if no
   # compilation database is found.
-  def FindCompilationDatabase( self, file_dir ):
+  def LoadCompilationDatabase( self, file_dir ):
     # We search up the directory hierarchy, to first see if we have a
     # compilation database already for that path, or if a compile_commands.json
     # file exists in that directory.
@@ -269,7 +248,7 @@ def _ExtractFlagsList( flags_for_file_output ):
   return [ ToUnicode( x ) for x in flags_for_file_output[ 'flags' ] ]
 
 
-def _ShouldAllowWinStyleFlags( flags ):
+def ShouldAllowWinStyleFlags( flags ):
   if OnWindows():
     # Iterate in reverse because we only care
     # about the last occurrence of --driver-mode flag.
@@ -317,22 +296,28 @@ def _CallExtraConfFlagsForFile( module, filename, client_data ):
   return results
 
 
-def _SysRootSpecifedIn( flags ):
-  for flag in flags:
-    if flag == '-isysroot' or flag.startswith( '--sysroot' ):
-      return True
-
-  return False
-
-
 def PrepareFlagsForClang( flags,
                           filename,
                           add_extra_clang_flags = True,
                           enable_windows_style_flags = False ):
   flags = _AddLanguageFlagWhenAppropriate( flags, enable_windows_style_flags )
   flags = _RemoveXclangFlags( flags )
-  flags = _RemoveUnusedFlags( flags, filename, enable_windows_style_flags )
+  flags = RemoveUnusedFlags( flags, filename, enable_windows_style_flags )
   if add_extra_clang_flags:
+    # This flag tells libclang where to find the builtin includes.
+    flags.append( '-resource-dir=' + CLANG_RESOURCE_DIR )
+    # On Windows, parsing of templates is delayed until instantiation time.
+    # This makes GetType and GetParent commands fail to return the expected
+    # result when the cursor is in a template.
+    # Using the -fno-delayed-template-parsing flag disables this behavior. See
+    # http://clang.llvm.org/extra/PassByValueTransform.html#note-about-delayed-template-parsing # noqa
+    # for an explanation of the flag and
+    # https://code.google.com/p/include-what-you-use/source/detail?r=566
+    # for a similar issue.
+    if OnWindows():
+      flags.append( '-fno-delayed-template-parsing' )
+    if OnMac():
+      flags = AddMacIncludePaths( flags )
     flags = _EnableTypoCorrection( flags )
 
   vector = ycm_core.StringVector()
@@ -422,7 +407,7 @@ def _AddLanguageFlagWhenAppropriate( flags, enable_windows_style_flags ):
   return flags
 
 
-def _RemoveUnusedFlags( flags, filename, enable_windows_style_flags ):
+def RemoveUnusedFlags( flags, filename, enable_windows_style_flags ):
   """Given an iterable object that produces strings (flags for Clang), removes
   the '-c' and '-o' options that Clang does not like to see when it's producing
   completions for a file. Same for '-MD' etc.
@@ -505,98 +490,111 @@ def _SkipStrayFilenameFlag( current_flag,
              ( not previous_flag_is_include and current_flag_may_be_path ) ) )
 
 
-# Return the path to the macOS toolchain root directory to use for system
-# includes. If no toolchain is found, returns None.
-def _SelectMacToolchain():
-  # There are 2 ways to get a development enviornment (as standard) on OS X:
-  #  - install XCode.app, or
-  #  - install the command-line tools (xcode-select --install)
-  #
-  # Most users have xcode installed, but in order to be as compatible as
-  # possible we consider both possible installation locations
-  MAC_CLANG_TOOLCHAIN_DIRS = [
-    '/Applications/Xcode.app/Contents/Developer/Toolchains/'
-      'XcodeDefault.xctoolchain',
-    '/Library/Developer/CommandLineTools'
-  ]
+def _GetMacSysRoot():
+  # Since macOS 10.14, the root framework directories do not contain the
+  # headers. Instead of relying on the macOS version, check if the Headers
+  # directory of a common framework (Foundation) exists. If it does, return the
+  # base directory as the default sysroot.
+  for sysroot in [ '/', MAC_XCODE_SYSROOT, MAC_COMMAND_LINE_SYSROOT ]:
+    if os.path.exists( os.path.join( sysroot,
+                                     MAC_FOUNDATION_HEADERS_RELATIVE_DIR ) ):
+      return sysroot
+  # No headers found. Use the root directory anyway.
+  return '/'
 
-  for toolchain in MAC_CLANG_TOOLCHAIN_DIRS:
+
+def _ExtractInfoForMacIncludePaths( flags ):
+  language = 'c++'
+  use_libcpp = True
+  sysroot = _GetMacSysRoot()
+  isysroot = None
+
+  previous_flag = None
+  for current_flag in flags:
+    if previous_flag == '-x':
+      language = current_flag
+    if current_flag.startswith( '-x' ):
+      language = current_flag[ 2: ]
+    if current_flag.startswith( '-stdlib=' ):
+      use_libcpp = current_flag[ 8: ] == 'libc++'
+    if previous_flag == '--sysroot':
+      sysroot = current_flag
+    if current_flag.startswith( '--sysroot=' ):
+      sysroot = current_flag[ 10: ]
+    if previous_flag == '-isysroot':
+      isysroot = current_flag
+    if current_flag.startswith( '-isysroot' ):
+      isysroot = current_flag[ 9: ]
+    previous_flag = current_flag
+
+  # -isysroot takes precedence over --sysroot.
+  if isysroot:
+    sysroot = isysroot
+
+  language_is_cpp = language in { 'c++', 'objective-c++' }
+
+  return language_is_cpp, use_libcpp, sysroot
+
+
+def _FindMacToolchain():
+  for toolchain in [ MAC_XCODE_TOOLCHAIN_DIR, MAC_COMMAND_LINE_TOOLCHAIN_DIR ]:
     if os.path.exists( toolchain ):
       return toolchain
-
   return None
 
 
-# Return the list of flags including any Clang headers found in the supplied
-# toolchain. These are required for the same reasons as described below, but
-# unfortunately, these are in versioned directories and there is no easy way to
-# find the "correct" version. We simply pick the highest version in the first
-# toolchain that we find, as this is the most likely to be correct.
-def _LatestMacClangIncludes( toolchain ):
-  # We use the first toolchain which actually contains any versions, rather than
-  # trying all of the toolchains and picking the highest. We favour Xcode over
-  # CommandLineTools as using Xcode is more common. It might be possible to
-  # extract this information from xcode-select, though xcode-select -p does not
-  # point at the toolchain directly.
-  candidates_dir = os.path.join( toolchain, 'usr', 'lib', 'clang' )
-  versions = ListDirectory( candidates_dir )
+# We can't rely on upstream libclang to find the system headers on macOS 10.14
+# as it's unable to locate the framework headers without setting the sysroot if
+# Command Line Tools is not installed. So, we try to reproduce the logic used by
+# Apple Clang to find the system headers by looking at the output of the command
+#
+#   clang++ -x c++ -E -v -
+#
+# which prints the list of system header directories and by reading the source
+# code of upstream Clang:
+# https://github.com/llvm-mirror/clang/blob/2709c8b804eb38dbdc8ae05b8fcf4f95c01b4102/lib/Frontend/InitHeaderSearch.cpp#L453-L510
+# This has also the benefit of allowing completion of system header paths and
+# navigation to these headers when the cursor is on an include statement.
+def AddMacIncludePaths( flags ):
+  use_standard_cpp_includes = '-nostdinc++' not in flags
+  use_standard_system_includes = '-nostdinc' not in flags
+  use_builtin_includes = '-nobuiltininc' not in flags
 
-  for version in reversed( sorted( versions ) ):
-    candidate_include = os.path.join( candidates_dir, version, 'include' )
-    if os.path.exists( candidate_include ):
-      return [ '-isystem', candidate_include ]
+  language_is_cpp, use_libcpp, sysroot = _ExtractInfoForMacIncludePaths( flags )
 
-  return []
+  toolchain = _FindMacToolchain()
 
+  if ( language_is_cpp and
+       use_standard_cpp_includes and
+       use_standard_system_includes and
+       use_libcpp ):
+    if toolchain:
+      flags.extend( [
+        '-isystem', os.path.join( toolchain, 'usr/include/c++/v1' ) ] )
+    flags.extend( [
+      '-isystem', os.path.join( sysroot, 'usr/include/c++/v1' ) ] )
 
-MAC_INCLUDE_PATHS = []
+  if use_standard_system_includes:
+    flags.extend( [
+      '-isystem', os.path.join( sysroot, 'usr/local/include' ) ] )
+    # Apple Clang always adds /usr/local/include to the list of system header
+    # directories even if sysroot is not the root directory.
+    if sysroot != '/':
+      flags.extend( [ '-isystem', '/usr/local/include' ] )
 
-if OnMac():
-  # These are the standard header search paths that clang will use on Mac BUT
-  # libclang won't, for unknown reasons. We add these paths when the user is on
-  # a Mac because if we don't, libclang would fail to find <vector> etc.  This
-  # should be fixed upstream in libclang, but until it does, we need to help
-  # users out.
-  # See the following for details:
-  #  - Valloric/YouCompleteMe#303
-  #  - Valloric/YouCompleteMe#2268
-  toolchain = _SelectMacToolchain()
-  if toolchain:
-    MAC_INCLUDE_PATHS = (
-      [ '-isystem', os.path.join( toolchain, 'usr/include/c++/v1' ),
-        '-isystem', '/usr/local/include' ] +
-      _LatestMacClangIncludes( toolchain ) +
-      [ '-isystem', os.path.join( toolchain, 'usr/include' ),
-        '-isystem', '/usr/include',
-        '-iframework', '/System/Library/Frameworks',
-        '-iframework', '/Library/Frameworks',
-        # We include the MacOS platform SDK because some meaningful parts of the
-        # standard library are located there. If users are compiling for (say)
-        # iPhone.platform, etc. they should appear earlier in the include path.
-        '-isystem', '/Applications/Xcode.app/Contents/Developer/Platforms'
-                    '/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include' ]
-    )
+  if use_builtin_includes:
+    flags.extend( [
+      '-isystem', os.path.join( CLANG_RESOURCE_DIR, 'include' ) ] )
 
+  if use_standard_system_includes:
+    if toolchain:
+      flags.extend( [
+        '-isystem', os.path.join( toolchain, 'usr/include' ) ] )
+    flags.extend( [
+      '-isystem',    os.path.join( sysroot, 'usr/include' ),
+      '-iframework', os.path.join( sysroot, 'System/Library/Frameworks' ),
+      '-iframework', os.path.join( sysroot, 'Library/Frameworks' ) ] )
 
-def _AddMacIncludePaths( flags ):
-  if OnMac() and not _SysRootSpecifedIn( flags ):
-    flags.extend( MAC_INCLUDE_PATHS )
-  return flags
-
-
-def _ExtraClangFlags():
-  flags = _SpecialClangIncludes()
-  # On Windows, parsing of templates is delayed until instantiation time.
-  # This makes GetType and GetParent commands fail to return the expected
-  # result when the cursor is in a template.
-  # Using the -fno-delayed-template-parsing flag disables this behavior.
-  # See
-  # http://clang.llvm.org/extra/PassByValueTransform.html#note-about-delayed-template-parsing # noqa
-  # for an explanation of the flag and
-  # https://code.google.com/p/include-what-you-use/source/detail?r=566
-  # for a similar issue.
-  if OnWindows():
-    flags.append( '-fno-delayed-template-parsing' )
   return flags
 
 
@@ -618,19 +616,13 @@ def _EnableTypoCorrection( flags ):
   return flags
 
 
-def _SpecialClangIncludes():
-  libclang_dir = os.path.dirname( ycm_core.__file__ )
-  path_to_includes = os.path.join( libclang_dir, 'clang_includes' )
-  return [ '-resource-dir=' + path_to_includes ]
-
-
 def _MakeRelativePathsInFlagsAbsolute( flags, working_directory ):
   if not working_directory:
     return list( flags )
   new_flags = []
   make_next_absolute = False
   path_flags = ( PATH_FLAGS + INCLUDE_FLAGS_WIN_STYLE
-                 if _ShouldAllowWinStyleFlags( flags )
+                 if ShouldAllowWinStyleFlags( flags )
                  else PATH_FLAGS )
   for flag in flags:
     new_flag = flag
@@ -671,21 +663,6 @@ def _GetCompilationInfoForFile( database, file_name, file_extension ):
   compilation_info = database.GetCompilationInfoForFile( file_name )
   if compilation_info.compiler_flags_:
     return compilation_info
-
-  # The compilation_commands.json file generated by CMake does not have entries
-  # for header files. So we do our best by asking the db for flags for a
-  # corresponding source file, if any. If one exists, the flags for that file
-  # should be good enough.
-  if file_extension in HEADER_EXTENSIONS:
-    for extension in SOURCE_EXTENSIONS:
-      replacement_file = os.path.splitext( file_name )[ 0 ] + extension
-      compilation_info = database.GetCompilationInfoForFile(
-        replacement_file )
-      if compilation_info and compilation_info.compiler_flags_:
-        return compilation_info
-
-  # No corresponding source file was found, so we can't generate any flags for
-  # this source file.
   return None
 
 
@@ -708,7 +685,7 @@ def UserIncludePaths( user_flags, filename ):
                       '-isystem':    include_paths,
                       '-F':          framework_paths,
                       '-iframework': framework_paths }
-    if _ShouldAllowWinStyleFlags( user_flags ):
+    if ShouldAllowWinStyleFlags( user_flags ):
       include_flags[ '/I' ] = include_paths
 
     try:

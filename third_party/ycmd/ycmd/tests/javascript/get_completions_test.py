@@ -34,7 +34,7 @@ from nose.tools import eq_
 import pprint
 import requests
 
-from ycmd.tests.javascript import PathToTestFile, SharedYcmd
+from ycmd.tests.javascript import IsolatedYcmd, PathToTestFile, SharedYcmd
 from ycmd.tests.test_utils import ( BuildRequest, ChunkMatcher,
                                     CompletionEntryMatcher, LocationMatcher )
 from ycmd.utils import ReadFile
@@ -132,6 +132,7 @@ def GetCompletions_Keyword_test( app ):
         'completions': has_item( {
           'insertion_text': 'class',
           'kind':           'keyword',
+          'extra_data':     {}
         } )
       } )
     }
@@ -174,6 +175,33 @@ def GetCompletions_AutoImport_test( app ):
             )
           } )
         } ) )
+      } )
+    }
+  } )
+
+
+@IsolatedYcmd
+def GetCompletions_IgnoreIdentifiers_test( app ):
+  RunTest( app, {
+    'description': 'Identifier "test" is not returned as a suggestion',
+    'request': {
+      'line_num': 5,
+      'column_num': 6,
+      'filepath': PathToTestFile( 'identifier', 'test.js' ),
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': has_entries( {
+        'completions': contains(
+          CompletionEntryMatcher(
+            'foo',
+            '(property) foo: string',
+            extra_params = {
+              'kind': 'property',
+              'detailed_info': '(property) foo: string'
+            }
+          )
+        )
       } )
     }
   } )

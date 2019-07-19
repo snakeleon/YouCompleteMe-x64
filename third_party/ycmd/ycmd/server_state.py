@@ -1,4 +1,4 @@
-# Copyright (C) 2013 Google Inc.
+# Copyright (C) 2013-2018 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -22,16 +22,22 @@ from __future__ import absolute_import
 # Not installing aliases from python-future; it's unreliable and slow.
 from builtins import *  # noqa
 
-import os
 import threading
-import logging
 from future.utils import itervalues
-from ycmd.utils import LoadPythonSource
+from importlib import import_module
 from ycmd.completers.general.general_completer_store import (
     GeneralCompleterStore )
-from ycmd.completers.completer_utils import PathToFiletypeCompleterPluginLoader
+from ycmd.completers.language_server import generic_lsp_completer
+from ycmd.utils import LOGGER
 
-_logger = logging.getLogger( __name__ )
+
+def _GetGenericLSPCompleter( user_options, filetype ):
+  custom_lsp = user_options[ 'language_server' ]
+  for server_settings in custom_lsp:
+    if filetype in server_settings[ 'filetypes' ]:
+      return generic_lsp_completer.GenericLSPCompleter(
+          user_options, server_settings )
+  return None
 
 
 class ServerState( object ):
@@ -63,14 +69,18 @@ class ServerState( object ):
       except KeyError:
         pass
 
-      module_path = PathToFiletypeCompleterPluginLoader( filetype )
-      completer = None
-      supported_filetypes = { filetype }
-      if os.path.exists( module_path ):
-        module = LoadPythonSource( filetype, module_path )
+      try:
+        module = import_module( 'ycmd.completers.{}.hook'.format( filetype ) )
         completer = module.GetCompleter( self._user_options )
-        if completer:
-          supported_filetypes.update( completer.SupportedFiletypes() )
+      except ImportError:
+        completer = None
+
+      if completer is None:
+        completer = _GetGenericLSPCompleter( self._user_options, filetype )
+
+      supported_filetypes = { filetype }
+      if completer:
+        supported_filetypes.update( completer.SupportedFiletypes() )
 
       for supported_filetype in supported_filetypes:
         if supported_filetype not in self._filetype_completers:
@@ -100,8 +110,8 @@ class ServerState( object ):
     try:
       self.GetFiletypeCompleter( filetypes )
       return True
-    except Exception as e:
-      _logger.exception( e )
+    except Exception:
+      LOGGER.exception( 'Semantic completion not available for %s', filetypes )
       return False
 
 

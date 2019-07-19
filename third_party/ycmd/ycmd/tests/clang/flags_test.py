@@ -1,4 +1,4 @@
-# Copyright (C) 2011-2018 ycmd contributors
+# Copyright (C) 2011-2019 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -24,24 +24,22 @@ from builtins import *  # noqa
 
 import contextlib
 import os
-
-from nose.tools import eq_, ok_
-from ycmd.completers.cpp import flags
-from mock import patch, MagicMock
-from types import ModuleType
-from ycmd.tests.test_utils import MacOnly, TemporaryTestDir, WindowsOnly
-from ycmd.responses import NoExtraConfDetected
-from ycmd.tests.clang import TemporaryClangProject
-from ycmd.completers.cpp.flags import _ShouldAllowWinStyleFlags
-
 from hamcrest import ( assert_that,
                        calling,
                        contains,
                        empty,
                        equal_to,
-                       has_item,
-                       not_,
                        raises )
+from mock import patch, MagicMock
+from nose.tools import eq_
+from types import ModuleType
+
+from ycmd.completers.cpp import flags
+from ycmd.completers.cpp.flags import ShouldAllowWinStyleFlags, INCLUDE_FLAGS
+from ycmd.tests.test_utils import ( MacOnly, TemporaryTestDir, WindowsOnly,
+                                    TemporaryClangProject )
+from ycmd.utils import CLANG_RESOURCE_DIR
+from ycmd.responses import NoExtraConfDetected
 
 
 @contextlib.contextmanager
@@ -194,53 +192,357 @@ def FlagsForFile_MakeRelativePathsAbsoluteIfOptionSpecified_test():
 
 
 @MacOnly
-@patch( 'ycmd.completers.cpp.flags.MAC_INCLUDE_PATHS',
-        [ 'sentinel_value_for_testing' ] )
-def FlagsForFile_AddMacIncludePathsWithoutSysroot_test():
+@patch( 'os.path.exists', lambda path:
+  path == '/System/Library/Frameworks/Foundation.framework/Headers' )
+def FlagsForFile_AddMacIncludePaths_SysRoot_Default_test():
   flags_object = flags.Flags()
 
   def Settings( **kwargs ):
     return {
-      'flags': [ '-test', '--test1', '--test2=test' ]
+      'flags': [ '-Wall' ]
     }
 
   with MockExtraConfModule( Settings ):
     flags_list, _ = flags_object.FlagsForFile( '/foo' )
-    assert_that( flags_list, has_item( 'sentinel_value_for_testing' ) )
+    assert_that( flags_list, contains(
+      '-Wall',
+      '-resource-dir=' + CLANG_RESOURCE_DIR,
+      '-isystem',    '/usr/include/c++/v1',
+      '-isystem',    '/usr/local/include',
+      '-isystem',    os.path.join( CLANG_RESOURCE_DIR, 'include' ),
+      '-isystem',    '/usr/include',
+      '-iframework', '/System/Library/Frameworks',
+      '-iframework', '/Library/Frameworks',
+      '-fspell-checking' ) )
 
 
 @MacOnly
-@patch( 'ycmd.completers.cpp.flags.MAC_INCLUDE_PATHS',
-        [ 'sentinel_value_for_testing' ] )
-def FlagsForFile_DoNotAddMacIncludePathsWithSysroot_test():
+@patch( 'os.path.exists', lambda path:
+  path == '/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform'
+          '/Developer/SDKs/MacOSX.sdk/System/Library/Frameworks'
+          '/Foundation.framework/Headers' )
+def FlagsForFile_AddMacIncludePaths_SysRoot_Xcode_test():
   flags_object = flags.Flags()
 
   def Settings( **kwargs ):
     return {
-      'flags': [ '-isysroot', 'test1', '--test2=test' ]
+      'flags': [ '-Wall' ]
     }
 
   with MockExtraConfModule( Settings ):
     flags_list, _ = flags_object.FlagsForFile( '/foo' )
-    assert_that( flags_list, not_( has_item( 'sentinel_value_for_testing' ) ) )
+    assert_that( flags_list, contains(
+      '-Wall',
+      '-resource-dir=' + CLANG_RESOURCE_DIR,
+      '-isystem',    '/Applications/Xcode.app/Contents/Developer/Platforms'
+                     '/MacOSX.platform/Developer/SDKs/MacOSX.sdk'
+                     '/usr/include/c++/v1',
+      '-isystem',    '/Applications/Xcode.app/Contents/Developer/Platforms'
+                     '/MacOSX.platform/Developer/SDKs/MacOSX.sdk'
+                     '/usr/local/include',
+      '-isystem',    '/usr/local/include',
+      '-isystem',    os.path.join( CLANG_RESOURCE_DIR, 'include' ),
+      '-isystem',    '/Applications/Xcode.app/Contents/Developer/Platforms'
+                     '/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include',
+      '-iframework', '/Applications/Xcode.app/Contents/Developer/Platforms'
+                     '/MacOSX.platform/Developer/SDKs/MacOSX.sdk'
+                     '/System/Library/Frameworks',
+      '-iframework', '/Applications/Xcode.app/Contents/Developer/Platforms'
+                     '/MacOSX.platform/Developer/SDKs/MacOSX.sdk'
+                     '/Library/Frameworks',
+      '-fspell-checking' ) )
+
+
+@MacOnly
+@patch( 'os.path.exists', lambda path:
+  path == '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+          '/System/Library/Frameworks/Foundation.framework/Headers' )
+def FlagsForFile_AddMacIncludePaths_SysRoot_CommandLine_test():
+  flags_object = flags.Flags()
 
   def Settings( **kwargs ):
     return {
-      'flags': [ '-test', '--sysroot', 'test1' ]
+      'flags': [ '-Wall' ]
     }
 
   with MockExtraConfModule( Settings ):
     flags_list, _ = flags_object.FlagsForFile( '/foo' )
-    assert_that( flags_list, not_( has_item( 'sentinel_value_for_testing' ) ) )
+    assert_that( flags_list, contains(
+      '-Wall',
+      '-resource-dir=' + CLANG_RESOURCE_DIR,
+      '-isystem',    '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+                     '/usr/include/c++/v1',
+      '-isystem',    '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+                     '/usr/local/include',
+      '-isystem',    '/usr/local/include',
+      '-isystem',    os.path.join( CLANG_RESOURCE_DIR, 'include' ),
+      '-isystem',    '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+                     '/usr/include',
+      '-iframework', '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+                     '/System/Library/Frameworks',
+      '-iframework', '/Library/Developer/CommandLineTools/SDKs/MacOSX.sdk'
+                     '/Library/Frameworks',
+      '-fspell-checking' ) )
+
+
+@MacOnly
+@patch( 'os.path.exists', lambda path: False )
+def FlagsForFile_AddMacIncludePaths_Sysroot_Custom_test():
+  flags_object = flags.Flags()
 
   def Settings( **kwargs ):
     return {
-      'flags': [ '-test', 'test1', '--sysroot=test' ]
+      'flags': [ '-Wall',
+                 '-isysroot/path/to/first/sys/root',
+                 '-isysroot', '/path/to/second/sys/root/',
+                 '--sysroot=/path/to/third/sys/root',
+                 '--sysroot', '/path/to/fourth/sys/root' ]
     }
 
   with MockExtraConfModule( Settings ):
     flags_list, _ = flags_object.FlagsForFile( '/foo' )
-    assert_that( flags_list, not_( has_item( 'sentinel_value_for_testing' ) ) )
+    assert_that( flags_list, contains(
+      '-Wall',
+      '-isysroot/path/to/first/sys/root',
+      '-isysroot', '/path/to/second/sys/root/',
+      '--sysroot=/path/to/third/sys/root',
+      '--sysroot', '/path/to/fourth/sys/root',
+      '-resource-dir=' + CLANG_RESOURCE_DIR,
+      '-isystem',    '/path/to/second/sys/root/usr/include/c++/v1',
+      '-isystem',    '/path/to/second/sys/root/usr/local/include',
+      '-isystem',    '/usr/local/include',
+      '-isystem',    os.path.join( CLANG_RESOURCE_DIR, 'include' ),
+      '-isystem',    '/path/to/second/sys/root/usr/include',
+      '-iframework', '/path/to/second/sys/root/System/Library/Frameworks',
+      '-iframework', '/path/to/second/sys/root/Library/Frameworks',
+      '-fspell-checking' ) )
+
+
+@MacOnly
+@patch( 'os.path.exists', lambda path:
+  path == '/Applications/Xcode.app/Contents/Developer/Toolchains/'
+          'XcodeDefault.xctoolchain' )
+def FlagsForFile_AddMacIncludePaths_Toolchain_Xcode_test():
+  flags_object = flags.Flags()
+
+  def Settings( **kwargs ):
+    return {
+      'flags': [ '-Wall' ]
+    }
+
+  with MockExtraConfModule( Settings ):
+    flags_list, _ = flags_object.FlagsForFile( '/foo' )
+    assert_that( flags_list, contains(
+      '-Wall',
+      '-resource-dir=' + CLANG_RESOURCE_DIR,
+      '-isystem',    '/Applications/Xcode.app/Contents/Developer/Toolchains'
+                     '/XcodeDefault.xctoolchain/usr/include/c++/v1',
+      '-isystem',    '/usr/include/c++/v1',
+      '-isystem',    '/usr/local/include',
+      '-isystem',    os.path.join( CLANG_RESOURCE_DIR, 'include' ),
+      '-isystem',    '/Applications/Xcode.app/Contents/Developer/Toolchains'
+                     '/XcodeDefault.xctoolchain/usr/include',
+      '-isystem',    '/usr/include',
+      '-iframework', '/System/Library/Frameworks',
+      '-iframework', '/Library/Frameworks',
+      '-fspell-checking' ) )
+
+
+@MacOnly
+@patch( 'os.path.exists', lambda path:
+  path == '/Library/Developer/CommandLineTools' )
+def FlagsForFile_AddMacIncludePaths_Toolchain_CommandLine_test():
+  flags_object = flags.Flags()
+
+  def Settings( **kwargs ):
+    return {
+      'flags': [ '-Wall' ]
+    }
+
+  with MockExtraConfModule( Settings ):
+    flags_list, _ = flags_object.FlagsForFile( '/foo' )
+    assert_that( flags_list, contains(
+      '-Wall',
+      '-resource-dir=' + CLANG_RESOURCE_DIR,
+      '-isystem',    '/Library/Developer/CommandLineTools/usr/include/c++/v1',
+      '-isystem',    '/usr/include/c++/v1',
+      '-isystem',    '/usr/local/include',
+      '-isystem',    os.path.join( CLANG_RESOURCE_DIR, 'include' ),
+      '-isystem',    '/Library/Developer/CommandLineTools/usr/include',
+      '-isystem',    '/usr/include',
+      '-iframework', '/System/Library/Frameworks',
+      '-iframework', '/Library/Frameworks',
+      '-fspell-checking' ) )
+
+
+@MacOnly
+@patch( 'os.path.exists', lambda path: False )
+def FlagsForFile_AddMacIncludePaths_ObjCppLanguage_test():
+  flags_object = flags.Flags()
+
+  def Settings( **kwargs ):
+    return {
+      'flags': [ '-Wall', '-x', 'c', '-xobjective-c++' ]
+    }
+
+  with MockExtraConfModule( Settings ):
+    flags_list, _ = flags_object.FlagsForFile( '/foo' )
+    assert_that( flags_list, contains(
+      '-Wall',
+      '-x', 'c',
+      '-xobjective-c++',
+      '-resource-dir=' + CLANG_RESOURCE_DIR,
+      '-isystem',    '/usr/include/c++/v1',
+      '-isystem',    '/usr/local/include',
+      '-isystem',    os.path.join( CLANG_RESOURCE_DIR, 'include' ),
+      '-isystem',    '/usr/include',
+      '-iframework', '/System/Library/Frameworks',
+      '-iframework', '/Library/Frameworks',
+      '-fspell-checking' ) )
+
+
+@MacOnly
+@patch( 'os.path.exists', lambda path: False )
+def FlagsForFile_AddMacIncludePaths_CppLanguage_test():
+  flags_object = flags.Flags()
+
+  def Settings( **kwargs ):
+    return {
+      'flags': [ '-Wall', '-x', 'c', '-xc++' ]
+    }
+
+  with MockExtraConfModule( Settings ):
+    flags_list, _ = flags_object.FlagsForFile( '/foo' )
+    assert_that( flags_list, contains(
+      '-Wall',
+      '-x', 'c',
+      '-xc++',
+      '-resource-dir=' + CLANG_RESOURCE_DIR,
+      '-isystem',    '/usr/include/c++/v1',
+      '-isystem',    '/usr/local/include',
+      '-isystem',    os.path.join( CLANG_RESOURCE_DIR, 'include' ),
+      '-isystem',    '/usr/include',
+      '-iframework', '/System/Library/Frameworks',
+      '-iframework', '/Library/Frameworks',
+      '-fspell-checking' ) )
+
+
+@MacOnly
+@patch( 'os.path.exists', lambda path: False )
+def FlagsForFile_AddMacIncludePaths_CLanguage_test():
+  flags_object = flags.Flags()
+
+  def Settings( **kwargs ):
+    return {
+      'flags': [ '-Wall', '-xc++', '-xc' ]
+    }
+
+  with MockExtraConfModule( Settings ):
+    flags_list, _ = flags_object.FlagsForFile( '/foo' )
+    assert_that( flags_list, contains(
+      '-Wall',
+      '-xc++',
+      '-xc',
+      '-resource-dir=' + CLANG_RESOURCE_DIR,
+      '-isystem',    '/usr/local/include',
+      '-isystem',    os.path.join( CLANG_RESOURCE_DIR, 'include' ),
+      '-isystem',    '/usr/include',
+      '-iframework', '/System/Library/Frameworks',
+      '-iframework', '/Library/Frameworks',
+      '-fspell-checking' ) )
+
+
+@MacOnly
+@patch( 'os.path.exists', lambda path: False )
+def FlagsForFile_AddMacIncludePaths_NoLibCpp_test():
+  flags_object = flags.Flags()
+
+  def Settings( **kwargs ):
+    return {
+      'flags': [ '-Wall', '-stdlib=libc++', '-stdlib=libstdc++' ]
+    }
+
+  with MockExtraConfModule( Settings ):
+    flags_list, _ = flags_object.FlagsForFile( '/foo' )
+    assert_that( flags_list, contains(
+      '-Wall',
+      '-stdlib=libc++',
+      '-stdlib=libstdc++',
+      '-resource-dir=' + CLANG_RESOURCE_DIR,
+      '-isystem',    '/usr/local/include',
+      '-isystem',    os.path.join( CLANG_RESOURCE_DIR, 'include' ),
+      '-isystem',    '/usr/include',
+      '-iframework', '/System/Library/Frameworks',
+      '-iframework', '/Library/Frameworks',
+      '-fspell-checking' ) )
+
+
+@MacOnly
+@patch( 'os.path.exists', lambda path: False )
+def FlagsForFile_AddMacIncludePaths_NoStandardCppIncludes_test():
+  flags_object = flags.Flags()
+
+  def Settings( **kwargs ):
+    return {
+      'flags': [ '-Wall', '-nostdinc++' ]
+    }
+
+  with MockExtraConfModule( Settings ):
+    flags_list, _ = flags_object.FlagsForFile( '/foo' )
+    assert_that( flags_list, contains(
+      '-Wall',
+      '-nostdinc++',
+      '-resource-dir=' + CLANG_RESOURCE_DIR,
+      '-isystem',    '/usr/local/include',
+      '-isystem',    os.path.join( CLANG_RESOURCE_DIR, 'include' ),
+      '-isystem',    '/usr/include',
+      '-iframework', '/System/Library/Frameworks',
+      '-iframework', '/Library/Frameworks',
+      '-fspell-checking' ) )
+
+
+@MacOnly
+@patch( 'os.path.exists', lambda path: False )
+def FlagsForFile_AddMacIncludePaths_NoStandardSystemIncludes_test():
+  flags_object = flags.Flags()
+
+  def Settings( **kwargs ):
+    return {
+      'flags': [ '-Wall', '-nostdinc' ]
+    }
+
+  with MockExtraConfModule( Settings ):
+    flags_list, _ = flags_object.FlagsForFile( '/foo' )
+    assert_that( flags_list, contains(
+      '-Wall',
+      '-nostdinc',
+      '-resource-dir=' + CLANG_RESOURCE_DIR,
+      '-isystem', os.path.join( CLANG_RESOURCE_DIR, 'include' ),
+      '-fspell-checking' ) )
+
+
+@MacOnly
+@patch( 'os.path.exists', lambda path: False )
+def FlagsForFile_AddMacIncludePaths_NoBuiltinIncludes_test():
+  flags_object = flags.Flags()
+
+  def Settings( **kwargs ):
+    return {
+      'flags': [ '-Wall', '-nobuiltininc' ]
+    }
+
+  with MockExtraConfModule( Settings ):
+    flags_list, _ = flags_object.FlagsForFile( '/foo' )
+    assert_that( flags_list, contains(
+      '-Wall',
+      '-nobuiltininc',
+      '-resource-dir=' + CLANG_RESOURCE_DIR,
+      '-isystem',    '/usr/include/c++/v1',
+      '-isystem',    '/usr/local/include',
+      '-isystem',    '/usr/include',
+      '-iframework', '/System/Library/Frameworks',
+      '-iframework', '/Library/Frameworks',
+      '-fspell-checking' ) )
 
 
 def FlagsForFile_OverrideTranslationUnit_test():
@@ -345,10 +647,10 @@ def FlagsForFile_Compatibility_NoKeywordArguments_test():
 
 def RemoveUnusedFlags_Passthrough_test():
   eq_( [ '-foo', '-bar' ],
-       flags._RemoveUnusedFlags( [ '-foo', '-bar' ],
-                                 'file',
-                                 _ShouldAllowWinStyleFlags(
-                                   [ '-foo', '-bar' ] ) ) )
+       flags.RemoveUnusedFlags( [ '-foo', '-bar' ],
+                                'file',
+                                ShouldAllowWinStyleFlags(
+                                  [ '-foo', '-bar' ] ) ) )
 
 
 def RemoveUnusedFlags_RemoveDashC_test():
@@ -357,22 +659,22 @@ def RemoveUnusedFlags_RemoveDashC_test():
   filename = 'file'
 
   eq_( expected,
-       flags._RemoveUnusedFlags( expected + to_remove,
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   expected + to_remove ) ) )
+       flags.RemoveUnusedFlags( expected + to_remove,
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  expected + to_remove ) ) )
 
   eq_( expected,
-       flags._RemoveUnusedFlags( to_remove + expected,
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   to_remove + expected ) ) )
+       flags.RemoveUnusedFlags( to_remove + expected,
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  to_remove + expected ) ) )
 
   eq_( expected,
-       flags._RemoveUnusedFlags(
+       flags.RemoveUnusedFlags(
          expected[ :1 ] + to_remove + expected[ -1: ],
          filename,
-         _ShouldAllowWinStyleFlags(
+         ShouldAllowWinStyleFlags(
            expected[ :1 ] + to_remove + expected[ -1: ] ) ) )
 
 
@@ -382,22 +684,22 @@ def RemoveUnusedFlags_RemoveColor_test():
   filename = 'file'
 
   eq_( expected,
-       flags._RemoveUnusedFlags( expected + to_remove,
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   expected + to_remove ) ) )
+       flags.RemoveUnusedFlags( expected + to_remove,
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  expected + to_remove ) ) )
 
   eq_( expected,
-       flags._RemoveUnusedFlags( to_remove + expected,
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   to_remove + expected ) ) )
+       flags.RemoveUnusedFlags( to_remove + expected,
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  to_remove + expected ) ) )
 
   eq_( expected,
-       flags._RemoveUnusedFlags(
+       flags.RemoveUnusedFlags(
          expected[ :1 ] + to_remove + expected[ -1: ],
          filename,
-         _ShouldAllowWinStyleFlags(
+         ShouldAllowWinStyleFlags(
            expected[ :1 ] + to_remove + expected[ -1: ] ) ) )
 
 
@@ -407,22 +709,22 @@ def RemoveUnusedFlags_RemoveDashO_test():
   filename = 'file'
 
   eq_( expected,
-       flags._RemoveUnusedFlags( expected + to_remove,
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   expected + to_remove ) ) )
+       flags.RemoveUnusedFlags( expected + to_remove,
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  expected + to_remove ) ) )
 
   eq_( expected,
-       flags._RemoveUnusedFlags( to_remove + expected,
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   to_remove + expected ) ) )
+       flags.RemoveUnusedFlags( to_remove + expected,
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  to_remove + expected ) ) )
 
   eq_( expected,
-       flags._RemoveUnusedFlags(
+       flags.RemoveUnusedFlags(
          expected[ :1 ] + to_remove + expected[ -1: ],
          filename,
-         _ShouldAllowWinStyleFlags(
+         ShouldAllowWinStyleFlags(
            expected[ :1 ] + to_remove + expected[ -1: ] ) ) )
 
 
@@ -432,22 +734,22 @@ def RemoveUnusedFlags_RemoveMP_test():
   filename = 'file'
 
   eq_( expected,
-       flags._RemoveUnusedFlags( expected + to_remove,
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   expected + to_remove ) ) )
+       flags.RemoveUnusedFlags( expected + to_remove,
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  expected + to_remove ) ) )
 
   eq_( expected,
-       flags._RemoveUnusedFlags( to_remove + expected,
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   to_remove + expected ) ) )
+       flags.RemoveUnusedFlags( to_remove + expected,
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  to_remove + expected ) ) )
 
   eq_( expected,
-       flags._RemoveUnusedFlags(
+       flags.RemoveUnusedFlags(
          expected[ :1 ] + to_remove + expected[ -1: ],
          filename,
-         _ShouldAllowWinStyleFlags(
+         ShouldAllowWinStyleFlags(
            expected[ :1 ] + to_remove + expected[ -1: ] ) ) )
 
 
@@ -457,23 +759,23 @@ def RemoveUnusedFlags_RemoveFilename_test():
   filename = 'file'
 
   eq_( expected,
-       flags._RemoveUnusedFlags( expected + to_remove,
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   expected + to_remove ) ) )
+       flags.RemoveUnusedFlags( expected + to_remove,
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  expected + to_remove ) ) )
 
   eq_( expected,
-       flags._RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   expected[ :1 ] + to_remove + expected[ 1: ]
-                                 ) ) )
+       flags.RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  expected[ :1 ] + to_remove + expected[ 1: ]
+                                ) ) )
 
   eq_( expected,
-       flags._RemoveUnusedFlags(
+       flags.RemoveUnusedFlags(
          expected[ :1 ] + to_remove + expected[ -1: ],
          filename,
-         _ShouldAllowWinStyleFlags(
+         ShouldAllowWinStyleFlags(
            expected[ :1 ] + to_remove + expected[ -1: ] ) ) )
 
 
@@ -483,17 +785,17 @@ def RemoveUnusedFlags_RemoveFlagWithoutPrecedingDashFlag_test():
   filename = 'file'
 
   eq_( expected,
-       flags._RemoveUnusedFlags( expected + to_remove,
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   expected + to_remove ) ) )
+       flags.RemoveUnusedFlags( expected + to_remove,
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  expected + to_remove ) ) )
 
   eq_( expected,
-       flags._RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   expected[ :1 ] + to_remove + expected[ 1: ]
-                                 ) ) )
+       flags.RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  expected[ :1 ] + to_remove + expected[ 1: ]
+                                ) ) )
 
 
 @WindowsOnly
@@ -505,17 +807,17 @@ def RemoveUnusedFlags_RemoveStrayFilenames_CLDriver_test():
   filename = 'file'
 
   eq_( expected,
-       flags._RemoveUnusedFlags( expected + to_remove,
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   expected + to_remove ) ) )
+       flags.RemoveUnusedFlags( expected + to_remove,
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  expected + to_remove ) ) )
 
   eq_( expected,
-       flags._RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   expected[ :1 ] + to_remove + expected[ 1: ]
-                                 ) ) )
+       flags.RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  expected[ :1 ] + to_remove + expected[ 1: ]
+                                ) ) )
 
   # clang-cl and --driver-mode=cl
   expected = [ 'clang-cl.exe', '-foo', '--driver-mode=cl', '-xc++', '-bar',
@@ -524,18 +826,18 @@ def RemoveUnusedFlags_RemoveStrayFilenames_CLDriver_test():
   filename = 'file'
 
   eq_( expected,
-       flags._RemoveUnusedFlags( expected + to_remove,
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   expected + to_remove
-                                 ) ) )
+       flags.RemoveUnusedFlags( expected + to_remove,
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  expected + to_remove
+                                ) ) )
 
   eq_( expected,
-       flags._RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   expected[ :1 ] + to_remove + expected[ 1: ]
-                                 ) ) )
+       flags.RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  expected[ :1 ] + to_remove + expected[ 1: ]
+                                ) ) )
 
   # clang-cl only
   expected = [ 'clang-cl.exe', '-foo', '-xc++', '-bar',
@@ -544,15 +846,15 @@ def RemoveUnusedFlags_RemoveStrayFilenames_CLDriver_test():
   filename = 'file'
 
   eq_( expected,
-       flags._RemoveUnusedFlags( expected + to_remove,
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   expected + to_remove ) ) )
+       flags.RemoveUnusedFlags( expected + to_remove,
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  expected + to_remove ) ) )
 
   eq_( expected,
-      flags._RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
+       flags.RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
                                 filename,
-                                _ShouldAllowWinStyleFlags(
+                                ShouldAllowWinStyleFlags(
                                   expected[ :1 ] + to_remove + expected[ 1: ]
                                 ) ) )
 
@@ -563,16 +865,16 @@ def RemoveUnusedFlags_RemoveStrayFilenames_CLDriver_test():
   filename = 'file'
 
   eq_( expected,
-       flags._RemoveUnusedFlags( expected + to_remove,
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   expected + to_remove ) ) )
+       flags.RemoveUnusedFlags( expected + to_remove,
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  expected + to_remove ) ) )
   eq_( expected,
-       flags._RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   expected[ :1 ] + to_remove + expected[ 1: ]
-                                 ) ) )
+       flags.RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  expected[ :1 ] + to_remove + expected[ 1: ]
+                                ) ) )
 
 
   # cl only with extension
@@ -581,16 +883,16 @@ def RemoveUnusedFlags_RemoveStrayFilenames_CLDriver_test():
   filename = 'file'
 
   eq_( expected,
-       flags._RemoveUnusedFlags( expected + to_remove,
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   expected + to_remove ) ) )
+       flags.RemoveUnusedFlags( expected + to_remove,
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  expected + to_remove ) ) )
   eq_( expected,
-       flags._RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   expected[ :1 ] + to_remove + expected[ 1: ]
-                                 ) ) )
+       flags.RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  expected[ :1 ] + to_remove + expected[ 1: ]
+                                ) ) )
 
   # cl path with Windows separators
   expected = [ 'path\\to\\cl', '-foo', '-xc++', '/I', 'path\\to\\include\\dir' ]
@@ -598,16 +900,16 @@ def RemoveUnusedFlags_RemoveStrayFilenames_CLDriver_test():
   filename = 'file'
 
   eq_( expected,
-       flags._RemoveUnusedFlags( expected + to_remove,
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   expected + to_remove ) ) )
+       flags.RemoveUnusedFlags( expected + to_remove,
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  expected + to_remove ) ) )
   eq_( expected,
-       flags._RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   expected[ :1 ] + to_remove + expected[ 1: ]
-                                 ) ) )
+       flags.RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  expected[ :1 ] + to_remove + expected[ 1: ]
+                                ) ) )
 
 
 
@@ -624,16 +926,16 @@ def RemoveUnusedFlags_MultipleDriverModeFlagsWindows_test():
   filename = 'file'
 
   eq_( expected,
-       flags._RemoveUnusedFlags( expected + to_remove,
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   expected + to_remove ) ) )
+       flags.RemoveUnusedFlags( expected + to_remove,
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  expected + to_remove ) ) )
   eq_( expected,
-       flags._RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
-                                 filename,
-                                 _ShouldAllowWinStyleFlags(
-                                   expected[ :1 ] + to_remove + expected[ 1: ]
-                                 ) ) )
+       flags.RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
+                                filename,
+                                ShouldAllowWinStyleFlags(
+                                  expected[ :1 ] + to_remove + expected[ 1: ]
+                                ) ) )
 
   flags_expected = [ '/usr/bin/g++', '--driver-mode=cl', '--driver-mode=gcc' ]
   flags_all = [ '/usr/bin/g++',
@@ -643,10 +945,10 @@ def RemoveUnusedFlags_MultipleDriverModeFlagsWindows_test():
                 '--driver-mode=gcc' ]
   filename = 'file'
 
-  eq_( flags_expected, flags._RemoveUnusedFlags( flags_all,
-                                                 filename,
-                                                 _ShouldAllowWinStyleFlags(
-                                                   flags_all ) ) )
+  eq_( flags_expected, flags.RemoveUnusedFlags( flags_all,
+                                                filename,
+                                                ShouldAllowWinStyleFlags(
+                                                  flags_all ) ) )
 
 
 def RemoveUnusedFlags_Depfiles_test():
@@ -666,10 +968,10 @@ def RemoveUnusedFlags_Depfiles_test():
     '-arch', 'armv7',
   ]
 
-  assert_that( flags._RemoveUnusedFlags( full_flags,
-                                         'test.m',
-                                         _ShouldAllowWinStyleFlags(
-                                           full_flags ) ),
+  assert_that( flags.RemoveUnusedFlags( full_flags,
+                                        'test.m',
+                                        ShouldAllowWinStyleFlags(
+                                          full_flags ) ),
                contains( *expected ) )
 
 
@@ -697,33 +999,30 @@ def RemoveUnusedFlags_RemoveFilenameWithoutPrecedingInclude_test():
     expected = [ 'clang', flag, '/foo/bar', '-isystem/zoo/goo' ]
 
     eq_( expected,
-         flags._RemoveUnusedFlags( expected + to_remove,
-                                   filename,
-                                   _ShouldAllowWinStyleFlags(
-                                     expected + to_remove ) ) )
+         flags.RemoveUnusedFlags( expected + to_remove,
+                                  filename,
+                                  ShouldAllowWinStyleFlags(
+                                    expected + to_remove ) ) )
 
     eq_( expected,
-         flags._RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
-                                   filename,
-                                   _ShouldAllowWinStyleFlags(
-                                     expected[ :1 ] +
-                                     to_remove +
-                                     expected[ 1: ] ) ) )
+         flags.RemoveUnusedFlags( expected[ :1 ] + to_remove + expected[ 1: ],
+                                  filename,
+                                  ShouldAllowWinStyleFlags(
+                                    expected[ :1 ] +
+                                    to_remove +
+                                    expected[ 1: ] ) ) )
 
     eq_( expected + expected[ 1: ],
-         flags._RemoveUnusedFlags( expected + to_remove + expected[ 1: ],
-                                   filename,
-                                   _ShouldAllowWinStyleFlags(
-                                     expected + to_remove + expected[ 1: ]
-                                   ) ) )
+         flags.RemoveUnusedFlags( expected + to_remove + expected[ 1: ],
+                                  filename,
+                                  ShouldAllowWinStyleFlags(
+                                    expected + to_remove + expected[ 1: ]
+                                  ) ) )
 
-  include_flags = [ '-isystem', '-I', '-iquote', '-isysroot', '--sysroot',
-                    '-gcc-toolchain', '-include', '-include-pch',
-                    '-iframework', '-F', '-imacros', '-idirafter' ]
   to_remove = [ '/moo/boo' ]
   filename = 'file'
 
-  for flag in include_flags:
+  for flag in INCLUDE_FLAGS:
     yield tester, flag
 
 
@@ -745,7 +1044,7 @@ def RemoveXclangFlags_test():
 def AddLanguageFlagWhenAppropriate_Passthrough_test():
   eq_( [ '-foo', '-bar' ],
        flags._AddLanguageFlagWhenAppropriate( [ '-foo', '-bar' ],
-                                              _ShouldAllowWinStyleFlags(
+                                              ShouldAllowWinStyleFlags(
                                                 [ '-foo', '-bar' ] ) ) )
 
 
@@ -755,7 +1054,7 @@ def AddLanguageFlagWhenAppropriate_CLDriver_Passthrough_test():
        flags._AddLanguageFlagWhenAppropriate( [ '-foo',
                                                 '-bar',
                                                 '--driver-mode=cl' ],
-                                              _ShouldAllowWinStyleFlags(
+                                              ShouldAllowWinStyleFlags(
                                                 [ '-foo',
                                                   '-bar',
                                                   '--driver-mode=cl' ] ) ) )
@@ -773,7 +1072,7 @@ def _AddLanguageFlagWhenAppropriateTester( compiler, language_flag = [] ):
     eq_( [ compiler ] + language_flag + expected,
          flags._AddLanguageFlagWhenAppropriate( to_remove + [ compiler ] +
                                                 expected,
-                                                _ShouldAllowWinStyleFlags(
+                                                ShouldAllowWinStyleFlags(
                                                   to_remove + [ compiler ] +
                                                   expected ) ) )
 
@@ -796,52 +1095,6 @@ def AddLanguageFlagWhenAppropriate_CppCompiler_test():
 
   for compiler in compilers:
     yield _AddLanguageFlagWhenAppropriateTester, compiler, [ '-x', 'c++' ]
-
-
-def ExtraClangFlags_test():
-  flags_object = flags.Flags()
-  num_found = 0
-  for flag in flags_object.extra_clang_flags:
-    if flag.startswith( '-resource-dir=' ):
-      ok_( flag.endswith( 'clang_includes' ) )
-      num_found += 1
-
-  eq_( 1, num_found )
-
-
-@MacOnly
-@patch( 'os.listdir',
-        return_value = [ '1.0.0', '7.0.1', '7.0.2', '___garbage__' ] )
-@patch( 'os.path.exists', side_effect = [ False, True, True, True ] )
-def Mac_LatestMacClangIncludes_test( *args ):
-  eq_( flags._LatestMacClangIncludes( '/tmp' ),
-       [ '-isystem', '/tmp/usr/lib/clang/7.0.2/include' ] )
-
-
-@MacOnly
-@patch( 'os.listdir', side_effect = OSError )
-def Mac_LatestMacClangIncludes_NoSuchDirectory_test( *args ):
-  eq_( flags._LatestMacClangIncludes( '/tmp' ), [] )
-
-
-@MacOnly
-@patch( 'os.path.exists', side_effect = [ False, False ] )
-def Mac_SelectMacToolchain_None_test( *args ):
-  eq_( flags._SelectMacToolchain(), None )
-
-
-@MacOnly
-@patch( 'os.path.exists', side_effect = [ True, False ] )
-def Mac_SelectMacToolchain_XCode_test( *args ):
-  eq_( flags._SelectMacToolchain(),
-       '/Applications/Xcode.app/Contents/Developer/Toolchains/'
-       'XcodeDefault.xctoolchain' )
-
-
-@MacOnly
-@patch( 'os.path.exists', side_effect = [ False, True ] )
-def Mac_SelectMacToolchain_CommandLineTools_test( *args ):
-  eq_( flags._SelectMacToolchain(), '/Library/Developer/CommandLineTools' )
 
 
 def CompilationDatabase_NoDatabase_test():
@@ -907,41 +1160,38 @@ def CompilationDatabase_UseFlagsFromSameDir_test():
     with TemporaryClangProject( tmp_dir, compile_commands ):
       f = flags.Flags()
 
-      # If we now ask for a file _not_ in the DB, we get []
-      eq_(
+      # If we ask for a file that is not in the DB but is in the same directory
+      # of another file present in the DB, we get its flags.
+      assert_that(
         f.FlagsForFile(
           os.path.join( tmp_dir, 'test1.cc' ),
           add_extra_clang_flags = False ),
-        ( [], os.path.join( tmp_dir, 'test1.cc' ) ) )
+        contains(
+          contains( 'clang++',
+                    '-x',
+                    'c++',
+                    '-Wall' ),
+          os.path.join( tmp_dir, 'test1.cc' )
+        )
+      )
 
-      # Then, we ask for a file that _is_ in the db. It will cache these flags
-      # against the files' directory.
+      # If we ask for a file that is not in the DB but in a subdirectory
+      # of another file present in the DB, we get its flags.
       assert_that(
         f.FlagsForFile(
-          os.path.join( tmp_dir, 'test.cc' ),
-          add_extra_clang_flags = False )[ 0 ],
-        contains( 'clang++',
-                  '-x',
-                  'c++',
-                  '-x',
-                  'c++',
-                  '-Wall' ) )
-
-      # If we now ask for a file _not_ in the DB, but in the same dir, we should
-      # get the same flags
-      assert_that(
-        f.FlagsForFile(
-          os.path.join( tmp_dir, 'test2.cc' ),
-          add_extra_clang_flags = False )[ 0 ],
-        contains( 'clang++',
-                  '-x',
-                  'c++',
-                  '-x',
-                  'c++',
-                  '-Wall' ) )
+          os.path.join( tmp_dir, 'some_dir', 'test1.cc' ),
+          add_extra_clang_flags = False ),
+        contains(
+          contains( 'clang++',
+                    '-x',
+                    'c++',
+                    '-Wall' ),
+          os.path.join( tmp_dir, 'some_dir', 'test1.cc' )
+        )
+      )
 
 
-def CompilationDatabase_HeaderFileHeuristic_test():
+def CompilationDatabase_HeaderFile_SameNameAsSourceFile_test():
   with TemporaryTestDir() as tmp_dir:
     compile_commands = [
       {
@@ -952,7 +1202,9 @@ def CompilationDatabase_HeaderFileHeuristic_test():
     ]
 
     with TemporaryClangProject( tmp_dir, compile_commands ):
-      # If we ask for a header file, it returns the equivalent cc file
+      # If we ask for a header file with the same name as a source file, it
+      # returns the flags of that cc file (and a special language flag for C++
+      # headers).
       assert_that(
         flags.Flags().FlagsForFile(
           os.path.join( tmp_dir, 'test.h' ),
@@ -960,12 +1212,12 @@ def CompilationDatabase_HeaderFileHeuristic_test():
         contains( 'clang++',
                   '-x',
                   'c++',
+                  '-Wall',
                   '-x',
-                  'c++',
-                  '-Wall' ) )
+                  'c++-header' ) )
 
 
-def CompilationDatabase_HeaderFileHeuristicNotFound_test():
+def CompilationDatabase_HeaderFile_DifferentNameFromSourceFile_test():
   with TemporaryTestDir() as tmp_dir:
     compile_commands = [
       {
@@ -976,13 +1228,19 @@ def CompilationDatabase_HeaderFileHeuristicNotFound_test():
     ]
 
     with TemporaryClangProject( tmp_dir, compile_commands ):
-      # If we ask for a header file, it returns the equivalent cc file (if and
-      # only if there are flags for that file)
-      eq_(
+      # Even if we ask for a header file with a different name than the source
+      # file, it still returns the flags from the cc file (and a special
+      # language flag for C++ headers).
+      assert_that(
         flags.Flags().FlagsForFile(
           os.path.join( tmp_dir, 'not_in_the_db.h' ),
           add_extra_clang_flags = False )[ 0 ],
-        [] )
+        contains( 'clang++',
+                  '-x',
+                  'c++',
+                  '-Wall',
+                  '-x',
+                  'c++-header' ) )
 
 
 def CompilationDatabase_ExplicitHeaderFileEntry_test():
@@ -1027,7 +1285,7 @@ def CompilationDatabase_CUDALanguageFlags_test():
       # If we ask for a header file, it returns the equivalent cu file
       assert_that(
         flags.Flags().FlagsForFile(
-          os.path.join( tmp_dir, 'test.h' ),
+          os.path.join( tmp_dir, 'test.cuh' ),
           add_extra_clang_flags = False )[ 0 ],
         contains( 'clang++',
                   '-x',
