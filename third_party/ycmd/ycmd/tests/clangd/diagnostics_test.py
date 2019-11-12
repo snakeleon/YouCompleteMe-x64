@@ -22,21 +22,28 @@ from __future__ import division
 # Not installing aliases from python-future; it's unreliable and slow.
 from builtins import *  # noqa
 
+import os
+from pprint import pformat
 from hamcrest import ( assert_that,
                        contains,
                        contains_string,
+                       empty,
+                       equal_to,
                        has_entries,
                        has_entry,
-                       has_items,
-                       empty,
-                       equal_to )
+                       has_items )
 from mock import patch
 from pprint import pprint
 
 from ycmd.tests.clangd import ( IsolatedYcmd,
                                 PathToTestFile,
                                 RunAfterInitialized )
-from ycmd.tests.test_utils import BuildRequest, LocationMatcher, RangeMatcher
+from ycmd.tests.test_utils import ( BuildRequest,
+                                    LocationMatcher,
+                                    RangeMatcher,
+                                    PollForMessages,
+                                    TemporaryTestDir,
+                                    UnixOnly )
 from ycmd.utils import ReadFile
 from ycmd import handlers
 
@@ -217,7 +224,8 @@ def Diagnostics_MultipleMissingIncludes_test( app ):
       has_entries( {
         'kind': equal_to( 'ERROR' ),
         'location': LocationMatcher( filepath, 1, 10 ),
-        'text': equal_to( "'first_missing_include' file not found" ),
+        'text': equal_to( "'first_missing_include' file not found"
+                          " [pp_file_not_found]" ),
         'fixit_available': False
       } )
     ) } )
@@ -244,7 +252,8 @@ def Diagnostics_LocationExtent_MissingSemicolon_test( app ):
         'location': LocationMatcher( filepath, 2, 9 ),
         'location_extent': RangeMatcher( filepath, ( 2, 9 ), ( 2, 9 ) ),
         'ranges': contains( RangeMatcher( filepath, ( 2, 9 ), ( 2, 9 ) ) ),
-        'text': equal_to( "Expected ';' at end of declaration list" ),
+        'text': equal_to( "Expected ';' at end of declaration list (fix "
+                          "available) [expected_semi_decl_list]" ),
         'fixit_available': False
       } ),
       has_entries( {
@@ -252,7 +261,8 @@ def Diagnostics_LocationExtent_MissingSemicolon_test( app ):
         'location': LocationMatcher( filepath, 5, 1 ),
         'location_extent': RangeMatcher( filepath, ( 5, 1 ), ( 6, 11 ) ),
         'ranges': contains( RangeMatcher( filepath, ( 5, 1 ), ( 6, 11 ) ) ),
-        'text': equal_to( "Unknown type name 'multiline_identifier'" ),
+        'text': equal_to( "Unknown type name 'multiline_identifier'"
+                          " [unknown_typename]" ),
         'fixit_available': False
       } ),
       has_entries( {
@@ -260,7 +270,8 @@ def Diagnostics_LocationExtent_MissingSemicolon_test( app ):
         'location': LocationMatcher( filepath, 8, 7 ),
         'location_extent': RangeMatcher( filepath, ( 8, 7 ), ( 8, 11 ) ),
         'ranges': contains( RangeMatcher( filepath, ( 8, 7 ), ( 8, 11 ) ) ),
-        'text': equal_to( 'Constructor cannot have a return type' ),
+        'text': equal_to( 'Constructor cannot have a return type'
+                          ' [constructor_return_type]' ),
         'fixit_available': False
       } )
     ) } )
@@ -287,7 +298,8 @@ def Diagnostics_CUDA_Kernel_test( app ):
         'location': LocationMatcher( filepath, 59, 5 ),
         'location_extent': RangeMatcher( filepath, ( 59, 5 ), ( 59, 6 ) ),
         'ranges': contains( RangeMatcher( filepath, ( 59, 5 ), ( 59, 6 ) ) ),
-        'text': equal_to( 'Call to global function \'g1\' not configured' ),
+        'text': equal_to( 'Call to global function \'g1\' not configured'
+                          ' [global_call_not_config]' ),
         'fixit_available': False
       } ),
       has_entries( {
@@ -296,7 +308,8 @@ def Diagnostics_CUDA_Kernel_test( app ):
         'location_extent': RangeMatcher( filepath, ( 60, 9 ), ( 60, 12 ) ),
         'ranges': contains( RangeMatcher( filepath, ( 60, 9 ), ( 60, 12 ) ) ),
         'text': equal_to( 'Too few execution configuration arguments to kernel '
-                          'function call, expected at least 2, have 1' ),
+                          'function call, expected at least 2, have 1'
+                          ' [typecheck_call_too_few_args_at_least]' ),
         'fixit_available': False
       } ),
       has_entries( {
@@ -307,7 +320,8 @@ def Diagnostics_CUDA_Kernel_test( app ):
           RangeMatcher( filepath, ( 61, 20 ), ( 61, 21 ) )
         ),
         'text': equal_to( 'Too many execution configuration arguments to '
-                          'kernel function call, expected at most 4, have 5' ),
+                          'kernel function call, expected at most 4, have 5'
+                          ' [typecheck_call_too_many_args_at_most]' ),
         'fixit_available': False
       } ),
       has_entries( {
@@ -315,7 +329,8 @@ def Diagnostics_CUDA_Kernel_test( app ):
         'location': LocationMatcher( filepath, 65, 15 ),
         'location_extent': RangeMatcher( filepath, ( 65, 15 ), ( 65, 16 ) ),
         'ranges': contains( RangeMatcher( filepath, ( 65, 15 ), ( 65, 16 ) ) ),
-        'text': equal_to( 'Kernel call to non-global function \'h1\'' ),
+        'text': equal_to( 'Kernel call to non-global function \'h1\''
+                          ' [kern_call_not_global_function]' ),
         'fixit_available': False
       } ),
       has_entries( {
@@ -324,7 +339,7 @@ def Diagnostics_CUDA_Kernel_test( app ):
         'location_extent': RangeMatcher( filepath, ( 68, 15 ), ( 68, 16 ) ),
         'ranges': contains( RangeMatcher( filepath, ( 68, 15 ), ( 68, 16 ) ) ),
         'text': equal_to( "Kernel function type 'int (*)(int)' must have "
-                          "void return type" ),
+                          "void return type [kern_type_not_void_return]" ),
         'fixit_available': False
       } ),
       has_entries( {
@@ -332,7 +347,8 @@ def Diagnostics_CUDA_Kernel_test( app ):
         'location': LocationMatcher( filepath, 70, 8 ),
         'location_extent': RangeMatcher( filepath, ( 70, 8 ), ( 70, 18 ) ),
         'ranges': contains( RangeMatcher( filepath, ( 70, 8 ), ( 70, 18 ) ) ),
-        'text': equal_to( "Use of undeclared identifier 'undeclared'" ),
+        'text': equal_to( "Use of undeclared identifier 'undeclared'"
+                           ' [undeclared_var_use]' ),
         'fixit_available': False
       } ),
     ) } )
@@ -437,3 +453,87 @@ struct Foo {
     results = app.post_json( '/detailed_diagnostic', diag_data ).json
     assert_that( results,
                has_entry( 'message', contains_string( "are not ready yet" ) ) )
+
+
+@UnixOnly
+@IsolatedYcmd()
+def Diagnostics_UpdatedOnBufferVisit_test( app ):
+  with TemporaryTestDir() as tmp_dir:
+    source_file = os.path.join( tmp_dir, 'source.cpp' )
+    source_contents = """#include "header.h"
+int main() {return S::h();}
+"""
+    with open( source_file, 'w' ) as sf:
+      sf.write( source_contents )
+
+    header_file = os.path.join( tmp_dir, 'header.h' )
+    old_header_content = """#pragma once
+struct S{static int h();};
+"""
+    with open( header_file, 'w' ) as hf:
+      hf.write( old_header_content )
+
+    flags_file = os.path.join( tmp_dir, 'compile_flags.txt' )
+    flags_content = """-xc++"""
+    with open( flags_file, 'w' ) as ff:
+      ff.write( flags_content )
+
+    messages_request = { 'contents': source_contents,
+                         'filepath': source_file,
+                         'filetype': 'cpp' }
+
+    test = { 'request': messages_request, 'route': '/receive_messages' }
+    response = RunAfterInitialized( app, test )
+    assert_that( response, contains(
+      has_entries( { 'diagnostics': empty() } ) ) )
+
+    # Overwrite header.cpp
+    new_header_content = """#pragma once
+  static int h();
+  """
+    with open( header_file, 'w' ) as f:
+      f.write( new_header_content )
+
+    # Send BufferVisit notification
+    buffer_visit_request = { "event_name": "BufferVisit",
+                             "filepath": source_file,
+                             "filetype": 'cpp' }
+    app.post_json( '/event_notification',
+                   BuildRequest( **buffer_visit_request ) )
+    # Assert diagnostics
+    for message in PollForMessages( app, messages_request ):
+      if 'diagnostics' in message:
+        assert_that( message,
+          has_entries( { 'diagnostics': contains(
+            has_entries( {
+              'kind': equal_to( 'ERROR' ),
+              'text': "Use of undeclared identifier 'S' [undeclared_var_use]",
+              'ranges': contains( RangeMatcher(
+                contains_string( source_file ), ( 2, 20 ), ( 2, 21 ) ) ),
+              'location': LocationMatcher(
+                contains_string( source_file ), 2, 20 ),
+              'location_extent': RangeMatcher(
+                contains_string( source_file ), ( 2, 20 ), ( 2, 21 ) )
+            } )
+          ) } ) )
+        break
+
+    # Restore original content
+    with open( header_file, 'w' ) as f:
+      f.write( old_header_content )
+
+    # Send BufferVisit notification
+    app.post_json( '/event_notification',
+                   BuildRequest( **buffer_visit_request ) )
+
+    # Assert no diagnostics
+    for message in PollForMessages( app, messages_request ):
+      print( 'Message {}'.format( pformat( message ) ) )
+      if 'diagnostics' in message:
+        assert_that( message,
+          has_entries( { 'diagnostics': empty() } ) )
+        break
+
+    # Assert no dirty files
+    with open( header_file, 'r' ) as f:
+      assert_that( f.read(), equal_to( old_header_content ) )

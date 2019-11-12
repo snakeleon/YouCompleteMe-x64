@@ -11,7 +11,7 @@
  * 2010-01-16 mrab Re-written
  */
 
-/* Supports Unicode version 11.0.0. */
+/* Supports Unicode version 12.1.0. */
 
 #define RE_MAGIC 20100116
 
@@ -113,12 +113,13 @@
 #define RE_OP_END_GROUP 92
 #define RE_OP_END_LAZY_REPEAT 93
 #define RE_OP_END_LOOKAROUND 94
-#define RE_OP_GREEDY_REPEAT_ONE 95
-#define RE_OP_GROUP_RETURN 96
-#define RE_OP_LAZY_REPEAT_ONE 97
-#define RE_OP_MATCH_BODY 98
-#define RE_OP_MATCH_TAIL 99
-#define RE_OP_START_GROUP 100
+#define RE_OP_FUZZY_INSERT 95
+#define RE_OP_GREEDY_REPEAT_ONE 96
+#define RE_OP_GROUP_RETURN 97
+#define RE_OP_LAZY_REPEAT_ONE 98
+#define RE_OP_MATCH_BODY 99
+#define RE_OP_MATCH_TAIL 100
+#define RE_OP_START_GROUP 101
 
 char* re_op_text[] = {
     "RE_OP_FAILURE",
@@ -216,6 +217,7 @@ char* re_op_text[] = {
     "RE_OP_END_GROUP",
     "RE_OP_END_LAZY_REPEAT",
     "RE_OP_END_LOOKAROUND",
+    "RE_OP_FUZZY_INSERT",
     "RE_OP_GREEDY_REPEAT_ONE",
     "RE_OP_GROUP_RETURN",
     "RE_OP_LAZY_REPEAT_ONE",

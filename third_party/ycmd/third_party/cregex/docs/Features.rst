@@ -67,6 +67,8 @@ For example, the pattern ``[[a-z]--[aeiou]]`` is treated in the version 0 behavi
 
 * Set containing letters "a", "e", "i", "o", "u"
 
+* Literal "]"
+
 but in the version 1 behaviour (nested sets, enhanced behaviour) as:
 
 * Set which is:
@@ -127,7 +129,7 @@ The regex module releases the GIL during matching on instances of the built-in (
 Unicode
 -------
 
-This module supports Unicode 11.0.
+This module supports Unicode 12.1.0.
 
 Full Unicode case-folding is supported.
 
@@ -964,3 +966,27 @@ The issue numbers relate to the Python bug tracker, except where listed as "Hg i
 * Default Unicode word boundary
 
   The ``WORD`` flag changes the definition of a 'word boundary' to that of a default Unicode word boundary. This applies to ``\b`` and ``\B``.
+
+* Timeout (Python 3)
+
+  The matching methods and functions support timeouts. The timeout (in seconds) applies to the entire operation:
+
+  .. sourcecode:: python
+
+    >>> from time import sleep
+    >>>
+    >>> def fast_replace(m):
+    ...     return 'X'
+    ...
+    >>> def slow_replace(m):
+    ...     sleep(0.5)
+    ...     return 'X'
+    ...
+    >>> regex.sub(r'[a-z]', fast_replace, 'abcde', timeout=2)
+    'XXXXX'
+    >>> regex.sub(r'[a-z]', slow_replace, 'abcde', timeout=2)
+    Traceback (most recent call last):
+      File "<stdin>", line 1, in <module>
+      File "C:\Python37\lib\site-packages\regex\regex.py", line 276, in sub
+        endpos, concurrent, timeout)
+    TimeoutError: regex timed out

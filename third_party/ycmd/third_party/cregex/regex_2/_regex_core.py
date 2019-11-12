@@ -1582,14 +1582,12 @@ def numeric_to_rational(numeric):
     return result
 
 upper_trans = string.maketrans(string.ascii_lowercase, string.ascii_uppercase)
-
 def ascii_upper(s):
     "Uppercases a bytestring in a locale-insensitive way within the ASCII range."
     if isinstance(s, str):
         return s.translate(upper_trans)
 
     return s.upper()
-
 
 def standardise_name(name):
     "Standardises a property or value name."
@@ -2723,7 +2721,7 @@ class Fuzzy(RegexBase):
 
     def __eq__(self, other):
         return (type(self) is type(other) and self.subpattern ==
-          other.subpattern)
+          other.subpattern and self.constraints == other.constraints)
 
     def max_width(self):
         return UNLIMITED
@@ -3023,6 +3021,12 @@ class LookAround(RegexBase):
     def contains_group(self):
         return self.subpattern.contains_group()
 
+    def get_firstset(self, reverse):
+        if self.positive and self.behind == reverse:
+            return self.subpattern.get_firstset(reverse)
+
+        return set([None])
+
     def _compile(self, reverse, fuzzy):
         flags = 0
         if self.positive:
@@ -3096,10 +3100,6 @@ class LookAroundConditional(RegexBase):
     def contains_group(self):
         return (self.subpattern.contains_group() or
           self.yes_item.contains_group() or self.no_item.contains_group())
-
-    def get_firstset(self, reverse):
-        return (self.subpattern.get_firstset(reverse) |
-          self.no_item.get_firstset(reverse))
 
     def _compile(self, reverse, fuzzy):
         code = [(OP.CONDITIONAL, int(self.positive), int(not self.behind))]
@@ -4434,7 +4434,7 @@ for prop_name, (prop_id, values) in PROPERTIES.items():
 
     for val_name, val_id in values.items():
         prop_values[val_id] = max(prop_values.get(val_id, ""), val_name,
-      key=len)
+          key=len)
 
 # Character escape sequences.
 CHARACTER_ESCAPES = {

@@ -120,6 +120,8 @@ def _get_token_collection(version_info):
 
 fstring_string_single_line = _compile(r'(?:[^{}\r\n]+|\{\{|\}\})+')
 fstring_string_multi_line = _compile(r'(?:[^{}]+|\{\{|\}\})+')
+fstring_format_spec_single_line = _compile(r'[^{}\r\n]+')
+fstring_format_spec_multi_line = _compile(r'[^{}]+')
 
 
 def _create_token_collection(version_info):
@@ -151,6 +153,8 @@ def _create_token_collection(version_info):
             Octnumber = '0[oO]?[0-7]+'
         Decnumber = r'(?:0+|[1-9][0-9]*)'
         Intnumber = group(Hexnumber, Binnumber, Octnumber, Decnumber)
+        if version_info[0] < 3:
+            Intnumber += '[lL]?'
         Exponent = r'[eE][-+]?[0-9]+'
         Pointfloat = group(r'[0-9]+\.[0-9]*', r'\.[0-9]+') + maybe(Exponent)
         Expfloat = r'[0-9]+' + Exponent
@@ -186,9 +190,13 @@ def _create_token_collection(version_info):
 
     Bracket = '[][(){}]'
 
-    special_args = [r'\r\n?', r'\n', r'[:;.,@]']
+    special_args = [r'\r\n?', r'\n', r'[;.,@]']
     if version_info >= (3, 0):
         special_args.insert(0, r'\.\.\.')
+    if version_info >= (3, 8):
+        special_args.insert(0, ":=?")
+    else:
+        special_args.insert(0, ":")
     Special = group(*special_args)
 
     Funny = group(Operator, Bracket, Special)
@@ -281,7 +289,10 @@ class FStringNode(object):
         return len(self.quote) == 3
 
     def is_in_expr(self):
-        return (self.parentheses_count - self.format_spec_count) > 0
+        return self.parentheses_count > self.format_spec_count
+
+    def is_in_format_spec(self):
+        return not self.is_in_expr() and self.format_spec_count
 
 
 def _close_fstring_if_necessary(fstring_stack, string, start_pos, additional_prefix):
@@ -303,10 +314,18 @@ def _close_fstring_if_necessary(fstring_stack, string, start_pos, additional_pre
 def _find_fstring_string(endpats, fstring_stack, line, lnum, pos):
     tos = fstring_stack[-1]
     allow_multiline = tos.allow_multiline()
-    if allow_multiline:
-        match = fstring_string_multi_line.match(line, pos)
+    if tos.is_in_format_spec():
+        if allow_multiline:
+            regex = fstring_format_spec_multi_line
+        else:
+            regex = fstring_format_spec_single_line
     else:
-        match = fstring_string_single_line.match(line, pos)
+        if allow_multiline:
+            regex = fstring_string_multi_line
+        else:
+            regex = fstring_string_single_line
+
+    match = regex.match(line, pos)
     if match is None:
         return tos.previous_lines, pos
 
@@ -575,7 +594,8 @@ def tokenize_lines(lines, version_info, start_pos=(1, 0)):
                         if paren_level:
                             paren_level -= 1
                 elif token == ':' and fstring_stack \
-                        and fstring_stack[-1].parentheses_count == 1:
+                        and fstring_stack[-1].parentheses_count \
+                        - fstring_stack[-1].format_spec_count == 1:
                     fstring_stack[-1].format_spec_count += 1
 
                 yield PythonToken(OP, token, spos, prefix)

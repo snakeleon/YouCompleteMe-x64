@@ -231,15 +231,15 @@ This module also defines an exception 'error'.
 """
 
 # Public symbols.
-__all__ = ["compile", "escape", "findall", "finditer", "fullmatch", "match",
-  "purge", "search", "split", "splititer", "sub", "subf", "subfn", "subn",
-  "template", "Scanner", "A", "ASCII", "B", "BESTMATCH", "D", "DEBUG", "E",
-  "ENHANCEMATCH", "S", "DOTALL", "F", "FULLCASE", "I", "IGNORECASE", "L",
-  "LOCALE", "M", "MULTILINE", "P", "POSIX", "R", "REVERSE", "T", "TEMPLATE",
-  "U", "UNICODE", "V0", "VERSION0", "V1", "VERSION1", "X", "VERBOSE", "W",
-  "WORD", "error", "Regex"]
+__all__ = ["compile", "DEFAULT_VERSION", "escape", "findall", "finditer",
+  "fullmatch", "match", "purge", "search", "split", "splititer", "sub", "subf",
+  "subfn", "subn", "template", "Scanner", "A", "ASCII", "B", "BESTMATCH", "D",
+  "DEBUG", "E", "ENHANCEMATCH", "S", "DOTALL", "F", "FULLCASE", "I",
+  "IGNORECASE", "L", "LOCALE", "M", "MULTILINE", "P", "POSIX", "R", "REVERSE",
+  "T", "TEMPLATE", "U", "UNICODE", "V0", "VERSION0", "V1", "VERSION1", "X",
+  "VERBOSE", "W", "WORD", "error", "Regex", "__version__", "__doc__"]
 
-__version__ = "2.4.146"
+__version__ = "2.5.33"
 
 # --------------------------------------------------------------------
 # Public interface.
@@ -309,7 +309,8 @@ def subfn(pattern, format, string, count=0, flags=0, pos=None, endpos=None,
     return _compile(pattern, flags, kwargs).subfn(format, string, count, pos,
       endpos, concurrent)
 
-def split(pattern, string, maxsplit=0, flags=0, concurrent=None, **kwargs):
+def split(pattern, string, maxsplit=0, flags=0, concurrent=None,
+  **kwargs):
     """Split the source string by the occurrences of the pattern, returning a
     list containing the resulting substrings.  If capturing parentheses are used
     in pattern, then the text of all groups in the pattern are also returned as
@@ -318,7 +319,8 @@ def split(pattern, string, maxsplit=0, flags=0, concurrent=None, **kwargs):
     the list."""
     return _compile(pattern, flags, kwargs).split(string, maxsplit, concurrent)
 
-def splititer(pattern, string, maxsplit=0, flags=0, concurrent=None, **kwargs):
+def splititer(pattern, string, maxsplit=0, flags=0, concurrent=None,
+  **kwargs):
     "Return an iterator yielding the parts of a split string."
     return _compile(pattern, flags, kwargs).splititer(string, maxsplit,
       concurrent)
@@ -395,8 +397,8 @@ from _regex_core import (_ALL_VERSIONS, _ALL_ENCODINGS, _FirstSetError,
   _UnscopedFlagSet, _check_group_features, _compile_firstset,
   _compile_replacement, _flatten_code, _fold_case, _get_required_string,
   _parse_pattern, _shrink_cache)
-from _regex_core import (ALNUM as _ALNUM, Info as _Info, OP as _OP, Source as
-  _Source, Fuzzy as _Fuzzy)
+from _regex_core import (ALNUM as _ALNUM, Info as _Info, OP as _OP, Source
+  as _Source, Fuzzy as _Fuzzy)
 
 # Version 0 is the old behaviour, compatible with the original 're' module.
 # Version 1 is the new behaviour, which differs slightly.
@@ -420,6 +422,12 @@ _MAXREPCACHE = 500
 
 def _compile(pattern, flags=0, kwargs={}):
     "Compiles a regular expression to a PatternObject."
+
+    global DEFAULT_VERSION
+    try:
+        from regex import DEFAULT_VERSION
+    except ImportError:
+        pass
 
     # We won't bother to cache the pattern if we're debugging.
     debugging = (flags & DEBUG) != 0

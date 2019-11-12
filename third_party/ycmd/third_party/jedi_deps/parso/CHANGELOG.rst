@@ -3,6 +3,20 @@
 Changelog
 ---------
 
+0.5.0 (2019-06-20)
+++++++++++++++++++
+
+- **Breaking Change** comp_for is now called sync_comp_for for all Python
+  versions to be compatible with the Python 3.8 Grammar
+- Added .pyi stubs for a lot of the parso API
+- Small FileIO changes
+
+0.4.0 (2019-04-05)
+++++++++++++++++++
+
+- Python 3.8 support
+- FileIO support, it's now possible to use abstract file IO, support is alpha
+
 0.3.4 (2018-02-13)
 +++++++++++++++++++
 

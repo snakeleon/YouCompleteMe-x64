@@ -28,9 +28,12 @@ import json
 import requests
 from hamcrest import ( assert_that,
                        contains,
+                       empty,
                        equal_to,
                        has_entries,
-                       has_items )
+                       has_entry,
+                       has_items,
+                       instance_of )
 from mock import patch
 from nose.tools import eq_
 from os import path as p
@@ -44,6 +47,7 @@ from ycmd.tests.test_utils import ( BuildRequest,
                                     ErrorMatcher,
                                     LocationMatcher,
                                     RangeMatcher,
+                                    SignatureAvailableMatcher,
                                     WaitUntilCompleterServerReady )
 from ycmd.utils import ReadFile
 
@@ -58,6 +62,32 @@ PATH_TO_GENERIC_COMPLETER = p.join( DIR_OF_THIS_SCRIPT,
                                     'server.js' )
 TEST_FILE = PathToTestFile( 'generic_server', 'test_file' )
 TEST_FILE_CONTENT = ReadFile( TEST_FILE )
+
+
+@IsolatedYcmd( { 'semantic_triggers': { 'foo': [ 're!.' ] },
+  'language_server':
+  [ { 'name': 'foo',
+      'filetypes': [ 'foo' ],
+      'cmdline': [ 'node', PATH_TO_GENERIC_COMPLETER, '--stdio' ] } ] } )
+def GenericLSPCompleter_GetCompletions_FilteredNoForce_test( app ):
+  request = BuildRequest( filepath = TEST_FILE,
+                          filetype = 'foo',
+                          line_num = 1,
+                          column_num = 3,
+                          contents = 'Java',
+                          event_name = 'FileReadyToParse' )
+  app.post_json( '/event_notification', request )
+  WaitUntilCompleterServerReady( app, 'foo' )
+  request.pop( 'event_name' )
+  response = app.post_json( '/completions', BuildRequest( **request ) )
+  eq_( response.status_code, 200 )
+  print( 'Completer response: {}'.format( json.dumps(
+    response.json, indent = 2 ) ) )
+  assert_that( response.json, has_entries( {
+    'completions': contains(
+      CompletionEntryMatcher( 'JavaScript', 'JavaScript details' ),
+    )
+  } ) )
 
 
 @IsolatedYcmd( { 'language_server':
@@ -163,3 +193,136 @@ def GenericLSPCompleter_Hover_HasResponse_test( app, *args ):
   eq_( response, {
     'message': 'asd'
   } )
+
+
+@IsolatedYcmd( { 'language_server':
+  [ { 'name': 'foo',
+      'filetypes': [ 'foo' ],
+      'project_root_files': [ 'proj_root' ],
+      'cmdline': [ 'node', PATH_TO_GENERIC_COMPLETER, '--stdio' ] } ] } )
+def GenericLSPCompleter_DebugInfo_CustomRoot_test( app, *args ):
+  test_file = PathToTestFile(
+      'generic_server', 'foo', 'bar', 'baz', 'test_file' )
+  request = BuildRequest( filepath = test_file,
+                          filetype = 'foo',
+                          line_num = 1,
+                          column_num = 1,
+                          contents = '',
+                          event_name = 'FileReadyToParse' )
+
+  app.post_json( '/event_notification', request )
+  WaitUntilCompleterServerReady( app, 'foo' )
+  request.pop( 'event_name' )
+  response = app.post_json( '/debug_info', request ).json
+  assert_that(
+    response,
+    has_entry( 'completer', has_entries( {
+      'name': 'GenericLSP',
+      'servers': contains( has_entries( {
+        'name': 'fooCompleter',
+        'is_running': instance_of( bool ),
+        'executable': contains( instance_of( str ),
+                                instance_of( str ),
+                                instance_of( str ) ),
+        'address': None,
+        'port': None,
+        'pid': instance_of( int ),
+        'logfiles': contains( instance_of( str ) ),
+        'extras': contains(
+          has_entries( {
+            'key': 'Server State',
+            'value': instance_of( str ),
+          } ),
+          has_entries( {
+            'key': 'Project Directory',
+            'value': PathToTestFile( 'generic_server', 'foo' ),
+          } ),
+          has_entries( {
+            'key': 'Settings',
+            'value': '{}'
+          } ),
+        )
+      } ) ),
+    } ) )
+  )
+
+
+@IsolatedYcmd( { 'language_server':
+  [ { 'name': 'foo',
+      'filetypes': [ 'foo' ],
+      'project_root_files': [ 'proj_root' ],
+      'cmdline': [ 'node', PATH_TO_GENERIC_COMPLETER, '--stdio' ] } ] } )
+def GenericLSPCompleter_SignatureHelp_NoTriggers_test( app ):
+  test_file = PathToTestFile(
+      'generic_server', 'foo', 'bar', 'baz', 'test_file' )
+  request = BuildRequest( filepath = test_file,
+                          filetype = 'foo',
+                          line_num = 1,
+                          column_num = 1,
+                          contents = '',
+                          event_name = 'FileReadyToParse' )
+
+  app.post_json( '/event_notification', request )
+  WaitUntilCompleterServerReady( app, 'foo' )
+  request.pop( 'event_name' )
+  response = app.post_json( '/signature_help', request ).json
+  assert_that( response, has_entries( {
+    'signature_help': has_entries( {
+      'activeSignature': 0,
+      'activeParameter': 0,
+      'signatures': empty()
+    } ),
+    'errors': empty()
+  } ) )
+
+
+@IsolatedYcmd( { 'language_server':
+  [ { 'name': 'foo',
+      'filetypes': [ 'foo' ],
+      'project_root_files': [ 'proj_root' ],
+      'cmdline': [ 'node', PATH_TO_GENERIC_COMPLETER, '--stdio' ] } ] } )
+@patch( 'ycmd.completers.completer.Completer.ShouldUseSignatureHelpNow',
+        return_value = True )
+def GenericLSPCompleter_SignatureHelp_NotASigHelpProvider_test( app, *args ):
+  test_file = PathToTestFile(
+      'generic_server', 'foo', 'bar', 'baz', 'test_file' )
+  request = BuildRequest( filepath = test_file,
+                          filetype = 'foo',
+                          line_num = 1,
+                          column_num = 1,
+                          contents = '',
+                          event_name = 'FileReadyToParse' )
+  app.post_json( '/event_notification', request )
+  WaitUntilCompleterServerReady( app, 'foo' )
+  request.pop( 'event_name' )
+  response = app.post_json( '/signature_help', request ).json
+  assert_that( response, has_entries( {
+    'signature_help': has_entries( {
+      'activeSignature': 0,
+      'activeParameter': 0,
+      'signatures': empty()
+    } ),
+    'errors': empty()
+  } ) )
+
+
+@IsolatedYcmd( { 'language_server':
+  [ { 'name': 'foo',
+      'filetypes': [ 'foo' ],
+      'project_root_files': [ 'proj_root' ],
+      'cmdline': [ 'node', PATH_TO_GENERIC_COMPLETER, '--stdio' ] } ] } )
+def GenericLSPCompleter_SignatureHelp_NotSupported_test( app ):
+  test_file = PathToTestFile(
+      'generic_server', 'foo', 'bar', 'baz', 'test_file' )
+  app.post_json( '/event_notification',
+                 BuildRequest( **{
+                   'filepath': test_file,
+                   'event_name': 'FileReadyToParse',
+                   'filetype': 'foo'
+                 } ),
+                 expect_errors = True )
+  WaitUntilCompleterServerReady( app, 'foo' )
+
+  response = app.get( '/signature_help_available',
+                      { 'subserver': 'foo' } ).json
+  assert_that( response, SignatureAvailableMatcher( 'NO' ) )

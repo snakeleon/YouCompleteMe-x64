@@ -6,23 +6,28 @@ package cmd_test
 
 import (
 	"bytes"
+	"context"
 	"io/ioutil"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
-	"unicode"
-	"unicode/utf8"
 
 	"golang.org/x/tools/go/packages/packagestest"
-	"golang.org/x/tools/internal/lsp/cmd"
 	"golang.org/x/tools/internal/lsp/tests"
+	"golang.org/x/tools/internal/testenv"
 )
 
-var isRace = false
+func TestMain(m *testing.M) {
+	testenv.ExitIfSmallMachine()
+	os.Exit(m.Run())
+}
 
 type runner struct {
-	data *tests.Data
-	app  *cmd.Application
+	exporter packagestest.Exporter
+	data     *tests.Data
+	ctx      context.Context
 }
 
 func TestCommandLine(t *testing.T) {
@@ -34,10 +39,9 @@ func testCommandLine(t *testing.T, exporter packagestest.Exporter) {
 	defer data.Exported.Cleanup()
 
 	r := &runner{
-		data: data,
-		app: &cmd.Application{
-			Config: *data.Exported.Config,
-		},
+		exporter: exporter,
+		data:     data,
+		ctx:      tests.Context(t),
 	}
 	tests.Run(t, r, data)
 }
@@ -46,19 +50,44 @@ func (r *runner) Completion(t *testing.T, data tests.Completions, snippets tests
 	//TODO: add command line completions tests when it works
 }
 
+func (r *runner) FoldingRange(t *testing.T, data tests.FoldingRanges) {
+	//TODO: add command line folding range tests when it works
+}
+
 func (r *runner) Highlight(t *testing.T, data tests.Highlights) {
 	//TODO: add command line highlight tests when it works
 }
+
+func (r *runner) Reference(t *testing.T, data tests.References) {
+	//TODO: add command line references tests when it works
+}
+
+func (r *runner) Rename(t *testing.T, data tests.Renames) {
+	//TODO: add command line rename tests when it works
+}
+
+func (r *runner) PrepareRename(t *testing.T, data tests.PrepareRenames) {
+	//TODO: add command line prepare rename tests when it works
+}
+
 func (r *runner) Symbol(t *testing.T, data tests.Symbols) {
 	//TODO: add command line symbol tests when it works
 }
 
-func (r *runner) Signature(t *testing.T, data tests.Signatures) {
+func (r *runner) SignatureHelp(t *testing.T, data tests.Signatures) {
 	//TODO: add command line signature tests when it works
 }
 
 func (r *runner) Link(t *testing.T, data tests.Links) {
 	//TODO: add command line link tests when it works
+}
+
+func (r *runner) Import(t *testing.T, data tests.Imports) {
+	//TODO: add command line imports tests when it works
+}
+
+func (r *runner) SuggestedFix(t *testing.T, data tests.SuggestedFixes) {
+	//TODO: add suggested fix tests when it works
 }
 
 func captureStdOut(t testing.TB, f func()) string {
@@ -84,20 +113,34 @@ func captureStdOut(t testing.TB, f func()) string {
 
 // normalizePaths replaces all paths present in s with just the fragment portion
 // this is used to make golden files not depend on the temporary paths of the files
-func (r *runner) normalizePaths(s string) string {
+func normalizePaths(data *tests.Data, s string) string {
 	type entry struct {
-		path  string
-		index int
+		path     string
+		index    int
+		fragment string
 	}
-	match := make([]entry, len(r.data.Exported.Modules))
+	match := make([]entry, 0, len(data.Exported.Modules))
 	// collect the initial state of all the matchers
-	for i, m := range r.data.Exported.Modules {
-		// any random file will do, we collect the first one only
-		for f := range m.Files {
-			path := strings.TrimSuffix(r.data.Exported.File(m.Name, f), f)
-			index := strings.Index(s, path)
-			match[i] = entry{path, index}
-			break
+	for _, m := range data.Exported.Modules {
+		for fragment := range m.Files {
+			filename := data.Exported.File(m.Name, fragment)
+			index := strings.Index(s, filename)
+			if index >= 0 {
+				match = append(match, entry{filename, index, fragment})
+			}
+			if slash := filepath.ToSlash(filename); slash != filename {
+				index := strings.Index(s, slash)
+				if index >= 0 {
+					match = append(match, entry{slash, index, fragment})
+				}
+			}
+			quoted := strconv.Quote(filename)
+			if escaped := quoted[1 : len(quoted)-1]; escaped != filename {
+				index := strings.Index(s, escaped)
+				if index >= 0 {
+					match = append(match, entry{escaped, index, fragment})
+				}
+			}
 		}
 	}
 	// result should be the same or shorter than the input
@@ -122,20 +165,10 @@ func (r *runner) normalizePaths(s string) string {
 		n := &match[next]
 		// copy up to the start of the match
 		buf.WriteString(s[last:n.index])
-		// skip over the non fragment prefix
+		// skip over the filename
 		last = n.index + len(n.path)
-		// now try to convert the fragment part
-		for last < len(s) {
-			r, size := utf8.DecodeRuneInString(s[last:])
-			if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '/' {
-				buf.WriteRune(r)
-			} else if r == '\\' {
-				buf.WriteRune('/')
-			} else {
-				break
-			}
-			last += size
-		}
+		// add in the fragment instead
+		buf.WriteString(n.fragment)
 		// see what the next match for this path is
 		n.index = strings.Index(s[last:], n.path)
 		if n.index >= 0 {

@@ -2789,6 +2789,10 @@ xyzabc
         self.assertEqual(regex.search(r"(?e)(GTTTTCATTCCTCATA){i<=4,d<=4,s<=4,i+d+s<=8}",
           "ATTATTTATTTTTCATA").fuzzy_changes, ([0, 6, 10, 11], [3], []))
 
+        # Fuzzy constraints ignored when checking for prefix/suffix in branches
+        self.assertEqual(bool(regex.match('(?:fo){e<=1}|(?:fo){e<=2}', 'FO')),
+          True)
+
     def test_recursive(self):
         self.assertEqual(regex.search(r"(\w)(?:(?R)|(\w?))\1", "xx")[ : ],
           ("xx", "x", ""))
@@ -3885,6 +3889,145 @@ thing
         self.assertEqual(bool(regex.match(ur'(?u)\p{scx:Devanagari}', u'\u091C')),
           True)
         self.assertEqual(bool(regex.match(ur'(?u)\p{scx:Batak}', u'\u091C')), False)
+
+        # Hg issue 296: Group references are not taken into account when group is reporting the last match
+        self.assertEqual(regex.fullmatch('(?P<x>.)*(?&x)', 'abc').captures('x'),
+          ['a', 'b', 'c'])
+        self.assertEqual(regex.fullmatch('(?P<x>.)*(?&x)', 'abc').group('x'),
+          'b')
+
+        self.assertEqual(regex.fullmatch('(?P<x>.)(?P<x>.)(?P<x>.)',
+          'abc').captures('x'), ['a', 'b', 'c'])
+        self.assertEqual(regex.fullmatch('(?P<x>.)(?P<x>.)(?P<x>.)',
+          'abc').group('x'), 'c')
+
+        # Hg issue 299: Partial gives misleading results with "open ended" regexp
+        self.assertEqual(regex.match('(?:ab)*', 'ab', partial=True).partial,
+          False)
+        self.assertEqual(regex.match('(?:ab)*', 'abab', partial=True).partial,
+          False)
+        self.assertEqual(regex.match('(?:ab)*?', '', partial=True).partial,
+          False)
+        self.assertEqual(regex.match('(?:ab)*+', 'ab', partial=True).partial,
+          False)
+        self.assertEqual(regex.match('(?:ab)*+', 'abab', partial=True).partial,
+          False)
+        self.assertEqual(regex.match('(?:ab)+', 'ab', partial=True).partial,
+          False)
+        self.assertEqual(regex.match('(?:ab)+', 'abab', partial=True).partial,
+          False)
+        self.assertEqual(regex.match('(?:ab)+?', 'ab', partial=True).partial,
+          False)
+        self.assertEqual(regex.match('(?:ab)++', 'ab', partial=True).partial,
+          False)
+        self.assertEqual(regex.match('(?:ab)++', 'abab', partial=True).partial,
+          False)
+
+        self.assertEqual(regex.match('(?r)(?:ab)*', 'ab', partial=True).partial,
+          False)
+        self.assertEqual(regex.match('(?r)(?:ab)*', 'abab', partial=True).partial,
+          False)
+        self.assertEqual(regex.match('(?r)(?:ab)*?', '', partial=True).partial,
+          False)
+        self.assertEqual(regex.match('(?r)(?:ab)*+', 'ab', partial=True).partial,
+          False)
+        self.assertEqual(regex.match('(?r)(?:ab)*+', 'abab', partial=True).partial,
+          False)
+        self.assertEqual(regex.match('(?r)(?:ab)+', 'ab', partial=True).partial,
+          False)
+        self.assertEqual(regex.match('(?r)(?:ab)+', 'abab', partial=True).partial,
+          False)
+        self.assertEqual(regex.match('(?r)(?:ab)+?', 'ab', partial=True).partial,
+          False)
+        self.assertEqual(regex.match('(?r)(?:ab)++', 'ab', partial=True).partial,
+          False)
+        self.assertEqual(regex.match('(?r)(?:ab)++', 'abab', partial=True).partial,
+          False)
+
+        self.assertEqual(regex.match('a*', '', partial=True).partial, False)
+        self.assertEqual(regex.match('a*?', '', partial=True).partial, False)
+        self.assertEqual(regex.match('a*+', '', partial=True).partial, False)
+        self.assertEqual(regex.match('a+', '', partial=True).partial, True)
+        self.assertEqual(regex.match('a+?', '', partial=True).partial, True)
+        self.assertEqual(regex.match('a++', '', partial=True).partial, True)
+        self.assertEqual(regex.match('a+', 'a', partial=True).partial, False)
+        self.assertEqual(regex.match('a+?', 'a', partial=True).partial, False)
+        self.assertEqual(regex.match('a++', 'a', partial=True).partial, False)
+
+        self.assertEqual(regex.match('(?r)a*', '', partial=True).partial, False)
+        self.assertEqual(regex.match('(?r)a*?', '', partial=True).partial, False)
+        self.assertEqual(regex.match('(?r)a*+', '', partial=True).partial, False)
+        self.assertEqual(regex.match('(?r)a+', '', partial=True).partial, True)
+        self.assertEqual(regex.match('(?r)a+?', '', partial=True).partial, True)
+        self.assertEqual(regex.match('(?r)a++', '', partial=True).partial, True)
+        self.assertEqual(regex.match('(?r)a+', 'a', partial=True).partial, False)
+        self.assertEqual(regex.match('(?r)a+?', 'a', partial=True).partial, False)
+        self.assertEqual(regex.match('(?r)a++', 'a', partial=True).partial, False)
+
+        self.assertEqual(regex.match(r"(?:\s*\w+'*)+", 'whatever', partial=True).partial,
+          False)
+
+        # Hg issue 300: segmentation fault
+        pattern = ('(?P<termini5>GGCGTCACACTTTGCTATGCCATAGCAT[AG]TTTATCCATAAGA'
+          'TTAGCGGATCCTACCTGACGCTTTTTATCGCAACTCTCTACTGTTTCTCCATAACAGAACATATTGA'
+          'CTATCCGGTATTACCCGGCATGACAGGAGTAAAA){e<=1}'
+          '(?P<gene>[ACGT]{1059}){e<=2}'
+          '(?P<spacer>TAATCGTCTTGTTTGATACACAAGGGTCGCATCTGCGGCCCTTTTGCTTTTTTAAG'
+          'TTGTAAGGATATGCCATTCTAGA){e<=0}'
+          '(?P<barcode>[ACGT]{18}){e<=0}'
+          '(?P<termini3>AGATCGG[CT]AGAGCGTCGTGTAGGGAAAGAGTGTGG){e<=1}')
+
+        text = ('GCACGGCGTCACACTTTGCTATGCCATAGCATATTTATCCATAAGATTAGCGGATCCTACC'
+          'TGACGCTTTTTATCGCAACTCTCTACTGTTTCTCCATAACAGAACATATTGACTATCCGGTATTACC'
+          'CGGCATGACAGGAGTAAAAATGGCTATCGACGAAAACAAACAGAAAGCGTTGGCGGCAGCACTGGGC'
+          'CAGATTGAGAAACAATTTGGTAAAGGCTCCATCATGCGCCTGGGTGAAGACCGTTCCATGGATGTGG'
+          'AAACCATCTCTACCGGTTCGCTTTCACTGGATATCGCGCTTGGGGCAGGTGGTCTGCCGATGGGCCG'
+          'TATCGTCGAAATCTACGGACCGGAATCTTCCGGTAAAACCACGCTGACGCTGCAGGTGATCGCCGCA'
+          'GCGCAGCGTGAAGGTAAAACCTGTGCGTTTATCGATGCTGAACACGCGCTGGACCCAATCTACGCAC'
+          'GTAAACTGGGCGTCGATATCGACAACCTGCTGTGCTCCCAGCCGGACACCGGCGAGCAGGCACTGGA'
+          'AATCTGTGACGCCCTGGCGCGTTCTGGCGCAGTAGACGTTATCGTCGTTGACTCCGTGGCGGCACTG'
+          'ACGCCGAAAGCGGAAATCGAAGGCGAAATCGGCGACTCTCATATGGGCCTTGCGGCACGTATGATGA'
+          'GCCAGGCGATGCGTAAGCTGGCGGGTAACCTGAAGCAGTCCAACACGCTGCTGATCTTCATCAACCC'
+          'CATCCGTATGAAAATTGGTGTGATGTTCGGCAACCCGGAAACCACTTACCGGTGGTAACGCGCTGAA'
+          'ATTCTACGCCTCTGTTCGTCTCGACATCCGTTAAATCGGCGCGGTGAAAGAGGGCGAAAACGTGGTG'
+          'GGTAGCGAAACCCGCGTGAAAGTGGTGAAGAACAAAATCGCTGCGCCGTTTAAACAGGCTGAATTCC'
+          'AGATCCTCTACGGCGAAGGTATCAACTTCTACCCCGAACTGGTTGACCTGGGCGTAAAAGAGAAGCT'
+          'GATCGAGAAAGCAGGCGCGTGGTACAGCTACAAAGGTGAGAAGATCGGTCAGGGTAAAGCGAATGCG'
+          'ACTGCCTGGCTGAAATTTAACCCGGAAACCGCGAAAGAGATCGAGTGAAAAGTACGTGAGTTGCTGC'
+          'TGAGCAACCCGAACTCAACGCCGGATTTCTCTGTAGATGATAGCGAAGGCGTAGCAGAAACTAACGA'
+          'AGATTTTTAATCGTCTTGTTTGATACACAAGGGTCGCATCTGCGGCCCTTTTGCTTTTTTAAGTTGT'
+          'AAGGATATGCCATTCTAGACAGTTAACACACCAACAAAGATCGGTAGAGCGTCGTGTAGGGAAAGAG'
+          'TGTGGTACC')
+
+        m = regex.search(pattern, text, flags=regex.BESTMATCH)
+        self.assertEqual(m.fuzzy_counts, (0, 1, 0))
+        self.assertEqual(m.fuzzy_changes, ([], [1206], []))
+
+        # Hg issue 306: Fuzzy match parameters not respecting quantifier scope
+        self.assertEqual(regex.search(r'(?e)(dogf(((oo){e<1})|((00){e<1}))d){e<2}',
+          'dogfood').fuzzy_counts, (0, 0, 0))
+        self.assertEqual(regex.search(r'(?e)(dogf(((oo){e<1})|((00){e<1}))d){e<2}',
+          'dogfoot').fuzzy_counts, (1, 0, 0))
+
+        # Hg issue 312: \X not matching graphemes with zero-width-joins
+        import sys
+        if sys.maxunicode > 0xFFFF:
+            # Works only on a wide build.
+            self.assertEqual(regex.findall(ur'(?u)\X',
+              u'\U0001F468\u200D\U0001F469\u200D\U0001F467\u200D\U0001F466'),
+              [u'\U0001F468\u200D\U0001F469\u200D\U0001F467\u200D\U0001F466'])
+
+        # Hg issue 320: Abnormal performance
+        self.assertEquals(bool(regex.search(r'(?=a)a', 'a')), True)
+        self.assertEquals(bool(regex.search(r'(?!b)a', 'a')), True)
+
+        # Hg issue 327: .fullmatch() causes MemoryError
+        self.assertEquals(regex.fullmatch(r'((\d)*?)*?', '123').span(), (0, 3))
+
+        # Hg issue 329: Wrong group matches when question mark quantifier is used within a look behind
+        self.assertEquals(regex.search(r'''(?(DEFINE)(?<mydef>(?<wrong>THIS_SHOULD_NOT_MATCHx?)|(?<right>right))).*(?<=(?&mydef).*)''',
+          'x right').capturesdict(), {'mydef': ['right'], 'wrong': [], 'right':
+          ['right']})
 
     def test_subscripted_captures(self):
         self.assertEqual(regex.match(r'(?P<x>.)+',

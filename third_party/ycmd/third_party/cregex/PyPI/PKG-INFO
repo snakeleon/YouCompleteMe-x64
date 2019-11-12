@@ -1,6 +1,6 @@
 Metadata-Version: 1.1
 Name: regex
-Version: 2018.08.29
+Version: 2019.06.08
 Summary: Alternative regular expression module, to replace re.
 Home-page: https://bitbucket.org/mrabarnett/mrab-regex
 Author: Matthew Barnett
@@ -75,6 +75,8 @@ Description: Introduction
         
         * Set containing letters "a", "e", "i", "o", "u"
         
+        * Literal "]"
+        
         but in the version 1 behaviour (nested sets, enhanced behaviour) as:
         
         * Set which is:
@@ -135,7 +137,7 @@ Description: Introduction
         Unicode
         -------
         
-        This module supports Unicode 11.0.
+        This module supports Unicode 12.1.0.
         
         Full Unicode case-folding is supported.
         
@@ -972,20 +974,42 @@ Description: Introduction
         * Default Unicode word boundary
         
           The ``WORD`` flag changes the definition of a 'word boundary' to that of a default Unicode word boundary. This applies to ``\b`` and ``\B``.
+        
+        * Timeout (Python 3)
+        
+          The matching methods and functions support timeouts. The timeout (in seconds) applies to the entire operation:
+        
+          .. sourcecode:: python
+        
+            >>> from time import sleep
+            >>>
+            >>> def fast_replace(m):
+            ...     return 'X'
+            ...
+            >>> def slow_replace(m):
+            ...     sleep(0.5)
+            ...     return 'X'
+            ...
+            >>> regex.sub(r'[a-z]', fast_replace, 'abcde', timeout=2)
+            'XXXXX'
+            >>> regex.sub(r'[a-z]', slow_replace, 'abcde', timeout=2)
+            Traceback (most recent call last):
+              File "<stdin>", line 1, in <module>
+              File "C:\Python37\lib\site-packages\regex\regex.py", line 276, in sub
+                endpos, concurrent, timeout)
+            TimeoutError: regex timed out
 Platform: UNKNOWN
 Classifier: Development Status :: 5 - Production/Stable
 Classifier: Intended Audience :: Developers
 Classifier: License :: OSI Approved :: Python Software Foundation License
 Classifier: Operating System :: OS Independent
 Classifier: Programming Language :: Python :: 2
-Classifier: Programming Language :: Python :: 2.6
 Classifier: Programming Language :: Python :: 2.7
 Classifier: Programming Language :: Python :: 3
-Classifier: Programming Language :: Python :: 3.3
-Classifier: Programming Language :: Python :: 3.4
 Classifier: Programming Language :: Python :: 3.5
 Classifier: Programming Language :: Python :: 3.6
 Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
 Classifier: Topic :: Scientific/Engineering :: Information Analysis
 Classifier: Topic :: Software Development :: Libraries :: Python Modules
 Classifier: Topic :: Text Processing

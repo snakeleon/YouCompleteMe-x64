@@ -5,7 +5,6 @@
 package cmd_test
 
 import (
-	"context"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -26,27 +25,23 @@ func (r *runner) Format(t *testing.T, data tests.Formats) {
 		for _, mode := range formatModes {
 			tag := "gofmt" + strings.Join(mode, "")
 			uri := spn.URI()
-			filename, err := uri.Filename()
-			if err != nil {
-				t.Fatal(err)
-			}
+			filename := uri.Filename()
 			args := append(mode, filename)
 			expect := string(r.data.Golden(tag, filename, func() ([]byte, error) {
 				cmd := exec.Command("gofmt", args...)
 				contents, _ := cmd.Output() // ignore error, sometimes we have intentionally ungofmt-able files
-				contents = []byte(r.normalizePaths(fixFileHeader(string(contents))))
+				contents = []byte(normalizePaths(r.data, fixFileHeader(string(contents))))
 				return contents, nil
 			}))
 			if expect == "" {
 				//TODO: our error handling differs, for now just skip unformattable files
 				continue
 			}
-			app := &cmd.Application{}
-			app.Config = r.data.Config
+			app := cmd.New("gopls-test", r.data.Config.Dir, r.data.Config.Env)
 			got := captureStdOut(t, func() {
-				tool.Main(context.Background(), app, append([]string{"format"}, args...))
+				tool.Main(r.ctx, app, append([]string{"-remote=internal", "format"}, args...))
 			})
-			got = r.normalizePaths(got)
+			got = normalizePaths(r.data, got)
 			// check the first two lines are the expected file header
 			if expect != got {
 				t.Errorf("format failed with %#v expected:\n%s\ngot:\n%s", args, expect, got)

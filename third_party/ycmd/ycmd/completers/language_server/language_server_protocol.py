@@ -228,10 +228,7 @@ def BuildNotification( method, parameters ):
 def BuildResponse( request, parameters ):
   """Builds a JSON RPC response message to respond to the supplied |request|
   message. |parameters| should contain either 'error' or 'result'"""
-  message = {
-    'id': request[ 'id' ],
-    'method': request[ 'method' ],
-  }
+  message = { 'id': request[ 'id' ] }
   message.update( parameters )
   return _BuildMessageData( message )
 
@@ -250,9 +247,32 @@ def Initialize( request_id, project_directory, settings ):
           'completionItemKind': {
             # ITEM_KIND list is 1-based.
             'valueSet': list( range( 1, len( ITEM_KIND ) ) ),
-          }
-        }
-      }
+          },
+          'completionItem': {
+            'documentationFormat': [
+              'plaintext',
+              'markdown'
+            ],
+          },
+        },
+        'hover': {
+          'contentFormat': [
+            'plaintext',
+            'markdown'
+          ]
+        },
+        'signatureHelp': {
+          'signatureInformation': {
+            'parameterInformation': {
+              'labelOffsetSupport': False, # For now.
+            },
+            'documentationFormat': [
+              'plaintext',
+              'markdown'
+            ],
+          },
+        },
+      },
     },
   } )
 
@@ -273,7 +293,7 @@ def Reject( request, request_error, data = None ):
   msg = {
     'error': {
       'code': request_error.code,
-      'reason': request_error.reason,
+      'message': request_error.reason,
     }
   }
   if data is not None:
@@ -300,6 +320,10 @@ def DidOpenTextDocument( file_state, file_types, file_contents ):
 
 
 def DidChangeTextDocument( file_state, file_contents ):
+  # NOTE: Passing `None` for the second argument will send an empty
+  # textDocument/didChange notification. It is useful when a LSP server
+  # needs to be forced to reparse a file without sending all the changes.
+  # More specifically, clangd completer relies on this.
   return BuildNotification( 'textDocument/didChange', {
     'textDocument': {
       'uri': FilePathToUri( file_state.filename ),
@@ -307,7 +331,7 @@ def DidChangeTextDocument( file_state, file_contents ):
     },
     'contentChanges': [
       { 'text': file_contents },
-    ],
+    ] if file_contents is not None else [],
   } )
 
 
@@ -333,6 +357,12 @@ def Completion( request_id, request_data, codepoint ):
 
 def ResolveCompletion( request_id, completion ):
   return BuildRequest( request_id, 'completionItem/resolve', completion )
+
+
+def SignatureHelp( request_id, request_data ):
+  return BuildRequest( request_id,
+                       'textDocument/signatureHelp',
+                       BuildTextDocumentPositionParams( request_data ) )
 
 
 def Hover( request_id, request_data ):
@@ -436,10 +466,12 @@ def RangeFormatting( request_id, request_data ):
 
 def FormattingOptions( request_data ):
   options = request_data[ 'options' ]
-  return {
-    'tabSize': options[ 'tab_size' ],
-    'insertSpaces': options[ 'insert_spaces' ]
+  format_options = {
+    'tabSize': options.pop( 'tab_size' ),
+    'insertSpaces': options.pop( 'insert_spaces' )
   }
+  format_options.update( options )
+  return format_options
 
 
 def Range( request_data ):
@@ -501,7 +533,9 @@ def _BuildMessageData( message ):
   # NOTE: sort_keys=True is needed to workaround a 'limitation' of clangd where
   # it requires keys to be in a specific order, due to a somewhat naive
   # JSON/YAML parser.
-  data = ToBytes( json.dumps( message, sort_keys=True ) )
+  data = ToBytes( json.dumps( message,
+                              separators = ( ',', ':' ),
+                              sort_keys=True ) )
   packet = ToBytes( 'Content-Length: {0}\r\n'
                     '\r\n'.format( len( data ) ) ) + data
   return packet
