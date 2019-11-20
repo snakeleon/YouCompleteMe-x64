@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"go/ast"
-	"go/parser"
 	"go/token"
 	"go/types"
 	"os"
@@ -24,6 +23,7 @@ import (
 	"golang.org/x/tools/internal/lsp/telemetry"
 	"golang.org/x/tools/internal/span"
 	"golang.org/x/tools/internal/telemetry/log"
+	errors "golang.org/x/xerrors"
 )
 
 type view struct {
@@ -74,8 +74,8 @@ type view struct {
 	// mcache caches metadata for the packages of the opened files in a view.
 	mcache *metadataCache
 
-	// builtinPkg is the AST package used to resolve builtin types.
-	builtinPkg *ast.Package
+	// builtin is used to resolve builtin types.
+	builtin *builtinPkg
 
 	// ignoredURIs is the set of URIs of files that we ignore.
 	ignoredURIsMu sync.Mutex
@@ -283,6 +283,16 @@ func (v *view) Ignore(uri span.URI) bool {
 	return ok
 }
 
+func (v *view) findIgnoredFile(ctx context.Context, uri span.URI) (source.ParseGoHandle, source.Package, error) {
+	// Check the builtin package.
+	for _, h := range v.BuiltinPackage().Files() {
+		if h.File().Identity().URI == uri {
+			return h, nil, nil
+		}
+	}
+	return nil, nil, errors.Errorf("no ignored file for %s", uri)
+}
+
 func (v *view) BackgroundContext() context.Context {
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -290,38 +300,8 @@ func (v *view) BackgroundContext() context.Context {
 	return v.backgroundCtx
 }
 
-func (v *view) BuiltinPackage() *ast.Package {
-	return v.builtinPkg
-}
-
-// buildBuiltinPkg builds the view's builtin package.
-// It assumes that the view is not active yet,
-// i.e. it has not been added to the session's list of views.
-func (v *view) buildBuiltinPkg(ctx context.Context) {
-	cfg := *v.Config(ctx)
-	pkgs, err := packages.Load(&cfg, "builtin")
-	if err != nil {
-		log.Error(ctx, "error getting package metadata for \"builtin\" package", err)
-	}
-	if len(pkgs) != 1 {
-		v.builtinPkg, _ = ast.NewPackage(cfg.Fset, nil, nil, nil)
-		return
-	}
-	pkg := pkgs[0]
-	files := make(map[string]*ast.File)
-	for _, filename := range pkg.GoFiles {
-		file, err := parser.ParseFile(cfg.Fset, filename, nil, parser.ParseComments)
-		if err != nil {
-			v.builtinPkg, _ = ast.NewPackage(cfg.Fset, nil, nil, nil)
-			return
-		}
-		files[filename] = file
-
-		v.ignoredURIsMu.Lock()
-		v.ignoredURIs[span.NewURI(filename)] = struct{}{}
-		v.ignoredURIsMu.Unlock()
-	}
-	v.builtinPkg, _ = ast.NewPackage(cfg.Fset, files, nil, nil)
+func (v *view) BuiltinPackage() source.BuiltinPackage {
+	return v.builtin
 }
 
 // SetContent sets the overlay contents for a file.
@@ -350,7 +330,7 @@ func (f *goFile) invalidateContent(ctx context.Context) {
 
 	var toDelete []packageID
 	f.mu.Lock()
-	for id, cph := range f.pkgs {
+	for id, cph := range f.cphs {
 		if cph != nil {
 			toDelete = append(toDelete, id)
 		}
@@ -372,14 +352,14 @@ func (f *goFile) invalidateContent(ctx context.Context) {
 // package. This forces f's package's metadata to be reloaded next
 // time the package is checked.
 func (f *goFile) invalidateMeta(ctx context.Context) {
-	pkgs, err := f.GetPackages(ctx)
+	cphs, err := f.CheckPackageHandles(ctx)
 	if err != nil {
 		log.Error(ctx, "invalidateMeta: GetPackages", err, telemetry.File.Of(f.URI()))
 		return
 	}
 
-	for _, pkg := range pkgs {
-		for _, pgh := range pkg.GetHandles() {
+	for _, pkg := range cphs {
+		for _, pgh := range pkg.Files() {
 			uri := pgh.File().Identity().URI
 			if gof, _ := f.view.FindFile(ctx, uri).(*goFile); gof != nil {
 				gof.mu.Lock()
@@ -422,16 +402,7 @@ func (v *view) remove(ctx context.Context, id packageID, seen map[packageID]stru
 			continue
 		}
 		gof.mu.Lock()
-		// TODO: Ultimately, we shouldn't need this.
-		if cph, ok := gof.pkgs[id]; ok {
-			// Delete the package handle from the store.
-			v.session.cache.store.Delete(checkPackageKey{
-				id:     cph.ID(),
-				files:  hashParseKeys(cph.Files()),
-				config: hashConfig(cph.Config()),
-			})
-		}
-		delete(gof.pkgs, id)
+		delete(gof.cphs, id)
 		gof.mu.Unlock()
 	}
 	return

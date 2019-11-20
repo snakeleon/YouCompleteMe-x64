@@ -18,6 +18,7 @@ import (
 	"golang.org/x/tools/internal/span"
 	"golang.org/x/tools/internal/telemetry/log"
 	"golang.org/x/tools/internal/telemetry/tag"
+	errors "golang.org/x/xerrors"
 )
 
 // formatCompletion creates a completion item for a given candidate.
@@ -122,13 +123,19 @@ func (c *completer) item(cand candidate) (CompletionItem, error) {
 	if !pos.IsValid() {
 		return item, nil
 	}
-
 	uri := span.FileURI(pos.Filename)
-	_, file, pkg, err := c.pkg.FindFile(c.ctx, uri, obj.Pos())
+	ph, pkg, err := c.pkg.FindFile(c.ctx, uri)
 	if err != nil {
 		return CompletionItem{}, err
 	}
-	ident, err := findIdentifier(c.ctx, c.view, []Package{pkg}, file, obj.Pos())
+	file, _, _, err := ph.Cached(c.ctx)
+	if err != nil {
+		return CompletionItem{}, err
+	}
+	if !(file.Pos() <= obj.Pos() && obj.Pos() <= file.End()) {
+		return CompletionItem{}, errors.Errorf("no file for %s", obj.Name())
+	}
+	ident, err := findIdentifier(c.ctx, c.view, pkg, file, obj.Pos())
 	if err != nil {
 		return CompletionItem{}, err
 	}
@@ -169,7 +176,11 @@ func (c *completer) formatBuiltin(cand candidate) CompletionItem {
 		item.Kind = ConstantCompletionItem
 	case *types.Builtin:
 		item.Kind = FunctionCompletionItem
-		decl, ok := lookupBuiltinDecl(c.view, obj.Name()).(*ast.FuncDecl)
+		builtin := c.view.BuiltinPackage().Lookup(obj.Name())
+		if obj == nil {
+			break
+		}
+		decl, ok := builtin.Decl.(*ast.FuncDecl)
 		if !ok {
 			break
 		}

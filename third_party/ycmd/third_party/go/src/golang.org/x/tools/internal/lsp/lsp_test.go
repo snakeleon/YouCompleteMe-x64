@@ -15,6 +15,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/tools/go/packages/packagestest"
 	"golang.org/x/tools/internal/lsp/cache"
@@ -60,6 +61,8 @@ func testLSP(t *testing.T, exporter packagestest.Exporter) {
 		source.Sum: {},
 	}
 	options.HoverKind = source.SynopsisDocumentation
+	// Crank this up so tests don't flake.
+	options.Completion.Budget = 5 * time.Second
 	session.SetOptions(options)
 	options.Env = data.Config.Env
 	session.NewView(ctx, viewName, span.FileURI(data.Config.Dir), options)
@@ -91,7 +94,7 @@ func (r *runner) Diagnostics(t *testing.T, data tests.Diagnostics) {
 		if !ok {
 			t.Fatalf("%s is not a Go file: %v", uri, err)
 		}
-		results, err := source.Diagnostics(r.ctx, v, gof, nil)
+		results, _, err := source.Diagnostics(r.ctx, v, gof, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -177,7 +180,7 @@ func (r *runner) Completion(t *testing.T, data tests.Completions, snippets tests
 				}
 			}
 			if got == nil {
-				t.Fatalf("%s: couldn't find completion matching %q", src.URI(), wantItem.Label)
+				t.Fatalf("%s:%d: couldn't find completion matching %q", src.URI(), src.Start().Line(), wantItem.Label)
 			}
 			var expected string
 			if usePlaceholders {
@@ -352,7 +355,7 @@ func (r *runner) FoldingRange(t *testing.T, data tests.FoldingRanges) {
 }
 
 func (r *runner) foldingRanges(t *testing.T, prefix string, uri span.URI, ranges []protocol.FoldingRange) {
-	m, err := r.mapper(uri)
+	m, err := r.data.Mapper(uri)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -484,7 +487,7 @@ func (r *runner) Format(t *testing.T, data tests.Formats) {
 			}
 			continue
 		}
-		m, err := r.mapper(uri)
+		m, err := r.data.Mapper(uri)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -520,7 +523,7 @@ func (r *runner) Import(t *testing.T, data tests.Imports) {
 			}
 			continue
 		}
-		m, err := r.mapper(uri)
+		m, err := r.data.Mapper(uri)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -555,7 +558,7 @@ func (r *runner) SuggestedFix(t *testing.T, data tests.SuggestedFixes) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		results, err := source.Diagnostics(r.ctx, v, f, nil)
+		results, _, err := source.Diagnostics(r.ctx, v, f, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -572,7 +575,7 @@ func (r *runner) SuggestedFix(t *testing.T, data tests.SuggestedFixes) {
 			}
 			continue
 		}
-		m, err := r.mapper(f.URI())
+		m, err := r.data.Mapper(f.URI())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -595,7 +598,7 @@ func (r *runner) SuggestedFix(t *testing.T, data tests.SuggestedFixes) {
 
 func (r *runner) Definition(t *testing.T, data tests.Definitions) {
 	for _, d := range data {
-		sm, err := r.mapper(d.Src.URI())
+		sm, err := r.data.Mapper(d.Src.URI())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -611,24 +614,19 @@ func (r *runner) Definition(t *testing.T, data tests.Definitions) {
 		var hover *protocol.Hover
 		if d.IsType {
 			params := &protocol.TypeDefinitionParams{
-				tdpp,
-				protocol.WorkDoneProgressParams{},
-				protocol.PartialResultParams{},
+				TextDocumentPositionParams: tdpp,
 			}
 			locs, err = r.server.TypeDefinition(r.ctx, params)
 		} else {
 			params := &protocol.DefinitionParams{
-				tdpp,
-				protocol.WorkDoneProgressParams{},
-				protocol.PartialResultParams{},
+				TextDocumentPositionParams: tdpp,
 			}
 			locs, err = r.server.Definition(r.ctx, params)
 			if err != nil {
 				t.Fatalf("failed for %v: %+v", d.Src, err)
 			}
 			v := &protocol.HoverParams{
-				tdpp,
-				protocol.WorkDoneProgressParams{},
+				TextDocumentPositionParams: tdpp,
 			}
 			hover, err = r.server.Hover(r.ctx, v)
 		}
@@ -648,7 +646,7 @@ func (r *runner) Definition(t *testing.T, data tests.Definitions) {
 			}
 		} else if !d.OnlyHover {
 			locURI := span.NewURI(locs[0].URI)
-			lm, err := r.mapper(locURI)
+			lm, err := r.data.Mapper(locURI)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -665,7 +663,7 @@ func (r *runner) Definition(t *testing.T, data tests.Definitions) {
 
 func (r *runner) Highlight(t *testing.T, data tests.Highlights) {
 	for name, locations := range data {
-		m, err := r.mapper(locations[0].URI())
+		m, err := r.data.Mapper(locations[0].URI())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -678,9 +676,7 @@ func (r *runner) Highlight(t *testing.T, data tests.Highlights) {
 			Position:     loc.Range.Start,
 		}
 		params := &protocol.DocumentHighlightParams{
-			tdpp,
-			protocol.WorkDoneProgressParams{},
-			protocol.PartialResultParams{},
+			TextDocumentPositionParams: tdpp,
 		}
 		highlights, err := r.server.DocumentHighlight(r.ctx, params)
 		if err != nil {
@@ -701,7 +697,7 @@ func (r *runner) Highlight(t *testing.T, data tests.Highlights) {
 
 func (r *runner) Reference(t *testing.T, data tests.References) {
 	for src, itemList := range data {
-		sm, err := r.mapper(src.URI())
+		sm, err := r.data.Mapper(src.URI())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -712,7 +708,7 @@ func (r *runner) Reference(t *testing.T, data tests.References) {
 
 		want := make(map[protocol.Location]bool)
 		for _, pos := range itemList {
-			m, err := r.mapper(pos.URI())
+			m, err := r.data.Mapper(pos.URI())
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -749,7 +745,7 @@ func (r *runner) Rename(t *testing.T, data tests.Renames) {
 
 		uri := spn.URI()
 		filename := uri.Filename()
-		sm, err := r.mapper(uri)
+		sm, err := r.data.Mapper(uri)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -777,7 +773,7 @@ func (r *runner) Rename(t *testing.T, data tests.Renames) {
 
 		var res []string
 		for uri, edits := range *workspaceEdits.Changes {
-			m, err := r.mapper(span.URI(uri))
+			m, err := r.data.Mapper(span.URI(uri))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -813,7 +809,7 @@ func (r *runner) Rename(t *testing.T, data tests.Renames) {
 
 func (r *runner) PrepareRename(t *testing.T, data tests.PrepareRenames) {
 	for src, want := range data {
-		m, err := r.mapper(src.URI())
+		m, err := r.data.Mapper(src.URI())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -826,8 +822,7 @@ func (r *runner) PrepareRename(t *testing.T, data tests.PrepareRenames) {
 			Position:     loc.Range.Start,
 		}
 		params := &protocol.PrepareRenameParams{
-			tdpp,
-			protocol.WorkDoneProgressParams{},
+			TextDocumentPositionParams: tdpp,
 		}
 		got, err := r.server.PrepareRename(context.Background(), params)
 		if err != nil {
@@ -928,7 +923,7 @@ func summarizeSymbols(t *testing.T, i int, want []protocol.DocumentSymbol, got [
 
 func (r *runner) SignatureHelp(t *testing.T, data tests.Signatures) {
 	for spn, expectedSignatures := range data {
-		m, err := r.mapper(spn.URI())
+		m, err := r.data.Mapper(spn.URI())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -943,8 +938,7 @@ func (r *runner) SignatureHelp(t *testing.T, data tests.Signatures) {
 			Position: loc.Range.Start,
 		}
 		params := &protocol.SignatureHelpParams{
-			tdpp,
-			protocol.WorkDoneProgressParams{},
+			TextDocumentPositionParams: tdpp,
 		}
 		gotSignatures, err := r.server.SignatureHelp(r.ctx, params)
 		if err != nil {
@@ -959,6 +953,9 @@ func (r *runner) SignatureHelp(t *testing.T, data tests.Signatures) {
 				t.Errorf("expected no signature, got %v", gotSignatures)
 			}
 			continue
+		}
+		if gotSignatures == nil {
+			t.Fatalf("expected %v, got nil", expectedSignatures)
 		}
 		if diff := diffSignatures(spn, expectedSignatures, gotSignatures); diff != "" {
 			t.Error(diff)
@@ -1003,7 +1000,7 @@ func diffSignatures(spn span.Span, want *source.SignatureInformation, got *proto
 
 func (r *runner) Link(t *testing.T, data tests.Links) {
 	for uri, wantLinks := range data {
-		m, err := r.mapper(uri)
+		m, err := r.data.Mapper(uri)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1054,27 +1051,6 @@ func (r *runner) Link(t *testing.T, data tests.Links) {
 	}
 }
 
-func (r *runner) mapper(uri span.URI) (*protocol.ColumnMapper, error) {
-	filename := uri.Filename()
-	fset := r.data.Exported.ExpectFileSet
-	var f *token.File
-	fset.Iterate(func(check *token.File) bool {
-		if check.Name() == filename {
-			f = check
-			return false
-		}
-		return true
-	})
-	if f == nil {
-		return nil, fmt.Errorf("no token.File for %s", uri)
-	}
-	content, err := r.data.Exported.FileContents(f.Name())
-	if err != nil {
-		return nil, err
-	}
-	return protocol.NewColumnMapper(uri, filename, fset, f, content), nil
-}
-
 func TestBytesOffset(t *testing.T) {
 	tests := []struct {
 		text string
@@ -1102,7 +1078,13 @@ func TestBytesOffset(t *testing.T) {
 		fset := token.NewFileSet()
 		f := fset.AddFile(fname, -1, len(test.text))
 		f.SetLinesForContent([]byte(test.text))
-		mapper := protocol.NewColumnMapper(span.FileURI(fname), fname, fset, f, []byte(test.text))
+		uri := span.FileURI(fname)
+		converter := span.NewContentConverter(fname, []byte(test.text))
+		mapper := &protocol.ColumnMapper{
+			URI:       uri,
+			Converter: converter,
+			Content:   []byte(test.text),
+		}
 		got, err := mapper.Point(test.pos)
 		if err != nil && test.want != -1 {
 			t.Errorf("unexpected error: %v", err)

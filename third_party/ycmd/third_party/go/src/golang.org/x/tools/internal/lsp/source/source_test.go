@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/tools/go/packages/packagestest"
 	"golang.org/x/tools/internal/lsp/cache"
@@ -67,7 +68,7 @@ func (r *runner) Diagnostics(t *testing.T, data tests.Diagnostics) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		results, err := source.Diagnostics(r.ctx, r.view, f.(source.GoFile), nil)
+		results, _, err := source.Diagnostics(r.ctx, r.view, f.(source.GoFile), nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -107,6 +108,8 @@ func (r *runner) Completion(t *testing.T, data tests.Completions, snippets tests
 			Deep:          deepComplete,
 			FuzzyMatching: fuzzyMatch,
 			Unimported:    unimported,
+			// Crank this up so tests don't flake.
+			Budget: 5 * time.Second,
 		})
 		if err != nil {
 			t.Fatalf("failed for %v: %v", src, err)
@@ -169,6 +172,8 @@ func (r *runner) Completion(t *testing.T, data tests.Completions, snippets tests
 				Deep:          strings.Contains(string(src.URI()), "deepcomplete"),
 				FuzzyMatching: strings.Contains(string(src.URI()), "fuzzymatch"),
 				Placeholders:  usePlaceholders,
+				// Crank this up so tests don't flake.
+				Budget: 5 * time.Second,
 			})
 			if err != nil {
 				t.Fatalf("failed for %v: %v", src, err)
@@ -488,10 +493,12 @@ func (r *runner) Format(t *testing.T, data tests.Formats) {
 		}
 		data, _, err := f.Handle(ctx).Read(ctx)
 		if err != nil {
-			t.Error(err)
-			continue
+			t.Fatal(err)
 		}
-		m := protocol.NewColumnMapper(uri, filename, r.view.Session().Cache().FileSet(), nil, data)
+		m, err := r.data.Mapper(f.URI())
+		if err != nil {
+			t.Fatal(err)
+		}
 		diffEdits, err := source.FromProtocolEdits(m, edits)
 		if err != nil {
 			t.Error(err)
@@ -535,10 +542,12 @@ func (r *runner) Import(t *testing.T, data tests.Imports) {
 		}
 		data, _, err := fh.Read(ctx)
 		if err != nil {
-			t.Error(err)
-			continue
+			t.Fatal(err)
 		}
-		m := protocol.NewColumnMapper(uri, filename, r.view.Session().Cache().FileSet(), nil, data)
+		m, err := r.data.Mapper(fh.Identity().URI)
+		if err != nil {
+			t.Fatal(err)
+		}
 		diffEdits, err := source.FromProtocolEdits(m, edits)
 		if err != nil {
 			t.Error(err)
@@ -717,12 +726,15 @@ func (r *runner) Rename(t *testing.T, data tests.Renames) {
 			if err != nil {
 				t.Fatalf("failed for %v: %v", spn, err)
 			}
-			data, _, err := f.Handle(ctx).Read(ctx)
+			fh := f.Handle(ctx)
+			data, _, err := fh.Read(ctx)
 			if err != nil {
-				t.Error(err)
-				continue
+				t.Fatal(err)
 			}
-			m := protocol.NewColumnMapper(f.URI(), f.URI().Filename(), r.data.Exported.ExpectFileSet, nil, data)
+			m, err := r.data.Mapper(fh.Identity().URI)
+			if err != nil {
+				t.Fatal(err)
+			}
 			filename := filepath.Base(editSpn.Filename())
 			diffEdits, err := source.FromProtocolEdits(m, edits)
 			if err != nil {
@@ -922,13 +934,12 @@ func (r *runner) Link(t *testing.T, data tests.Links) {
 	// This is a pure LSP feature, no source level functionality to be tested.
 }
 
-func spanToRange(data *tests.Data, span span.Span) (*protocol.ColumnMapper, protocol.Range, error) {
-	contents, err := data.Exported.FileContents(span.URI().Filename())
+func spanToRange(data *tests.Data, spn span.Span) (*protocol.ColumnMapper, protocol.Range, error) {
+	m, err := data.Mapper(spn.URI())
 	if err != nil {
 		return nil, protocol.Range{}, err
 	}
-	m := protocol.NewColumnMapper(span.URI(), span.URI().Filename(), data.Exported.ExpectFileSet, nil, contents)
-	srcRng, err := m.Range(span)
+	srcRng, err := m.Range(spn)
 	if err != nil {
 		return nil, protocol.Range{}, err
 	}

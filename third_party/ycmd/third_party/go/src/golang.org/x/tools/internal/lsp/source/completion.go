@@ -111,17 +111,11 @@ const (
 
 	// lowScore indicates an irrelevant or not useful completion item.
 	lowScore float64 = 0.01
-
-	// completionBudget is the soft latency goal for completion requests. Most
-	// requests finish in a couple milliseconds, but in some cases deep
-	// completions can take much longer. As we use up our budget we dynamically
-	// reduce the search scope to ensure we return timely results.
-	completionBudget = 100 * time.Millisecond
 )
 
-// matcher matches a candidate's label against the user input.  The
-// returned score reflects the quality of the match. A score less than
-// zero indicates no match, and a score of one means a perfect match.
+// matcher matches a candidate's label against the user input. The
+// returned score reflects the quality of the match. A score of zero
+// indicates no match, and a score of one means a perfect match.
 type matcher interface {
 	Score(candidateLabel string) (score float32)
 }
@@ -312,8 +306,12 @@ func (c *completer) found(obj types.Object, score float64, imp *imports.ImportIn
 		imp:   imp,
 	}
 
-	if c.matchingType(&cand) {
+	if c.matchingCandidate(&cand) {
 		cand.score *= highScore
+	} else if isTypeName(obj) {
+		// If obj is a *types.TypeName that didn't otherwise match, check
+		// if a literal object of this type makes a good candidate.
+		c.literal(obj.Type())
 	}
 
 	// Favor shallow matches by lowering weight according to depth.
@@ -324,12 +322,7 @@ func (c *completer) found(obj types.Object, score float64, imp *imports.ImportIn
 
 	cand.name = c.deepState.chainString(obj.Name())
 	matchScore := c.matcher.Score(cand.name)
-	if matchScore >= 0 {
-		// Avoid a score of zero since that homogenizes all candidates.
-		if matchScore == 0 {
-			matchScore = 0.001
-		}
-
+	if matchScore > 0 {
 		cand.score *= float64(matchScore)
 
 		// Avoid calling c.item() for deep candidates that wouldn't be in the top
@@ -378,30 +371,23 @@ func Completion(ctx context.Context, view View, f GoFile, pos protocol.Position,
 
 	startTime := time.Now()
 
-	pkg, err := f.GetPackage(ctx)
+	cphs, err := f.CheckPackageHandles(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	var ph ParseGoHandle
-	for _, h := range pkg.GetHandles() {
-		if h.File().Identity().URI == f.URI() {
-			ph = h
-		}
-	}
-	file, err := ph.Cached(ctx)
-	if file == nil {
-		return nil, nil, err
-	}
-	data, _, err := ph.File().Read(ctx)
+	cph := NarrowestCheckPackageHandle(cphs)
+	pkg, err := cph.Check(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	fset := view.Session().Cache().FileSet()
-	tok := fset.File(file.Pos())
-	if tok == nil {
-		return nil, nil, errors.Errorf("no token.File for %s", f.URI())
+	ph, err := pkg.File(f.URI())
+	if err != nil {
+		return nil, nil, err
 	}
-	m := protocol.NewColumnMapper(f.URI(), f.URI().Filename(), fset, tok, data)
+	file, m, _, err := ph.Cached(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
 	spn, err := m.PointSpan(pos)
 	if err != nil {
 		return nil, nil, err
@@ -669,6 +655,18 @@ func (c *completer) lexical() error {
 			}
 		}
 	}
+
+	if c.expectedType.objType != nil {
+		// If we have an expected type and it is _not_ a named type, see
+		// if an object literal makes a good candidate. Named types are
+		// handled during the normal lexical object search. For example,
+		// if our expected type is "[]int", this will add a candidate of
+		// "[]int{}".
+		if _, named := c.expectedType.objType.(*types.Named); !named {
+			c.literal(c.expectedType.objType)
+		}
+	}
+
 	return nil
 }
 
@@ -898,6 +896,10 @@ type typeInference struct {
 	// objType is the desired type of an object used at the query position.
 	objType types.Type
 
+	// variadic is true if objType is a slice type from an initial
+	// variadic param.
+	variadic bool
+
 	// wantTypeName is true if we expect the name of a type.
 	wantTypeName bool
 
@@ -925,6 +927,7 @@ func expectedType(c *completer) typeInference {
 
 	var (
 		modifiers     []typeModifier
+		variadic      bool
 		typ           types.Type
 		convertibleTo types.Type
 	)
@@ -976,6 +979,7 @@ Nodes:
 							i = sig.Params().Len() - 1
 						}
 						typ = sig.Params().At(i).Type()
+						variadic = sig.Variadic() && i == sig.Params().Len()-1
 						break Nodes
 					}
 				}
@@ -1051,6 +1055,7 @@ Nodes:
 	}
 
 	return typeInference{
+		variadic:      variadic,
 		objType:       typ,
 		modifiers:     modifiers,
 		convertibleTo: convertibleTo,
@@ -1194,9 +1199,15 @@ Nodes:
 	}
 }
 
-// matchingType reports whether an object is a good completion candidate
-// in the context of the expected type.
-func (c *completer) matchingType(cand *candidate) bool {
+// matchingType reports whether a type matches the expected type.
+func (c *completer) matchingType(T types.Type) bool {
+	fakeObj := types.NewVar(token.NoPos, c.pkg.GetTypes(), "", T)
+	return c.matchingCandidate(&candidate{obj: fakeObj})
+}
+
+// matchingCandidate reports whether a candidate matches our type
+// inferences.
+func (c *completer) matchingCandidate(cand *candidate) bool {
 	if isTypeName(cand.obj) {
 		return c.matchingTypeName(cand)
 	}
