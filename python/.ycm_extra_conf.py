@@ -97,8 +97,12 @@ flags = [
 # compile_commands.json file to use that instead of 'flags'. See here for
 # more details: http://clang.llvm.org/docs/JSONCompilationDatabase.html
 #
+# You can get CMake to generate this file for you by adding:
+#   set( CMAKE_EXPORT_COMPILE_COMMANDS 1 )
+# to your CMakeLists.txt file.
+#
 # Most projects will NOT need to set this to anything; you can just change the
-# 'flags' list of compilation flags.
+# 'flags' list of compilation flags. Notice that YCM itself uses that approach.
 compilation_database_folder = ''
 
 if os.path.exists( compilation_database_folder ):
@@ -106,7 +110,7 @@ if os.path.exists( compilation_database_folder ):
 else:
   database = None
 
-SOURCE_EXTENSIONS = [ '.cpp', '.cxx', '.cc', '.c', '.m', '.mm' ]
+SOURCE_EXTENSIONS = [ '.C', '.cpp', '.cxx', '.cc', '.c', '.m', '.mm' ]
 
 def DirectoryOfThisScript():
   return os.path.dirname( os.path.abspath( __file__ ) )
@@ -143,7 +147,7 @@ def MakeRelativePathsInFlagsAbsolute( flags, working_directory ):
 
 def IsHeaderFile( filename ):
   extension = os.path.splitext( filename )[ 1 ]
-  return extension in [ '.h', '.hxx', '.hpp', '.hh' ]
+  return extension in [ '.H', '.h', '.hxx', '.hpp', '.hh' ]
 
 
 def GetCompilationInfoForFile( filename ):
@@ -164,8 +168,6 @@ def GetCompilationInfoForFile( filename ):
   return database.GetCompilationInfoForFile( filename )
 
 
-# This is the entry point; this function is called by ycmd to produce flags for
-# a file.
 def FlagsForFile( filename, **kwargs ):
   if database:
     # Bear in mind that compilation_info.compiler_flags_ does NOT return a
@@ -177,6 +179,7 @@ def FlagsForFile( filename, **kwargs ):
     final_flags = MakeRelativePathsInFlagsAbsolute(
       compilation_info.compiler_flags_,
       compilation_info.compiler_working_dir_ )
+
   else:
     relative_to = DirectoryOfThisScript()
     final_flags = MakeRelativePathsInFlagsAbsolute( flags, relative_to )
@@ -186,3 +189,11 @@ def FlagsForFile( filename, **kwargs ):
     'do_cache': True
   }
 
+def Settings( **kwargs ):
+    language = kwargs[ 'language' ]
+    if language == 'cfamily':
+        return {
+            'flags': flags
+        }
+
+    return {}
