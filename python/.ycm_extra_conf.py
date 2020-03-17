@@ -37,7 +37,7 @@ import ycm_core
 flags = [
 # The libclang version 7.0.0 or higher add platform switch with Back-end
 # toolchain, For GNU you would set this.
-    '--target=x86_64-w64-mingw32',
+    '--target=x86_64-pc-mingw32',
     '-Wall',
     '-Wextra',
     # '-Werror',
