@@ -1,4 +1,4 @@
-# Copyright (C) 2013-2019 ycmd contributors
+# Copyright (C) 2013-2020 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -16,28 +16,20 @@
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
 
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
-from future.utils import iteritems, PY2
 from hamcrest import ( assert_that,
-                       contains,
+                       contains_exactly,
                        contains_string,
                        empty,
                        equal_to,
                        has_entries,
                        has_entry,
                        has_item )
-from mock import patch
+from unittest.mock import patch
 from pprint import pformat
 from webtest import TestApp
 import bottle
 import contextlib
-import nose
+import pytest
 import functools
 import os
 import tempfile
@@ -56,22 +48,15 @@ from ycmd.utils import ( GetCurrentDirectory,
                          WaitUntilProcessIsTerminated )
 import ycm_core
 
-try:
-  from unittest import skipIf
-except ImportError:
-  from unittest2 import skipIf
+from unittest import skipIf
 
 TESTS_DIR = os.path.abspath( os.path.dirname( __file__ ) )
 
-Py2Only = skipIf( not PY2, 'Python 2 only' )
-Py3Only = skipIf( PY2, 'Python 3 only' )
 WindowsOnly = skipIf( not OnWindows(), 'Windows only' )
 ClangOnly = skipIf( not ycm_core.HasClangSupport(),
                     'Only when Clang support available' )
 MacOnly = skipIf( not OnMac(), 'Mac only' )
 UnixOnly = skipIf( OnWindows(), 'Unix only' )
-NoWinPy2 = skipIf( OnWindows() and PY2, 'Disabled on Windows with Python 2' )
-
 
 EMPTY_SIGNATURE_HELP = has_entries( {
   'activeParameter': 0,
@@ -98,7 +83,7 @@ def BuildRequest( **kwargs ):
     }
   }
 
-  for key, value in iteritems( kwargs ):
+  for key, value in kwargs.items():
     if key in [ 'contents', 'filetype', 'filepath' ]:
       continue
 
@@ -180,7 +165,7 @@ def LineColMatcher( line, col ):
 def CompleterProjectDirectoryMatcher( project_directory ):
   return has_entry(
     'completer',
-    has_entry( 'servers', contains(
+    has_entry( 'servers', contains_exactly(
       has_entry( 'extras', has_item(
         has_entries( {
           'key': 'Project Directory',
@@ -194,7 +179,7 @@ def CompleterProjectDirectoryMatcher( project_directory ):
 def SignatureMatcher( label, parameters ):
   return has_entries( {
     'label': equal_to( label ),
-    'parameters': contains( *parameters )
+    'parameters': contains_exactly( *parameters )
   } )
 
 
@@ -204,7 +189,7 @@ def SignatureAvailableMatcher( available ):
 
 def ParameterMatcher( begin, end ):
   return has_entries( {
-    'label': contains( begin, end )
+    'label': contains_exactly( begin, end )
   } )
 
 
@@ -325,7 +310,7 @@ def ClearCompletionsCache():
 
 class DummyCompleter( Completer ):
   def __init__( self, user_options ):
-    super( DummyCompleter, self ).__init__( user_options )
+    super().__init__( user_options )
 
   def SupportedFiletypes( self ):
     return []
@@ -376,7 +361,7 @@ def ExpectedFailure( reason, *exception_matchers ):
           raise test_exception
 
         # Failed for the right reason
-        raise nose.SkipTest( reason )
+        pytest.skip( reason )
       else:
         raise AssertionError( 'Test was expected to fail: {0}'.format(
           reason ) )

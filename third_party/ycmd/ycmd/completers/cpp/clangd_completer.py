@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2019 ycmd contributors
+# Copyright (C) 2018-2020 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -15,19 +15,11 @@
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
 import logging
 import os
 import subprocess
 
 from ycmd import extra_conf_store, responses
-from ycmd.completers.completer_utils import GetFileLines
 from ycmd.completers.cpp.flags import ( AddMacIncludePaths,
                                         RemoveUnusedFlags,
                                         ShouldAllowWinStyleFlags )
@@ -58,28 +50,6 @@ PRE_BUILT_CLANGD_DIR = os.path.abspath( os.path.join(
   'output',
   'bin' ) )
 PRE_BUILT_CLANDG_PATH = os.path.join( PRE_BUILT_CLANGD_DIR, 'clangd' )
-
-
-def DistanceOfPointToRange( point, range ):
-  """Calculate the distance from a point to a range.
-
-  Assumes point is covered by lines in the range.
-  Returns 0 if point is already inside range. """
-  start = range[ 'start' ]
-  end = range[ 'end' ]
-
-  # Single-line range.
-  if start[ 'line' ] == end[ 'line' ]:
-    # 0 if point is within range, otherwise distance from start/end.
-    return max( 0, point[ 'character' ] - end[ 'character' ],
-                start[ 'character' ] - point[ 'character' ] )
-
-  if start[ 'line' ] == point[ 'line' ]:
-    return max( 0, start[ 'character' ] - point[ 'character' ] )
-  if end[ 'line' ] == point[ 'line' ]:
-    return max( 0, point[ 'character' ] - end[ 'character' ] )
-  # If not on the first or last line, then point is within range for sure.
-  return 0
 
 
 def ParseClangdVersion( version_str ):
@@ -242,7 +212,7 @@ class ClangdCompleter( simple_language_server_completer.SimpleLSPCompleter ):
   """
 
   def __init__( self, user_options ):
-    super( ClangdCompleter, self ).__init__( user_options )
+    super().__init__( user_options )
 
     self._clangd_command = GetClangdCommand( user_options )
     self._use_ycmd_caching = user_options[ 'clangd_uses_ycmd_caching' ]
@@ -255,7 +225,7 @@ class ClangdCompleter( simple_language_server_completer.SimpleLSPCompleter ):
 
   def _Reset( self ):
     with self._server_state_mutex:
-      super( ClangdCompleter, self )._Reset()
+      super()._Reset()
       self._compilation_commands = {}
 
 
@@ -280,21 +250,28 @@ class ClangdCompleter( simple_language_server_completer.SimpleLSPCompleter ):
 
 
   def GetType( self, request_data ):
-    # Clangd's hover response looks like this:
-    #     Declared in namespace <namespace name>
-    #
-    #     <declaration line>
-    #
-    #     <docstring>
-    # GetType gets the first two lines.
-    value = self.GetHoverResponse( request_data )[ 'value' ].split( '\n\n', 2 )
-    return responses.BuildDisplayMessageResponse( '\n\n'.join( value[ : 2 ] ) )
+    try:
+      # Clangd's hover response looks like this:
+      #     Declared in namespace <namespace name>
+      #
+      #     <declaration line>
+      #
+      #     <docstring>
+      # GetType gets the first two lines.
+      hover_value = self.GetHoverResponse( request_data )[ 'value' ]
+      type_info = '\n\n'.join( hover_value.split( '\n\n', 2 )[ : 2 ] )
+      return responses.BuildDisplayMessageResponse( type_info )
+    except language_server_completer.NoHoverInfoException:
+      raise RuntimeError( 'Unknown type.' )
 
 
   def GetDoc( self, request_data ):
-    # Just pull `value` out of the textDocument/hover response
-    return responses.BuildDisplayMessageResponse(
-        self.GetHoverResponse( request_data )[ 'value' ] )
+    try:
+      # Just pull `value` out of the textDocument/hover response
+      return responses.BuildDetailedInfoResponse(
+          self.GetHoverResponse( request_data )[ 'value' ] )
+    except language_server_completer.NoHoverInfoException:
+      raise RuntimeError( 'No documentation available.' )
 
 
   def GetTriggerCharacters( self, server_trigger_characters ):
@@ -306,14 +283,6 @@ class ClangdCompleter( simple_language_server_completer.SimpleLSPCompleter ):
 
   def GetCustomSubcommands( self ):
     return {
-      'FixIt': (
-        lambda self, request_data, args: self.GetCodeActions( request_data,
-                                                              args )
-      ),
-      'GetType': (
-        # In addition to type information we show declaration.
-        lambda self, request_data, args: self.GetType( request_data )
-      ),
       'GetTypeImprecise': (
         lambda self, request_data, args: self.GetType( request_data )
       ),
@@ -327,12 +296,6 @@ class ClangdCompleter( simple_language_server_completer.SimpleLSPCompleter ):
         lambda self, request_data, args: self.GoTo( request_data,
                                                     [ 'Definition' ] )
       ),
-      'RestartServer': (
-        lambda self, request_data, args: self._RestartServer( request_data )
-      ),
-      'GetDoc': (
-        lambda self, request_data, args: self.GetDoc( request_data )
-      ),
       'GetDocImprecise': (
         lambda self, request_data, args: self.GetDoc( request_data )
       ),
@@ -344,19 +307,6 @@ class ClangdCompleter( simple_language_server_completer.SimpleLSPCompleter ):
     }
 
 
-  def HandleServerCommand( self, request_data, command ):
-    if command[ 'command' ] == 'clangd.applyFix':
-      return language_server_completer.WorkspaceEditToFixIt(
-        request_data,
-        command[ 'arguments' ][ 0 ],
-        text = command[ 'title' ] )
-
-    if command[ 'command' ] == 'clangd.applyTweak':
-      return responses.UnresolvedFixIt( command, command[ 'title' ] )
-
-    return None
-
-
   def ShouldCompleteIncludeStatement( self, request_data ):
     column_codepoint = request_data[ 'column_codepoint' ] - 1
     current_line = request_data[ 'line_value' ]
@@ -365,8 +315,7 @@ class ClangdCompleter( simple_language_server_completer.SimpleLSPCompleter ):
 
   def ShouldUseNowInner( self, request_data ):
     return ( self.ServerIsReady() and
-             ( super( language_server_completer.LanguageServerCompleter,
-                      self ).ShouldUseNowInner( request_data ) or
+             ( super().ShouldUseNowInner( request_data ) or
                self.ShouldCompleteIncludeStatement( request_data ) ) )
 
 
@@ -376,61 +325,20 @@ class ClangdCompleter( simple_language_server_completer.SimpleLSPCompleter ):
     # Clangd should be able to provide completions in any context.
     # FIXME: Empty queries provide spammy results, fix this in Clangd.
     if self._use_ycmd_caching:
-      return super( ClangdCompleter, self ).ShouldUseNow( request_data )
+      return super().ShouldUseNow( request_data )
     return ( request_data[ 'query' ] != '' or
-             super( ClangdCompleter, self ).ShouldUseNowInner( request_data ) )
+             super().ShouldUseNowInner( request_data ) )
 
 
   def ComputeCandidates( self, request_data ):
     """Overridden to bypass ycmd cache if disabled."""
     # Caching results means resorting them, and ycmd has fewer signals.
     if self._use_ycmd_caching:
-      return super( ClangdCompleter, self ).ComputeCandidates( request_data )
+      return super().ComputeCandidates( request_data )
     codepoint = request_data[ 'column_codepoint' ]
-    candidates, _ = super( ClangdCompleter,
-                           self ).ComputeCandidatesInner( request_data,
-                                                          codepoint )
+    candidates, _ = super().ComputeCandidatesInner( request_data,
+                                                    codepoint )
     return candidates
-
-
-  def GetDetailedDiagnostic( self, request_data ):
-    self._UpdateServerWithFileContents( request_data )
-
-    current_line_lsp = request_data[ 'line_num' ] - 1
-    current_file = request_data[ 'filepath' ]
-
-    if not self._latest_diagnostics:
-      return responses.BuildDisplayMessageResponse(
-          'Diagnostics are not ready yet.' )
-
-    with self._server_info_mutex:
-      diagnostics = list( self._latest_diagnostics[
-          lsp.FilePathToUri( current_file ) ] )
-
-    if not diagnostics:
-      return responses.BuildDisplayMessageResponse(
-          'No diagnostics for current file.' )
-
-    current_column = lsp.CodepointsToUTF16CodeUnits(
-        GetFileLines( request_data, current_file )[ current_line_lsp ],
-        request_data[ 'column_codepoint' ] )
-    minimum_distance = None
-
-    message = 'No diagnostics for current line.'
-    for diagnostic in diagnostics:
-      start = diagnostic[ 'range' ][ 'start' ]
-      end = diagnostic[ 'range' ][ 'end' ]
-      if current_line_lsp < start[ 'line' ] or end[ 'line' ] < current_line_lsp:
-        continue
-      point = { 'line': current_line_lsp, 'character': current_column }
-      distance = DistanceOfPointToRange( point, diagnostic[ 'range' ] )
-      if minimum_distance is None or distance < minimum_distance:
-        message = diagnostic[ 'message' ]
-        if distance == 0:
-          break
-        minimum_distance = distance
-
-    return responses.BuildDisplayMessageResponse( message )
 
 
   def _SendFlagsFromExtraConf( self, request_data ):

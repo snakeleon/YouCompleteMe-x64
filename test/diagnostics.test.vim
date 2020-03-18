@@ -38,8 +38,26 @@ function! Test_MessagePoll_After_LocationList()
   call assert_equal( 'cpp', &ft )
   call WaitForAssert( {-> assert_equal( 1, len( sign_getplaced() ) ) } )
   call setline( 1, '' )
+  " Wait for the parse request to be complete otherwise we won't send another
+  " one when the TextChanged event fires
+  call WaitFor( {-> pyxeval( 'ycm_state.FileParseRequestReady()' ) } )
   doautocmd TextChanged
-  call WaitForAssert( {-> assert_true( empty( sign_getplaced() ) ) }, 10000 )
+  call WaitForAssert( {-> assert_true( empty( sign_getplaced() ) ) } )
   call assert_true( empty( getloclist( 0 ) ) )
   %bwipeout!
+endfunction
+
+function! Test_MessagePoll_Multiple_Filetypes()
+  call youcompleteme#test#setup#OpenFile(
+        \ '/third_party/ycmd/ycmd/tests/java/testdata/simple_eclipse_project' .
+        \ '/src/com/test/TestLauncher.java', {} )
+  call WaitForAssert( {-> assert_true( len( sign_getplaced( '%' )[ 0 ][ 'signs' ] ) ) } )
+  let java_signs = sign_getplaced( '%' )[ 0 ][ 'signs' ]
+  vsplit testdata/diagnostics/foo.cpp
+  " Make sure we've left the java buffer
+  call assert_equal( java_signs, sign_getplaced( '#' )[ 0 ][ 'signs' ] )
+  " Clangd emits two diagnostics for foo.cpp.
+  call WaitForAssert( {-> assert_equal( 2, len( sign_getplaced( '%' )[ 0 ][ 'signs' ] ) ) } )
+  let cpp_signs = sign_getplaced( '%' )[ 0 ][ 'signs' ]
+  call assert_false( java_signs == cpp_signs )
 endfunction

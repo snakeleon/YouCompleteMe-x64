@@ -1,5 +1,3 @@
-# coding: utf-8
-#
 # Copyright (C) 2016 YouCompleteMe contributors
 #
 # This file is part of YouCompleteMe.
@@ -17,21 +15,13 @@
 # You should have received a copy of the GNU General Public License
 # along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
 from ycm.tests.test_utils import ( CurrentWorkingDirectory, ExtendedMock,
                                    MockVimModule, MockVimBuffers, VimBuffer )
 MockVimModule()
 
 import contextlib
-from hamcrest import assert_that, contains, empty, has_entries
-from mock import call, MagicMock, patch
-from nose.tools import ok_
+from hamcrest import assert_that, contains_exactly, empty, has_entries
+from unittest.mock import call, MagicMock, patch
 
 from ycm.tests import PathToTestFile, YouCompleteMeInstance
 from ycmd.responses import ServerError
@@ -69,7 +59,7 @@ def SendCompletionRequest_UnicodeWorkingDirectory_test( ycm ):
     with MockVimBuffers( [ current_buffer ], [ current_buffer ] ):
       with MockCompletionRequest( ServerResponse ):
         ycm.SendCompletionRequest()
-        ok_( ycm.CompletionRequestReady() )
+        assert_that( ycm.CompletionRequestReady() )
         assert_that(
           ycm.GetCompletionResponse(),
           has_entries( {
@@ -81,7 +71,7 @@ def SendCompletionRequest_UnicodeWorkingDirectory_test( ycm ):
 
 @YouCompleteMeInstance()
 @patch( 'ycm.vimsupport.PostVimMessage', new_callable = ExtendedMock )
-def SendCompletionRequest_ResponseContainingError_test( ycm, post_vim_message ):
+def SendCompletionRequest_ResponseContainingError_test( post_vim_message, ycm ):
   current_buffer = VimBuffer( 'buffer' )
 
   def ServerResponse( *args ):
@@ -109,7 +99,7 @@ def SendCompletionRequest_ResponseContainingError_test( ycm, post_vim_message ):
   with MockVimBuffers( [ current_buffer ], [ current_buffer ] ):
     with MockCompletionRequest( ServerResponse ):
       ycm.SendCompletionRequest()
-      ok_( ycm.CompletionRequestReady() )
+      assert_that( ycm.CompletionRequestReady() )
       response = ycm.GetCompletionResponse()
       post_vim_message.assert_has_exact_calls( [
         call( 'Exception: message', truncate = True )
@@ -117,7 +107,7 @@ def SendCompletionRequest_ResponseContainingError_test( ycm, post_vim_message ):
       assert_that(
         response,
         has_entries( {
-          'completions': contains( has_entries( {
+          'completions': contains_exactly( has_entries( {
             'word': 'insertion_text',
             'abbr': 'menu_text',
             'menu': 'extra_menu_info',
@@ -134,14 +124,14 @@ def SendCompletionRequest_ResponseContainingError_test( ycm, post_vim_message ):
 @YouCompleteMeInstance()
 @patch( 'ycm.client.base_request._logger', autospec = True )
 @patch( 'ycm.vimsupport.PostVimMessage', new_callable = ExtendedMock )
-def SendCompletionRequest_ErrorFromServer_test( ycm,
-                                                post_vim_message,
-                                                logger ):
+def SendCompletionRequest_ErrorFromServer_test( post_vim_message,
+                                                logger,
+                                                ycm ):
   current_buffer = VimBuffer( 'buffer' )
   with MockVimBuffers( [ current_buffer ], [ current_buffer ] ):
     with MockCompletionRequest( ServerError( 'Server error' ) ):
       ycm.SendCompletionRequest()
-      ok_( ycm.CompletionRequestReady() )
+      assert_that( ycm.CompletionRequestReady() )
       response = ycm.GetCompletionResponse()
       logger.exception.assert_called_with( 'Error while handling server '
                                            'response' )

@@ -1,6 +1,4 @@
-# encoding: utf-8
-#
-# Copyright (C) 2017-2018 ycmd contributors
+# Copyright (C) 2017-2020 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -21,11 +19,12 @@ from __future__ import absolute_import
 from __future__ import unicode_literals
 from __future__ import print_function
 from __future__ import division
-from future import standard_library
-standard_library.install_aliases()
 from builtins import *  # noqa
 
-from hamcrest import ( assert_that, contains, contains_inanyorder, has_entries,
+from hamcrest import ( assert_that,
+                       contains_exactly,
+                       contains_inanyorder,
+                       has_entries,
                        has_entry )
 
 from ycmd.tests.typescript import IsolatedYcmd, PathToTestFile, SharedYcmd
@@ -57,7 +56,8 @@ def Diagnostics_FileReadyToParse_test( app ):
         'text': "Property 'mA' does not exist on type 'Foo'.",
         'location': LocationMatcher( filepath, 17, 5 ),
         'location_extent': RangeMatcher( filepath, ( 17, 5 ), ( 17, 7 ) ),
-        'ranges': contains( RangeMatcher( filepath, ( 17, 5 ), ( 17, 7 ) ) ),
+        'ranges': contains_exactly(
+          RangeMatcher( filepath, ( 17, 5 ), ( 17, 7 ) ) ),
         'fixit_available': True
       } ),
       has_entries( {
@@ -65,7 +65,8 @@ def Diagnostics_FileReadyToParse_test( app ):
         'text': "Property 'nonExistingMethod' does not exist on type 'Bar'.",
         'location': LocationMatcher( filepath, 35, 5 ),
         'location_extent': RangeMatcher( filepath, ( 35, 5 ), ( 35, 22 ) ),
-        'ranges': contains( RangeMatcher( filepath, ( 35, 5 ), ( 35, 22 ) ) ),
+        'ranges': contains_exactly(
+          RangeMatcher( filepath, ( 35, 5 ), ( 35, 22 ) ) ),
         'fixit_available': True
       } ),
       has_entries( {
@@ -73,7 +74,8 @@ def Diagnostics_FileReadyToParse_test( app ):
         'text': 'Expected 1-2 arguments, but got 0.',
         'location': LocationMatcher( filepath, 37, 5 ),
         'location_extent': RangeMatcher( filepath, ( 37, 5 ), ( 37, 12 ) ),
-        'ranges': contains( RangeMatcher( filepath, ( 37, 5 ), ( 37, 12 ) ) ),
+        'ranges': contains_exactly(
+          RangeMatcher( filepath, ( 37, 5 ), ( 37, 12 ) ) ),
         'fixit_available': False
       } ),
       has_entries( {
@@ -81,7 +83,8 @@ def Diagnostics_FileReadyToParse_test( app ):
         'text': "Cannot find name 'Bår'.",
         'location': LocationMatcher( filepath, 39, 1 ),
         'location_extent': RangeMatcher( filepath, ( 39, 1 ), ( 39, 5 ) ),
-        'ranges': contains( RangeMatcher( filepath, ( 39, 1 ), ( 39, 5 ) ) ),
+        'ranges': contains_exactly(
+          RangeMatcher( filepath, ( 39, 1 ), ( 39, 5 ) ) ),
         'fixit_available': True
       } ),
     )
@@ -137,7 +140,8 @@ def Diagnostics_MaximumDiagnosticsNumberExceeded_test( app ):
         'text': "Property 'mA' does not exist on type 'Foo'.",
         'location': LocationMatcher( filepath, 17, 5 ),
         'location_extent': RangeMatcher( filepath, ( 17, 5 ), ( 17, 7 ) ),
-        'ranges': contains( RangeMatcher( filepath, ( 17, 5 ), ( 17, 7 ) ) ),
+        'ranges': contains_exactly(
+          RangeMatcher( filepath, ( 17, 5 ), ( 17, 7 ) ) ),
         'fixit_available': True
       } ),
       has_entries( {
@@ -145,7 +149,8 @@ def Diagnostics_MaximumDiagnosticsNumberExceeded_test( app ):
         'text': 'Maximum number of diagnostics exceeded.',
         'location': LocationMatcher( filepath, 1, 1 ),
         'location_extent': RangeMatcher( filepath, ( 1, 1 ), ( 1, 1 ) ),
-        'ranges': contains( RangeMatcher( filepath, ( 1, 1 ), ( 1, 1 ) ) ),
+        'ranges': contains_exactly(
+          RangeMatcher( filepath, ( 1, 1 ), ( 1, 1 ) ) ),
         'fixit_available': False
       } ),
     )

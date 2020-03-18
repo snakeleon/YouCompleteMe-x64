@@ -3,11 +3,61 @@
 Changelog
 ---------
 
+0.16.0 (2020-01-26)
++++++++++++++++++++
+
+- **Added** ``Script.get_context`` to get information where you currently are.
+- Completions/type inference of **Pytest fixtures**.
+- Tensorflow, Numpy and Pandas completions should now be about **4-10x faster**
+  after the first time they are used.
+- Dict key completions are working now. e.g. ``d = {1000: 3}; d[10`` will
+  expand to ``1000``.
+- Completion for "proxies" works now. These are classes that have a
+  ``__getattr__(self, name)`` method that does a ``return getattr(x, name)``.
+  after loading them initially.
+- Goto on a function/attribute in a class now goes to the definition in its
+  super class.
+- Big **Script API Changes**:
+    - The line and column parameters of ``jedi.Script`` are now deprecated
+    - ``completions`` deprecated, use ``complete`` instead
+    - ``goto_assignments`` deprecated, use ``goto`` instead
+    - ``goto_definitions`` deprecated, use ``infer`` instead
+    - ``call_signatures`` deprecated, use ``get_signatures`` instead
+    - ``usages`` deprecated, use ``get_references`` instead
+    - ``jedi.names`` deprecated, use ``jedi.Script(...).get_names()``
+- ``BaseDefinition.goto_assignments`` renamed to ``BaseDefinition.goto``
+- Add follow_imports to ``Definition.goto``. Now its signature matches
+  ``Script.goto``.
+- **Python 2 support deprecated**. For this release it is best effort. Python 2
+  has reached the end of its life and now it's just about a smooth transition.
+  Bugs for Python 2 will not be fixed anymore and a third of the tests are
+  already skipped.
+- Removed ``settings.no_completion_duplicates``. It wasn't tested and nobody
+  was probably using it anyway.
+- Removed ``settings.use_filesystem_cache`` and
+  ``settings.additional_dynamic_modules``, they have no usage anymore. Pretty
+  much nobody was probably using them.
+
+0.15.2 (2019-12-20)
++++++++++++++++++++
+
+- Signatures are now detected a lot better
+- Add fuzzy completions with ``Script(...).completions(fuzzy=True)``
+- Files bigger than one MB (about 20kLOC) get cropped to avoid getting
+  stuck completely.
+- Many small Bugfixes
+- A big refactoring around contexts/values
+
+0.15.1 (2019-08-13)
++++++++++++++++++++
+
+- Small bugfix and removal of a print statement
+
 0.15.0 (2019-08-11)
 +++++++++++++++++++
 
-- Added file path completions, there's a **new ``Completion.type``** ``path``,
-  now. Example: ``'/ho`` -> ``'/home/``
+- Added file path completions, there's a **new** ``Completion.type`` now:
+  ``path``. Example: ``'/ho`` -> ``'/home/``
 - ``*args``/``**kwargs`` resolving. If possible Jedi replaces the parameters
   with the actual alternatives.
 - Better support for enums/dataclasses
@@ -18,12 +68,12 @@ New APIs:
 
 - ``Definition.get_signatures() -> List[Signature]``. Signatures are similar to
   ``CallSignature``. ``Definition.params`` is therefore deprecated.
-- ``Signature.to_string()`` to format call signatures.
+- ``Signature.to_string()`` to format signatures.
 - ``Signature.params -> List[ParamDefinition]``, ParamDefinition has the
   following additional attributes ``infer_default()``, ``infer_annotation()``,
   ``to_string()``, and ``kind``.
 - ``Definition.execute() -> List[Definition]``, makes it possible to infer
-    return values of functions.
+  return values of functions.
 
 
 0.14.1 (2019-07-13)
@@ -126,12 +176,12 @@ New APIs:
 ++++++++++++++++++
 
 - The import logic has been rewritten to look more like Python's. There is now
-  an ``Evaluator.modules`` import cache, which resembles ``sys.modules``.
+  an ``InferState.modules`` import cache, which resembles ``sys.modules``.
 - Integrated the parser of 2to3. This will make refactoring possible. It will
   also be possible to check for error messages (like compiling an AST would give)
   in the future.
-- With the new parser, the evaluation also completely changed. It's now simpler
-  and more readable.
+- With the new parser, the type inference also completely changed. It's now
+  simpler and more readable.
 - Completely rewritten REPL completion.
 - Added ``jedi.names``, a command to do static analysis. Thanks to that
   sourcegraph guys for sponsoring this!

@@ -6,7 +6,7 @@ Features and Caveats
 Jedi obviously supports autocompletion. It's also possible to get it working in
 (:ref:`your REPL (IPython, etc.) <repl-completion>`).
 
-Static analysis is also possible by using the command ``jedi.names``.
+Static analysis is also possible by using ``jedi.Script(...).get_names``.
 
 Jedi would in theory support refactoring, but we have never publicized it,
 because it's not production ready. If you're interested in helping out here,
@@ -52,6 +52,7 @@ Supported Python Features
 - ``isinstance`` checks for if/while/assert
 - namespace packages (includes ``pkgutil``, ``pkg_resources`` and PEP420 namespaces)
 - Django / Flask / Buildout support
+- Understands Pytest fixtures
 
 
 Not Supported
@@ -67,7 +68,6 @@ Will probably never be implemented:
 - metaclasses (how could an auto-completion ever support this)
 - ``setattr()``, ``__import__()``
 - writing to some dicts: ``globals()``, ``locals()``, ``object.__dict__``
-- evaluating ``if`` / ``while`` / ``del``
 
 
 Caveats
@@ -84,7 +84,7 @@ etc.
 **Security**
 
 Security is an important issue for |jedi|. Therefore no Python code is
-executed.  As long as you write pure Python, everything is evaluated
+executed.  As long as you write pure Python, everything is inferred
 statically. But: If you use builtin modules (``c_builtin``) there is no other
 option than to execute those modules. However: Execute isn't that critical (as
 e.g. in pythoncomplete, which used to execute *every* import!), because it

@@ -1,4 +1,4 @@
-# Copyright (C) 2015 ycmd contributors
+# Copyright (C) 2020 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -15,15 +15,8 @@
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import absolute_import
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
 from hamcrest import ( assert_that,
-                       contains,
+                       contains_exactly,
                        contains_inanyorder,
                        contains_string,
                        has_entries,
@@ -55,11 +48,11 @@ void foo() {
                              filetype = 'cpp' )
 
   results = app.post_json( '/event_notification', event_data ).json
-  assert_that( results, contains(
+  assert_that( results, contains_exactly(
     has_entries( {
       'kind': equal_to( 'ERROR' ),
       'text': contains_string( 'cannot initialize' ),
-      'ranges': contains( RangeMatcher( 'foo', ( 3, 16 ), ( 3, 21 ) ) ),
+      'ranges': contains_exactly( RangeMatcher( 'foo', ( 3, 16 ), ( 3, 21 ) ) ),
       'location': LocationMatcher( 'foo', 3, 10 ),
       'location_extent': RangeMatcher( 'foo', ( 3, 10 ), ( 3, 13 ) )
     } )
@@ -83,7 +76,7 @@ void foo() {
                              filetype = 'cpp' )
 
   results = app.post_json( '/event_notification', event_data ).json
-  assert_that( results, contains(
+  assert_that( results, contains_exactly(
     has_entries( {
       'location_extent': RangeMatcher( 'foo', ( 3, 3 ), ( 3, 6 ) )
     } )
@@ -246,7 +239,7 @@ def Diagnostics_LocationExtent_MissingSemicolon_test( app ):
 
   pprint( response )
 
-  assert_that( response, contains(
+  assert_that( response, contains_exactly(
     has_entries( {
       'kind': equal_to( 'ERROR' ),
       'location': LocationMatcher( filepath, 2, 9 ),
@@ -267,7 +260,7 @@ def Diagnostics_LocationExtent_MissingSemicolon_test( app ):
       'kind': equal_to( 'ERROR' ),
       'location': LocationMatcher( filepath, 8, 7 ),
       'location_extent': RangeMatcher( filepath, ( 8, 7 ), ( 8, 11 ) ),
-      'ranges': contains(
+      'ranges': contains_exactly(
         # FIXME: empty ranges from libclang should be ignored.
         RangeMatcher( '', ( 0, 0 ), ( 0, 0 ) ),
         RangeMatcher( filepath, ( 8, 7 ), ( 8, 11 ) )
@@ -339,7 +332,8 @@ def Diagnostics_CUDA_Kernel_test( app ):
       'kind': equal_to( 'ERROR' ),
       'location': LocationMatcher( filepath, 59, 5 ),
       'location_extent': RangeMatcher( filepath, ( 59, 5 ), ( 59, 6 ) ),
-      'ranges': contains( RangeMatcher( filepath, ( 59, 3 ), ( 59, 5 ) ) ),
+      'ranges': contains_exactly(
+                  RangeMatcher( filepath, ( 59, 3 ), ( 59, 5 ) ) ),
       'text': equal_to( "call to global function 'g1' not configured" ),
       'fixit_available': False
     } ),
@@ -347,7 +341,8 @@ def Diagnostics_CUDA_Kernel_test( app ):
       'kind': equal_to( 'ERROR' ),
       'location': LocationMatcher( filepath, 60, 9 ),
       'location_extent': RangeMatcher( filepath, ( 60, 9 ), ( 60, 12 ) ),
-      'ranges': contains( RangeMatcher( filepath, ( 60, 5 ), ( 60, 8 ) ) ),
+      'ranges': contains_exactly(
+                  RangeMatcher( filepath, ( 60, 5 ), ( 60, 8 ) ) ),
       'text': equal_to(
         'too few execution configuration arguments to kernel function call, '
         'expected at least 2, have 1'
@@ -358,7 +353,7 @@ def Diagnostics_CUDA_Kernel_test( app ):
       'kind': equal_to( 'ERROR' ),
       'location': LocationMatcher( filepath, 61, 20 ),
       'location_extent': RangeMatcher( filepath, ( 61, 20 ), ( 61, 21 ) ),
-      'ranges': contains(
+      'ranges': contains_exactly(
         RangeMatcher( filepath, ( 61, 5 ), ( 61, 8 ) ),
         RangeMatcher( filepath, ( 61, 20 ), ( 61, 21 ) )
       ),
@@ -370,7 +365,8 @@ def Diagnostics_CUDA_Kernel_test( app ):
       'kind': equal_to( 'ERROR' ),
       'location': LocationMatcher( filepath, 65, 15 ),
       'location_extent': RangeMatcher( filepath, ( 65, 15 ), ( 65, 16 ) ),
-      'ranges': contains( RangeMatcher( filepath, ( 65, 3 ), ( 65, 5 ) ) ),
+      'ranges': contains_exactly(
+                  RangeMatcher( filepath, ( 65, 3 ), ( 65, 5 ) ) ),
       'text': equal_to( "kernel call to non-global function 'h1'" ),
       'fixit_available': False
     } ),
@@ -378,7 +374,8 @@ def Diagnostics_CUDA_Kernel_test( app ):
       'kind': equal_to( 'ERROR' ),
       'location': LocationMatcher( filepath, 68, 15 ),
       'location_extent': RangeMatcher( filepath, ( 68, 15 ), ( 68, 16 ) ),
-      'ranges': contains( RangeMatcher( filepath, ( 68, 3 ), ( 68, 5 ) ) ),
+      'ranges': contains_exactly(
+                  RangeMatcher( filepath, ( 68, 3 ), ( 68, 5 ) ) ),
       'text': equal_to( "kernel function type 'int (*)(int)' must have "
                         "void return type" ),
       'fixit_available': False
@@ -409,7 +406,7 @@ def Diagnostics_MaximumDiagnosticsNumberExceeded_test( app ):
 
   pprint( response )
 
-  assert_that( response, contains(
+  assert_that( response, contains_exactly(
     has_entries( {
       'kind': equal_to( 'ERROR' ),
       'location': LocationMatcher( filepath, 3, 9 ),
@@ -422,7 +419,8 @@ def Diagnostics_MaximumDiagnosticsNumberExceeded_test( app ):
       'kind': equal_to( 'ERROR' ),
       'location': LocationMatcher( filepath, 1, 1 ),
       'location_extent': RangeMatcher( filepath, ( 1, 1 ), ( 1, 1 ) ),
-      'ranges': contains( RangeMatcher( filepath, ( 1, 1 ), ( 1, 1 ) ) ),
+      'ranges': contains_exactly(
+                  RangeMatcher( filepath, ( 1, 1 ), ( 1, 1 ) ) ),
       'text': equal_to( 'Maximum number of diagnostics exceeded.' ),
       'fixit_available': False
     } )
@@ -444,7 +442,7 @@ def Diagnostics_NoLimitToNumberOfDiagnostics_test( app ):
 
   pprint( response )
 
-  assert_that( response, contains(
+  assert_that( response, contains_exactly(
     has_entries( {
       'kind': equal_to( 'ERROR' ),
       'location': LocationMatcher( filepath, 3, 9 ),

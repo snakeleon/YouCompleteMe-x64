@@ -1,9 +1,6 @@
 [submodule "third_party/bottle"]
 	path = third_party/bottle
 	url = https://github.com/defnull/bottle
-[submodule "third_party/frozendict"]
-	path = third_party/frozendict
-	url = https://github.com/slezica/python-frozendict
 [submodule "third_party/waitress"]
 	path = third_party/waitress
 	url = https://github.com/Pylons/waitress
@@ -19,9 +16,6 @@
 [submodule "third_party/parso"]
 	path = third_party/jedi_deps/parso
 	url = https://github.com/davidhalter/parso
-[submodule "third_party/python-future"]
-	path = third_party/python-future
-	url = https://github.com/PythonCharmers/python-future
 [submodule "third_party/cregex"]
 	path = third_party/cregex
 	url = https://github.com/ycm-core/regex.git

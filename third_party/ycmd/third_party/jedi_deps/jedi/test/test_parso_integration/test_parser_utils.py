@@ -45,18 +45,6 @@ class TestCallAndName:
         assert parser_utils.safe_literal_eval(literal.value) == 'hello'
 
 
-def test_user_statement_on_import():
-    """github #285"""
-    s = "from datetime import (\n" \
-        "    time)"
-
-    for pos in [(2, 1), (2, 4)]:
-        p = parse(s)
-        stmt = parser_utils.get_statement_of_position(p, pos)
-        assert isinstance(stmt, tree.Import)
-        assert [n.value for n in stmt.get_defined_names()] == ['time']
-
-
 def test_hex_values_in_docstring():
     source = r'''
         def foo(object):
@@ -74,13 +62,13 @@ def test_hex_values_in_docstring():
 
 
 @pytest.mark.parametrize(
-    'code,call_signature', [
+    'code,signature', [
         ('def my_function(x, typed: Type, z):\n return', 'my_function(x, typed: Type, z)'),
         ('def my_function(x, y, z) -> str:\n return', 'my_function(x, y, z) -> str'),
         ('lambda x, y, z: x + y * z\n', '<lambda>(x, y, z)')
     ])
-def test_get_call_signature(code, call_signature):
+def test_get_signature(code, signature):
     node = parse(code, version='3.5').children[0]
     if node.type == 'simple_stmt':
         node = node.children[0]
-    assert parser_utils.get_call_signature(node) == call_signature
+    assert parser_utils.get_signature(node) == signature

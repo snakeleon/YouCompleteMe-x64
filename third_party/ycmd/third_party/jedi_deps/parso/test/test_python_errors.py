@@ -37,7 +37,7 @@ def test_python_exception_matches(code):
         error, = errors
         actual = error.message
     assert actual in wanted
-    # Somehow in Python3.3 the SyntaxError().lineno is sometimes None
+    # Somehow in Python2.7 the SyntaxError().lineno is sometimes None
     assert line_nr is None or line_nr == error.start_pos[0]
 
 
@@ -118,22 +118,12 @@ def _get_actual_exception(code):
             assert False, "The piece of code should raise an exception."
 
     # SyntaxError
-    # Python 2.6 has a bit different error messages here, so skip it.
-    if sys.version_info[:2] == (2, 6) and wanted == 'SyntaxError: unexpected EOF while parsing':
-        wanted = 'SyntaxError: invalid syntax'
-
     if wanted == 'SyntaxError: non-keyword arg after keyword arg':
         # The python 3.5+ way, a bit nicer.
         wanted = 'SyntaxError: positional argument follows keyword argument'
     elif wanted == 'SyntaxError: assignment to keyword':
         return [wanted, "SyntaxError: can't assign to keyword",
                 'SyntaxError: cannot assign to __debug__'], line_nr
-    elif wanted == 'SyntaxError: assignment to None':
-        # Python 2.6 does has a slightly different error.
-        wanted = 'SyntaxError: cannot assign to None'
-    elif wanted == 'SyntaxError: can not assign to __debug__':
-        # Python 2.6 does has a slightly different error.
-        wanted = 'SyntaxError: cannot assign to __debug__'
     elif wanted == 'SyntaxError: can use starred expression only as assignment target':
         # Python 3.4/3.4 have a bit of a different warning than 3.5/3.6 in
         # certain places. But in others this error makes sense.
@@ -294,6 +284,19 @@ def test_valid_fstrings(code):
 
 
 @pytest.mark.parametrize(
+    'code', [
+        'a = (b := 1)',
+        '[x4 := x ** 5 for x in range(7)]',
+        '[total := total + v for v in range(10)]',
+        'while chunk := file.read(2):\n pass',
+        'numbers = [y := math.factorial(x), y**2, y**3]',
+    ]
+)
+def test_valid_namedexpr(code):
+    assert not _get_error_list(code, version='3.8')
+
+
+@pytest.mark.parametrize(
     ('code', 'message'), [
         ("f'{1+}'", ('invalid syntax')),
         (r'f"\"', ('invalid syntax')),
@@ -307,3 +310,14 @@ def test_invalid_fstrings(code, message):
     """
     error, = _get_error_list(code, version='3.6')
     assert message in error.message
+
+
+@pytest.mark.parametrize(
+    'code', [
+        "from foo import (\nbar,\n rab,\n)",
+        "from foo import (bar, rab, )",
+    ]
+)
+def test_trailing_comma(code):
+    errors = _get_error_list(code)
+    assert not errors

@@ -1,4 +1,4 @@
-# Copyright (C) 2011-2018 ycmd contributors
+# Copyright (C) 2011-2020 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -15,18 +15,10 @@
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
 import abc
 import threading
 from ycmd.completers import completer_utils
 from ycmd.responses import NoDiagnosticSupport, SignatureHelpAvailalability
-from future.utils import with_metaclass
 
 NO_USER_COMMANDS = 'This completer does not define any commands.'
 
@@ -34,7 +26,7 @@ NO_USER_COMMANDS = 'This completer does not define any commands.'
 MESSAGE_POLL_TIMEOUT = 10
 
 
-class Completer( with_metaclass( abc.ABCMeta, object ) ):
+class Completer( metaclass = abc.ABCMeta ):
   """A base class for all Completers in YCM.
 
   Here's several important things you need to know if you're writing a custom
@@ -172,7 +164,7 @@ class Completer( with_metaclass( abc.ABCMeta, object ) ):
 
   If your completer supports signature help, then you need to implemment:
     - SignatureHelpAvailable
-    - something which calls self._signature_triggers.SetServerTriggerCharacters
+    - something which calls self.SetSignatureHelpTriggers()
     - ComputeSignaturesInner
   See the language_server_completer or Python completers for examples.
 
@@ -191,7 +183,7 @@ class Completer( with_metaclass( abc.ABCMeta, object ) ):
             filetype_set = set( self.SupportedFiletypes() ) )
         if user_options[ 'auto_trigger' ] else None )
 
-    self.signature_triggers = (
+    self._signature_triggers = (
       completer_utils.PreparedTriggers(
         user_trigger_map = {}, # user triggers not supported for signature help
         filetype_set = set( self.SupportedFiletypes() ),
@@ -257,10 +249,17 @@ class Completer( with_metaclass( abc.ABCMeta, object ) ):
       # the menu and returns state 'INACTIVE').
       return True
 
-    return self.signature_triggers.MatchesForFiletype( current_line,
-                                                       column_codepoint,
-                                                       column_codepoint,
-                                                       filetype )
+    return self._signature_triggers.MatchesForFiletype( current_line,
+                                                        column_codepoint,
+                                                        column_codepoint,
+                                                        filetype )
+
+
+  def SetSignatureHelpTriggers( self, trigger_characters ):
+    if self._signature_triggers is None:
+      return
+
+    self._signature_triggers.SetServerSemanticTriggers( trigger_characters )
 
 
   def QueryLengthAboveMinThreshold( self, request_data ):
@@ -472,7 +471,7 @@ class Completer( with_metaclass( abc.ABCMeta, object ) ):
     return False
 
 
-class CompletionsCache( object ):
+class CompletionsCache:
   """Cache of computed completions for a particular request."""
 
   def __init__( self ):

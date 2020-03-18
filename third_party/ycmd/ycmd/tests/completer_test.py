@@ -1,6 +1,4 @@
-# encoding: utf-8
-#
-# Copyright (C) 2016-2018 ycmd contributors.
+# Copyright (C) 2016-2020 ycmd contributors.
 #
 # This file is part of ycmd.
 #
@@ -17,23 +15,16 @@
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
 from ycmd.tests.test_utils import DummyCompleter
 from ycmd.user_options_store import DefaultOptions
-from mock import patch
-from nose.tools import eq_
+from unittest.mock import patch
+from hamcrest import assert_that, contains_exactly, equal_to
 
 
 def _FilterAndSortCandidates_Match( candidates, query, expected_matches ):
   completer = DummyCompleter( DefaultOptions() )
   matches = completer.FilterAndSortCandidates( candidates, query )
-  eq_( expected_matches, matches )
+  assert_that( expected_matches, equal_to( matches ) )
 
 
 def FilterAndSortCandidates_OmniCompleter_List_test():
@@ -82,4 +73,4 @@ def FilterAndSortCandidates_Unicode_test():
         return_value = { 'Foo': '', 'StopServer': '' } )
 def DefinedSubcommands_RemoveStopServerSubcommand_test( subcommands_map ):
   completer = DummyCompleter( DefaultOptions() )
-  eq_( completer.DefinedSubcommands(), [ 'Foo' ] )
+  assert_that( completer.DefinedSubcommands(), contains_exactly( 'Foo' ) )

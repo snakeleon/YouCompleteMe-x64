@@ -1,4 +1,4 @@
-# Copyright (C) 2018 ycmd contributors
+# Copyright (C) 2020 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -15,25 +15,17 @@
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
-from ycmd.utils import ToCppStringCompatible as ToCppStr
 from ycmd.completers.cpp.clang_completer import ConvertCompletionData
 from ycmd.responses import BuildDiagnosticData
 from ycmd.tests.bindings import PathToTestFile
 from ycmd.tests.test_utils import ( ClangOnly, TemporaryTestDir,
                                     TemporaryClangProject )
 
-from nose.tools import eq_
 from hamcrest import ( assert_that,
-                       contains,
+                       contains_exactly,
                        contains_inanyorder,
                        contains_string,
+                       equal_to,
                        has_entries,
                        has_properties )
 import ycm_core
@@ -42,8 +34,8 @@ import os
 
 def CppBindings_FilterAndSortCandidates_test():
   candidates = [ 'foo1', 'foo2', 'foo3' ]
-  query = ToCppStr( 'oo' )
-  candidate_property = ToCppStr( '' )
+  query = 'oo'
+  candidate_property = ''
 
   result_full = ycm_core.FilterAndSortCandidates( candidates,
                                                   candidate_property,
@@ -57,45 +49,40 @@ def CppBindings_FilterAndSortCandidates_test():
   del query
   del candidate_property
 
-  assert_that( result_full, contains( 'foo1', 'foo2', 'foo3' ) )
-  assert_that( result_2, contains( 'foo1', 'foo2' ) )
+  assert_that( result_full, contains_exactly( 'foo1', 'foo2', 'foo3' ) )
+  assert_that( result_2, contains_exactly( 'foo1', 'foo2' ) )
 
 
 def CppBindings_IdentifierCompleter_test():
   identifier_completer = ycm_core.IdentifierCompleter()
   identifiers = ycm_core.StringVector()
-  identifiers.append( ToCppStr( 'foo' ) )
-  identifiers.append( ToCppStr( 'bar' ) )
-  identifiers.append( ToCppStr( 'baz' ) )
-  identifier_completer.AddIdentifiersToDatabase( identifiers,
-                                                 ToCppStr( 'foo' ),
-                                                 ToCppStr( 'file' ) )
+  identifiers.append( 'foo' )
+  identifiers.append( 'bar' )
+  identifiers.append( 'baz' )
+  identifier_completer.AddIdentifiersToDatabase( identifiers, 'foo', 'file' )
   del identifiers
   query_fo_10 = identifier_completer.CandidatesForQueryAndType(
-                                       ToCppStr( 'fo' ), ToCppStr( 'foo' ), 10 )
-  query_fo = identifier_completer.CandidatesForQueryAndType(
-                                    ToCppStr( 'fo' ), ToCppStr( 'foo' ) )
-  query_a = identifier_completer.CandidatesForQueryAndType(
-                                   ToCppStr( 'a' ), ToCppStr( 'foo' ) )
-  assert_that( query_fo_10, contains( 'foo' ) )
-  assert_that( query_fo, contains( 'foo' ) )
-  assert_that( query_a, contains( 'bar', 'baz' ) )
+                                       'fo', 'foo', 10 )
+  query_fo = identifier_completer.CandidatesForQueryAndType( 'fo', 'foo' )
+  query_a = identifier_completer.CandidatesForQueryAndType( 'a', 'foo' )
+  assert_that( query_fo_10, contains_exactly( 'foo' ) )
+  assert_that( query_fo, contains_exactly( 'foo' ) )
+  assert_that( query_a, contains_exactly( 'bar', 'baz' ) )
   identifiers = ycm_core.StringVector()
-  identifiers.append( ToCppStr( 'oof' ) )
-  identifiers.append( ToCppStr( 'rab' ) )
-  identifiers.append( ToCppStr( 'zab' ) )
+  identifiers.append( 'oof' )
+  identifiers.append( 'rab' )
+  identifiers.append( 'zab' )
   identifier_completer.ClearForFileAndAddIdentifiersToDatabase(
-                         identifiers, ToCppStr( 'foo' ), ToCppStr( 'file' ) )
-  query_a_10 = identifier_completer.CandidatesForQueryAndType(
-                                      ToCppStr( 'a' ), ToCppStr( 'foo' ) )
-  assert_that( query_a_10, contains( 'rab', 'zab' ) )
+                         identifiers, 'foo', 'file' )
+  query_a_10 = identifier_completer.CandidatesForQueryAndType( 'a', 'foo' )
+  assert_that( query_a_10, contains_exactly( 'rab', 'zab' ) )
 
 
 @ClangOnly
 def CppBindings_UnsavedFile_test():
   unsaved_file = ycm_core.UnsavedFile()
-  filename = ToCppStr( 'foo' )
-  contents = ToCppStr( 'bar\\n' )
+  filename = 'foo'
+  contents = 'bar\\n'
   length = len( contents )
   unsaved_file.filename_ = filename
   unsaved_file.contents_ = contents
@@ -112,13 +99,13 @@ def CppBindings_UnsavedFile_test():
 
 @ClangOnly
 def CppBindings_DeclarationLocation_test():
-  translation_unit = ToCppStr( PathToTestFile( 'foo.c' ) )
-  filename = ToCppStr( PathToTestFile( 'foo.c' ) )
+  translation_unit = PathToTestFile( 'foo.c' )
+  filename = PathToTestFile( 'foo.c' )
   line = 9
   column = 17
   unsaved_file_vector = ycm_core.UnsavedFileVector()
   flags = ycm_core.StringVector()
-  flags.append( ToCppStr( '-xc++' ) )
+  flags.append( '-xc++' )
   reparse = True
   clang_completer = ycm_core.ClangCompleter()
 
@@ -146,13 +133,13 @@ def CppBindings_DeclarationLocation_test():
 
 @ClangOnly
 def CppBindings_DefinitionOrDeclarationLocation_test():
-  translation_unit = ToCppStr( PathToTestFile( 'foo.c' ) )
-  filename = ToCppStr( PathToTestFile( 'foo.c' ) )
+  translation_unit = PathToTestFile( 'foo.c' )
+  filename = PathToTestFile( 'foo.c' )
   line = 9
   column = 17
   unsaved_file_vector = ycm_core.UnsavedFileVector()
   flags = ycm_core.StringVector()
-  flags.append( ToCppStr( '-xc++' ) )
+  flags.append( '-xc++' )
   reparse = True
   clang_completer = ycm_core.ClangCompleter()
 
@@ -181,13 +168,13 @@ def CppBindings_DefinitionOrDeclarationLocation_test():
 
 @ClangOnly
 def CppBindings_DefinitionLocation_test():
-  translation_unit = ToCppStr( PathToTestFile( 'foo.c' ) )
-  filename = ToCppStr( PathToTestFile( 'foo.c' ) )
+  translation_unit = PathToTestFile( 'foo.c' )
+  filename = PathToTestFile( 'foo.c' )
   line = 9
   column = 17
   unsaved_file_vector = ycm_core.UnsavedFileVector()
   flags = ycm_core.StringVector()
-  flags.append( ToCppStr( '-xc++' ) )
+  flags.append( '-xc++' )
   reparse = True
   clang_completer = ycm_core.ClangCompleter()
 
@@ -215,13 +202,13 @@ def CppBindings_DefinitionLocation_test():
 
 @ClangOnly
 def CppBindings_Candidates_test():
-  translation_unit = ToCppStr( PathToTestFile( 'foo.c' ) )
-  filename = ToCppStr( PathToTestFile( 'foo.c' ) )
+  translation_unit = PathToTestFile( 'foo.c' )
+  filename = PathToTestFile( 'foo.c' )
   line = 11
   column = 6
   unsaved_file_vector = ycm_core.UnsavedFileVector()
   flags = ycm_core.StringVector()
-  flags.append( ToCppStr( '-xc' ) )
+  flags.append( '-xc' )
   reparse = True
   clang_completer = ycm_core.ClangCompleter()
 
@@ -262,13 +249,13 @@ def CppBindings_Candidates_test():
 
 @ClangOnly
 def CppBindings_GetType_test():
-  translation_unit = ToCppStr( PathToTestFile( 'foo.c' ) )
-  filename = ToCppStr( PathToTestFile( 'foo.c' ) )
+  translation_unit = PathToTestFile( 'foo.c' )
+  filename = PathToTestFile( 'foo.c' )
   line = 9
   column = 17
   unsaved_file_vector = ycm_core.UnsavedFileVector()
   flags = ycm_core.StringVector()
-  flags.append( ToCppStr( '-xc++' ) )
+  flags.append( '-xc++' )
   reparse = True
   clang_completer = ycm_core.ClangCompleter()
 
@@ -288,18 +275,18 @@ def CppBindings_GetType_test():
   del clang_completer
   del reparse
 
-  eq_( 'int ()', type_at_cursor )
+  assert_that( 'int ()', equal_to( type_at_cursor ) )
 
 
 @ClangOnly
 def CppBindings_GetParent_test():
-  translation_unit = ToCppStr( PathToTestFile( 'foo.c' ) )
-  filename = ToCppStr( PathToTestFile( 'foo.c' ) )
+  translation_unit = PathToTestFile( 'foo.c' )
+  filename = PathToTestFile( 'foo.c' )
   line = 9
   column = 17
   unsaved_file_vector = ycm_core.UnsavedFileVector()
   flags = ycm_core.StringVector()
-  flags.append( ToCppStr( '-xc++' ) )
+  flags.append( '-xc++' )
   reparse = True
   clang_completer = ycm_core.ClangCompleter()
 
@@ -321,18 +308,18 @@ def CppBindings_GetParent_test():
   del clang_completer
   del reparse
 
-  eq_( 'bar', enclosing_function )
+  assert_that( 'bar', equal_to( enclosing_function ) )
 
 
 @ClangOnly
 def CppBindings_FixIt_test():
-  translation_unit = ToCppStr( PathToTestFile( 'foo.c' ) )
-  filename = ToCppStr( PathToTestFile( 'foo.c' ) )
+  translation_unit = PathToTestFile( 'foo.c' )
+  filename = PathToTestFile( 'foo.c' )
   line = 3
   column = 5
   unsaved_file_vector = ycm_core.UnsavedFileVector()
   flags = ycm_core.StringVector()
-  flags.append( ToCppStr( '-xc++' ) )
+  flags.append( '-xc++' )
   reparse = True
   clang_completer = ycm_core.ClangCompleter()
 
@@ -354,7 +341,7 @@ def CppBindings_FixIt_test():
 
   assert_that(
     fixits,
-    contains( has_properties( {
+    contains_exactly( has_properties( {
       'text': ( PathToTestFile( 'foo.c' ) +
                 ':3:16: error: expected \';\' at end of declaration' ),
       'location': has_properties( {
@@ -362,7 +349,7 @@ def CppBindings_FixIt_test():
         'column_number_': 16,
         'filename_': PathToTestFile( 'foo.c' )
       } ),
-      'chunks': contains( has_properties( {
+      'chunks': contains_exactly( has_properties( {
         'replacement_text': ';',
         'range': has_properties( {
           'start_': has_properties( {
@@ -380,13 +367,13 @@ def CppBindings_FixIt_test():
 
 @ClangOnly
 def CppBindings_Docs_test():
-  translation_unit = ToCppStr( PathToTestFile( 'foo.c' ) )
-  filename = ToCppStr( PathToTestFile( 'foo.c' ) )
+  translation_unit = PathToTestFile( 'foo.c' )
+  filename = PathToTestFile( 'foo.c' )
   line = 9
   column = 16
   unsaved_file_vector = ycm_core.UnsavedFileVector()
   flags = ycm_core.StringVector()
-  flags.append( ToCppStr( '-xc++' ) )
+  flags.append( '-xc++' )
   reparse = True
   clang_completer = ycm_core.ClangCompleter()
 
@@ -420,10 +407,10 @@ def CppBindings_Docs_test():
 
 @ClangOnly
 def CppBindings_Diags_test():
-  filename = ToCppStr( PathToTestFile( 'foo.c' ) )
+  filename = PathToTestFile( 'foo.c' )
   unsaved_file_vector = ycm_core.UnsavedFileVector()
   flags = ycm_core.StringVector()
-  flags.append( ToCppStr( '-xc++' ) )
+  flags.append( '-xc++' )
   reparse = True
   clang_completer = ycm_core.ClangCompleter()
 
@@ -442,11 +429,11 @@ def CppBindings_Diags_test():
 
   assert_that(
     diags,
-    contains(
+    contains_exactly(
       has_entries( {
         'kind': 'ERROR',
         'text': contains_string( 'expected \';\' at end of declaration' ),
-        'ranges': contains(),
+        'ranges': contains_exactly(),
         'location': has_entries( {
           'line_num': 3,
           'column_num': 16,
@@ -483,13 +470,13 @@ def CppBindings_CompilationDatabase_test():
                               compile_commands[ 0 ][ 'file' ] )
       del db
       del compile_commands
-      eq_( db_successful, True )
-      eq_( db_busy, False )
-      eq_( db_dir, tmp_dir )
+      assert_that( db_successful, equal_to( True ) )
+      assert_that( db_busy, equal_to( False ) )
+      assert_that( db_dir, equal_to( tmp_dir ) )
       assert_that( compilation_info,
                    has_properties( {
                      'compiler_working_dir_': tmp_dir,
-                     'compiler_flags_': contains( 'clang++',
+                     'compiler_flags_': contains_exactly( 'clang++',
                                                   '--driver-mode=g++',
                                                   '-x',
                                                   'c++',

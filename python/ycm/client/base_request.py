@@ -15,21 +15,15 @@
 # You should have received a copy of the GNU General Public License
 # along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
 import logging
 import json
 import vim
-from future.utils import native
 from base64 import b64decode, b64encode
+from hmac import compare_digest
+from urllib.parse import urljoin, urlparse
 from ycm import vimsupport
-from ycmd.utils import ToBytes, urljoin, urlparse, GetCurrentDirectory
-from ycmd.hmac_utils import CreateRequestHmac, CreateHmac, SecureBytesEqual
+from ycmd.utils import ToBytes, GetCurrentDirectory
+from ycmd.hmac_utils import CreateRequestHmac, CreateHmac
 from ycmd.responses import ServerError, UnknownExtraConf
 
 _HEADERS = { 'content-type': 'application/json' }
@@ -40,7 +34,7 @@ _HMAC_HEADER = 'x-ycm-hmac'
 _logger = logging.getLogger( __name__ )
 
 
-class BaseRequest( object ):
+class BaseRequest:
 
   def __init__( self ):
     self._should_resend = False
@@ -76,9 +70,7 @@ class BaseRequest( object ):
     from this message."""
     try:
       try:
-        result = _JsonFromFuture( future )
-        _logger.debug( 'RX: %s', result )
-        return result
+        return _JsonFromFuture( future )
       except UnknownExtraConf as e:
         if vimsupport.Confirm( str( e ) ):
           _LoadExtraConfFile( e.extra_conf_file )
@@ -174,7 +166,7 @@ class BaseRequest( object ):
 
     headers = BaseRequest._ExtraHeaders( method, request_uri )
 
-    _logger.debug( 'GET %s\n%s', request_uri, headers )
+    _logger.debug( 'GET %s (%s)\n%s', request_uri, payload, headers )
 
     return BaseRequest.Session().get(
       request_uri,
@@ -258,6 +250,7 @@ def BuildRequestData( buffer_number = None ):
 
 def _JsonFromFuture( future ):
   response = future.result()
+  _logger.debug( 'RX: %s\n%s', response, response.text )
   _ValidateResponseObject( response )
   if response.status_code == BaseRequest.Requests().codes.server_error:
     raise MakeServerException( response.json() )
@@ -298,13 +291,13 @@ def _ToUtf8Json( data ):
 def _ValidateResponseObject( response ):
   our_hmac = CreateHmac( response.content, BaseRequest.hmac_secret )
   their_hmac = ToBytes( b64decode( response.headers[ _HMAC_HEADER ] ) )
-  if not SecureBytesEqual( our_hmac, their_hmac ):
+  if not compare_digest( our_hmac, their_hmac ):
     raise RuntimeError( 'Received invalid HMAC for response!' )
   return True
 
 
 def _BuildUri( handler ):
-  return native( ToBytes( urljoin( BaseRequest.server_location, handler ) ) )
+  return ToBytes( urljoin( BaseRequest.server_location, handler ) )
 
 
 def MakeServerException( data ):

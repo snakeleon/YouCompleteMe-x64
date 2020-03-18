@@ -15,14 +15,6 @@
 # You should have received a copy of the GNU General Public License
 # along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
-from future.utils import iteritems
 import base64
 import json
 import logging
@@ -42,8 +34,8 @@ from ycm.client.base_request import BaseRequest, BuildRequestData
 from ycm.client.completer_available_request import SendCompleterAvailableRequest
 from ycm.client.command_request import SendCommandRequest
 from ycm.client.completion_request import CompletionRequest
-from ycm.client.signature_help_request import SignatureHelpRequest
-from ycm.client.signature_help_request import SigHelpAvailableByFileType
+from ycm.client.signature_help_request import ( SignatureHelpRequest,
+                                                SigHelpAvailableByFileType )
 from ycm.client.debug_info_request import ( SendDebugInfoRequest,
                                             FormatDebugInfoResponse )
 from ycm.client.omni_completion_request import OmniCompletionRequest
@@ -85,17 +77,12 @@ CORE_UNEXPECTED_MESSAGE = (
 CORE_MISSING_MESSAGE = (
   'YCM core library not detected; you need to compile YCM before using it. '
   'Follow the instructions in the documentation.' )
-CORE_PYTHON2_MESSAGE = (
-  "YCM core library compiled for Python 2 but loaded in Python 3. "
-  "Set the 'g:ycm_server_python_interpreter' option to a Python 2 "
-  "interpreter path." )
-CORE_PYTHON3_MESSAGE = (
-  "YCM core library compiled for Python 3 but loaded in Python 2. "
-  "Set the 'g:ycm_server_python_interpreter' option to a Python 3 "
-  "interpreter path." )
 CORE_OUTDATED_MESSAGE = (
   'YCM core library too old; PLEASE RECOMPILE by running the install.py '
   'script. See the documentation for more details.' )
+NO_PYTHON2_SUPPORT_MESSAGE = (
+  'YCM has dropped support for python2. '
+  'You need to recompile it with python3 instead.' )
 SERVER_IDLE_SUICIDE_SECONDS = 1800  # 30 minutes
 CLIENT_LOGFILE_FORMAT = 'ycm_'
 SERVER_LOGFILE_FORMAT = 'ycmd_{port}_{std}_'
@@ -105,7 +92,7 @@ SERVER_LOGFILE_FORMAT = 'ycmd_{port}_{std}_'
 HANDLE_FLAG_INHERIT = 0x00000001
 
 
-class YouCompleteMe( object ):
+class YouCompleteMe:
   def __init__( self ):
     self._available_completers = {}
     self._user_options = None
@@ -134,7 +121,7 @@ class YouCompleteMe( object ):
     self._user_notified_about_crash = False
     self._filetypes_with_keywords_loaded = set()
     self._server_is_ready_with_cache = False
-    self._message_poll_request = None
+    self._message_poll_requests = {}
 
     self._user_options = base.GetUserOptions()
     self._omnicomp = OmniCompleter( self._user_options )
@@ -261,17 +248,16 @@ class YouCompleteMe( object ):
       error_message = CORE_UNEXPECTED_MESSAGE.format( logfile = logfile )
     elif return_code == 4:
       error_message = CORE_MISSING_MESSAGE
-    elif return_code == 5:
-      error_message = CORE_PYTHON2_MESSAGE
-    elif return_code == 6:
-      error_message = CORE_PYTHON3_MESSAGE
     elif return_code == 7:
       error_message = CORE_OUTDATED_MESSAGE
+    elif return_code == 8:
+      error_message = NO_PYTHON2_SUPPORT_MESSAGE
     else:
       error_message = EXIT_CODE_UNEXPECTED_MESSAGE.format( code = return_code,
                                                            logfile = logfile )
 
-    error_message = SERVER_SHUTDOWN_MESSAGE + ' ' + error_message
+    if return_code != 8:
+      error_message = SERVER_SHUTDOWN_MESSAGE + ' ' + error_message
     self._logger.error( error_message )
     vimsupport.PostVimMessage( error_message )
 
@@ -321,17 +307,24 @@ class YouCompleteMe( object ):
     return response
 
 
+  def SignatureHelpAvailableRequestComplete( self, filetype, send_new=True ):
+    """Triggers or polls signature help available request. Returns whether or
+    not the request is complete. When send_new is False, won't send a new
+    request, only return the current status (This is used by the tests)"""
+    if not send_new and filetype not in self._signature_help_available_requests:
+      return False
+
+    return self._signature_help_available_requests[ filetype ].Done()
+
+
   def SendSignatureHelpRequest( self ):
     """Send a signature help request, if we're ready to. Return whether or not a
     request was sent (and should be checked later)"""
     if not self.NativeFiletypeCompletionUsable():
       return False
 
-    if not self._latest_completion_request:
-      return False
-
     for filetype in vimsupport.CurrentFiletypes():
-      if not self._signature_help_available_requests[ filetype ].Done():
+      if not self.SignatureHelpAvailableRequestComplete( filetype ):
         continue
 
       sig_help_available = self._signature_help_available_requests[
@@ -342,6 +335,9 @@ class YouCompleteMe( object ):
       if sig_help_available == 'PENDING':
         # Send another /signature_help_available request
         self._signature_help_available_requests[ filetype ].Start( filetype )
+        continue
+
+      if not self._latest_completion_request:
         return False
 
       request_data = self._latest_completion_request.request_data.copy()
@@ -352,6 +348,8 @@ class YouCompleteMe( object ):
       self._latest_signature_help_request = SignatureHelpRequest( request_data )
       self._latest_signature_help_request.Start()
       return True
+
+    return False
 
 
   def SignatureHelpRequestReady( self ):
@@ -492,18 +490,17 @@ class YouCompleteMe( object ):
       # Try again in a jiffy
       return True
 
-    if not self._message_poll_request:
-      self._message_poll_request = MessagesPoll()
+    for w in vim.windows:
+      for filetype in vimsupport.FiletypesForBuffer( w.buffer ):
+        if filetype not in self._message_poll_requests:
+          self._message_poll_requests[ filetype ] = MessagesPoll( w.buffer )
 
-    if not self._message_poll_request.Poll( self ):
-      # Don't poll again until some event which might change the server's mind
-      # about whether to provide messages for the current buffer (e.g. buffer
-      # visit, file ready to parse, etc.)
-      self._message_poll_request = None
-      return False
+        # None means don't poll this filetype
+        if ( self._message_poll_requests[ filetype ] and
+             not self._message_poll_requests[ filetype ].Poll( self ) ):
+          self._message_poll_requests[ filetype ] = None
 
-    # Poll again in a jiffy
-    return True
+    return any( self._message_poll_requests.values() )
 
 
   def OnFileReadyToParse( self ):
@@ -538,11 +535,11 @@ class YouCompleteMe( object ):
 
 
   def OnBufferVisit( self ):
-    filetype = vimsupport.CurrentFiletypes()[ 0 ]
-    # The constructor of dictionary values starts the request,
-    # so the line below fires a new request only if the dictionary
-    # value is accessed for the first time.
-    self._signature_help_available_requests[ filetype ].Done()
+    for filetype in vimsupport.CurrentFiletypes():
+      # Send the signature help available request for these filetypes if we need
+      # to (as a side effect of checking if it is complete)
+      self.SignatureHelpAvailableRequestComplete( filetype, True )
+
     extra_data = {}
     self._AddUltiSnipsDataIfNeeded( extra_data )
     SendEventNotificationAsync( 'BufferVisit', extra_data = extra_data )
@@ -820,5 +817,5 @@ class YouCompleteMe( object ):
     extra_data[ 'ultisnips_snippets' ] = [
       { 'trigger': trigger,
         'description': snippet[ 'description' ] }
-      for trigger, snippet in iteritems( snippets )
+      for trigger, snippet in snippets.items()
     ]

@@ -142,7 +142,7 @@ def test_yields(each_version):
 
 
 def test_yield_from():
-    y, = get_yield_exprs('def x(): (yield from 1)', '3.3')
+    y, = get_yield_exprs('def x(): (yield from 1)', '3.8')
     assert y.type == 'yield_expr'
 
 
@@ -180,3 +180,61 @@ def top_function_three():
 
     r = get_raise_stmts(code, 2) #  Lists inside try-catch
     assert len(list(r)) == 2
+
+
+@pytest.mark.parametrize(
+    'code, name_index, is_definition, include_setitem', [
+        ('x = 3', 0, True, False),
+        ('x.y = 3', 0, False, False),
+        ('x.y = 3', 1, True, False),
+        ('x.y = u.v = z', 0, False, False),
+        ('x.y = u.v = z', 1, True, False),
+        ('x.y = u.v = z', 2, False, False),
+        ('x.y = u.v, w = z', 3, True, False),
+        ('x.y = u.v, w = z', 4, True, False),
+        ('x.y = u.v, w = z', 5, False, False),
+
+        ('x, y = z', 0, True, False),
+        ('x, y = z', 1, True, False),
+        ('x, y = z', 2, False, False),
+        ('x, y = z', 2, False, False),
+        ('x[0], y = z', 2, False, False),
+        ('x[0] = z', 0, False, False),
+        ('x[0], y = z', 0, False, False),
+        ('x[0], y = z', 2, False, True),
+        ('x[0] = z', 0, True, True),
+        ('x[0], y = z', 0, True, True),
+        ('x: int = z', 0, True, False),
+        ('x: int = z', 1, False, False),
+        ('x: int = z', 2, False, False),
+        ('x: int', 0, True, False),
+        ('x: int', 1, False, False),
+    ]
+)
+def test_is_definition(code, name_index, is_definition, include_setitem):
+    module = parse(code, version='3.8')
+    name = module.get_first_leaf()
+    while True:
+        if name.type == 'name':
+            if name_index == 0:
+                break
+            name_index -= 1
+        name = name.get_next_leaf()
+
+    assert name.is_definition(include_setitem=include_setitem) == is_definition
+
+
+def test_iter_funcdefs():
+    code = dedent('''
+        def normal(): ...
+        async def asyn(): ...
+        @dec
+        def dec_normal(): ...
+        @dec1
+        @dec2
+        async def dec_async(): ...
+        def broken
+        ''')
+    module = parse(code, version='3.8')
+    func_names = [f.name.value for f in module.iter_funcdefs()]
+    assert func_names == ['normal', 'asyn', 'dec_normal', 'dec_async']

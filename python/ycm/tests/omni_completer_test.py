@@ -17,17 +17,10 @@
 # You should have received a copy of the GNU General Public License
 # along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
+from hamcrest import assert_that, contains_exactly, empty, has_entries
+import pytest
 
-from hamcrest import assert_that, contains, empty, has_entries
-
-from ycm.tests.test_utils import ( MockVimBuffers, MockVimModule, ToBytesOnPY2,
-                                   VimBuffer )
+from ycm.tests.test_utils import MockVimBuffers, MockVimModule, VimBuffer
 MockVimModule()
 
 from ycm import vimsupport
@@ -57,11 +50,11 @@ def OmniCompleter_GetCompletions_Cache_List_test( ycm ):
     assert_that(
       ycm.GetCompletionResponse(),
       has_entries( {
-        'completions': ToBytesOnPY2( [
+        'completions': [
           { 'word': 'a',    'equal': 1 },
           { 'word': 'b',    'equal': 1 },
           { 'word': 'cdef', 'equal': 1 }
-        ] ),
+        ],
         'completion_start_column': 6
       } )
     )
@@ -109,11 +102,11 @@ def OmniCompleter_GetCompletions_NoCache_List_test( ycm ):
     assert_that(
       ycm.GetCompletionResponse(),
       has_entries( {
-        'completions': ToBytesOnPY2( [
+        'completions': [
           { 'word': 'a',    'equal': 1 },
           { 'word': 'b',    'equal': 1 },
           { 'word': 'cdef', 'equal': 1 }
-        ] ),
+        ],
         'completion_start_column': 6
       } )
     )
@@ -139,11 +132,11 @@ def OmniCompleter_GetCompletions_NoCache_ListFilter_test( ycm ):
     assert_that(
       ycm.GetCompletionResponse(),
       has_entries( {
-        'completions': ToBytesOnPY2( [
+        'completions': [
           { 'word': 'a',    'equal': 1 },
           { 'word': 'b',    'equal': 1 },
           { 'word': 'cdef', 'equal': 1 }
-        ] ),
+        ],
         'completion_start_column': 6
       } )
     )
@@ -169,11 +162,11 @@ def OmniCompleter_GetCompletions_NoCache_UseFindStart_test( ycm ):
     assert_that(
       ycm.GetCompletionResponse(),
       has_entries( {
-        'completions': ToBytesOnPY2( [
+        'completions': [
           { 'word': 'a',    'equal': 1 },
           { 'word': 'b',    'equal': 1 },
           { 'word': 'cdef', 'equal': 1 }
-        ] ),
+        ],
         'completion_start_column': 1
       } )
     )
@@ -262,7 +255,7 @@ def OmniCompleter_GetCompletions_Cache_ObjectList_test( ycm ):
     assert_that(
       ycm.GetCompletionResponse(),
       has_entries( {
-        'completions': contains( {
+        'completions': contains_exactly( {
           'word' : 'test',
           'abbr' : 'ABBRTEST',
           'menu' : 'MENUTEST',
@@ -310,7 +303,7 @@ def OmniCompleter_GetCompletions_NoCache_ObjectList_test( ycm ):
     assert_that(
       ycm.GetCompletionResponse(),
       has_entries( {
-        'completions': ToBytesOnPY2( [ {
+        'completions': [ {
           'word' : 'a',
           'abbr' : 'ABBR',
           'menu' : 'MENU',
@@ -324,7 +317,7 @@ def OmniCompleter_GetCompletions_NoCache_ObjectList_test( ycm ):
           'info' : 'INFOTEST',
           'kind' : 'T',
           'equal': 1
-        } ] ),
+        } ],
         'completion_start_column': 6
       } )
     )
@@ -363,14 +356,14 @@ def OmniCompleter_GetCompletions_Cache_ObjectListObject_test( ycm ):
     assert_that(
       ycm.GetCompletionResponse(),
       has_entries( {
-        'completions': ToBytesOnPY2( [ {
+        'completions': [ {
           'word' : 'test',
           'abbr' : 'ABBRTEST',
           'menu' : 'MENUTEST',
           'info' : 'INFOTEST',
           'kind' : 'T',
           'equal': 1
-        } ] ),
+        } ],
         'completion_start_column': 6
       } )
     )
@@ -411,7 +404,7 @@ def OmniCompleter_GetCompletions_NoCache_ObjectListObject_test( ycm ):
     assert_that(
       ycm.GetCompletionResponse(),
       has_entries( {
-        'completions': ToBytesOnPY2( [ {
+        'completions': [ {
           'word' : 'a',
           'abbr' : 'ABBR',
           'menu' : 'MENU',
@@ -425,7 +418,7 @@ def OmniCompleter_GetCompletions_NoCache_ObjectListObject_test( ycm ):
           'info' : 'INFOTEST',
           'kind' : 'T',
           'equal': 1
-        } ] ),
+        } ],
         'completion_start_column': 6
       } )
     )
@@ -477,11 +470,11 @@ def OmniCompleter_GetCompletions_NoCache_List_Unicode_test( ycm ):
     assert_that(
       ycm.GetCompletionResponse(),
       has_entries( {
-        'completions': ToBytesOnPY2( [
+        'completions': [
           { 'word': '†est',                 'equal': 1 },
           { 'word': 'å_unicode_identifier', 'equal': 1 },
           { 'word': 'πππππππ yummy πie',    'equal': 1 }
-        ] ),
+        ],
         'completion_start_column': 13
       } )
     )
@@ -529,9 +522,7 @@ def OmniCompleter_GetCompletions_NoCache_List_Filter_Unicode_test( ycm ):
     assert_that(
       ycm.GetCompletionResponse(),
       has_entries( {
-        'completions': ToBytesOnPY2(
-          [ { 'word': 'πππππππ yummy πie', 'equal': 1 } ]
-        ),
+        'completions': [ { 'word': 'πππππππ yummy πie', 'equal': 1 } ],
         'completion_start_column': 13
       } )
     )
@@ -625,7 +616,7 @@ def OmniCompleter_GetCompletions_Cache_ObjectListObject_Unicode_test( ycm ):
     assert_that(
       ycm.GetCompletionResponse(),
       has_entries( {
-        'completions': contains( {
+        'completions': contains_exactly( {
           'word' : 'test',
           'abbr' : 'ÅııÂÊ‰ÍÊ',
           'menu' : '˜‰ˆËÊ‰ÍÊ',
@@ -669,12 +660,12 @@ def OmniCompleter_GetCompletions_RestoreCursorPositionAfterOmnifuncCall_test(
     ycm.SendCompletionRequest()
     assert_that(
       vimsupport.CurrentLineAndColumn(),
-      contains( 2, 5 )
+      contains_exactly( 2, 5 )
     )
     assert_that(
       ycm.GetCompletionResponse(),
       has_entries( {
-        'completions': ToBytesOnPY2( [ { 'word': 'length', 'equal': 1 } ] ),
+        'completions': [ { 'word': 'length', 'equal': 1 } ],
         'completion_start_column': 6
       } )
     )
@@ -704,18 +695,17 @@ def OmniCompleter_GetCompletions_MoveCursorPositionAtStartColumn_test( ycm ):
     ycm.SendCompletionRequest()
     assert_that(
       vimsupport.CurrentLineAndColumn(),
-      contains( 2, 7 )
+      contains_exactly( 2, 7 )
     )
     assert_that(
       ycm.GetCompletionResponse(),
       has_entries( {
-        'completions': ToBytesOnPY2( [ { 'word': 'length', 'equal': 1 } ] ),
+        'completions': [ { 'word': 'length', 'equal': 1 } ],
         'completion_start_column': 6
       } )
     )
 
 
-@YouCompleteMeInstance( { 'g:ycm_cache_omnifunc': 1 } )
 def StartColumnCompliance( ycm,
                            omnifunc_start_column,
                            ycm_completions,
@@ -735,21 +725,33 @@ def StartColumnCompliance( ycm,
     assert_that(
       ycm.GetCompletionResponse(),
       has_entries( {
-        'completions': ToBytesOnPY2( ycm_completions ),
+        'completions': ycm_completions,
         'completion_start_column': ycm_start_column
       } )
     )
 
 
-def OmniCompleter_GetCompletions_StartColumnCompliance_test():
-  yield StartColumnCompliance, -4, [ { 'word': 'foo', 'equal': 1 } ], 3
-  yield StartColumnCompliance, -3, [],                                1
-  yield StartColumnCompliance, -2, [],                                1
-  yield StartColumnCompliance, -1, [ { 'word': 'foo', 'equal': 1 } ], 3
-  yield StartColumnCompliance,  0, [ { 'word': 'foo', 'equal': 1 } ], 1
-  yield StartColumnCompliance,  1, [ { 'word': 'foo', 'equal': 1 } ], 2
-  yield StartColumnCompliance,  2, [ { 'word': 'foo', 'equal': 1 } ], 3
-  yield StartColumnCompliance,  3, [ { 'word': 'foo', 'equal': 1 } ], 3
+@YouCompleteMeInstance( { 'g:ycm_cache_omnifunc': 1 } )
+@pytest.mark.parametrize(
+  'omnifunc_start_column,ycm_completions,ycm_start_column', [
+   [ -4, [ { 'word': 'foo', 'equal': 1 } ], 3 ],
+   [ -3, [],                                1 ],
+   [ -2, [],                                1 ],
+   [ -1, [ { 'word': 'foo', 'equal': 1 } ], 3 ],
+   [ 0, [ { 'word': 'foo', 'equal': 1 } ], 1 ],
+   [ 1, [ { 'word': 'foo', 'equal': 1 } ], 2 ],
+   [ 2, [ { 'word': 'foo', 'equal': 1 } ], 3 ],
+   [ 3, [ { 'word': 'foo', 'equal': 1 } ], 3 ]
+  ] )
+def OmniCompleter_GetCompletions_StartColumnCompliance_test(
+    ycm,
+    omnifunc_start_column,
+    ycm_completions,
+    ycm_start_column ):
+  StartColumnCompliance( ycm,
+                         omnifunc_start_column,
+                         ycm_completions,
+                         ycm_start_column )
 
 
 @YouCompleteMeInstance( { 'g:ycm_cache_omnifunc': 0,
@@ -794,7 +796,7 @@ def OmniCompleter_GetCompletions_NoCache_ForceSemantic_test( ycm ):
     assert_that(
       ycm.GetCompletionResponse(),
       has_entries( {
-        'completions': ToBytesOnPY2( [ { 'word': 'test', 'equal': 1 } ] ),
+        'completions': [ { 'word': 'test', 'equal': 1 } ],
         'completion_start_column': 1
       } )
     )
@@ -821,10 +823,10 @@ def OmniCompleter_GetCompletions_ConvertStringsToDictionaries_test( ycm ):
     assert_that(
       ycm.GetCompletionResponse(),
       has_entries( {
-        'completions': ToBytesOnPY2( [
+        'completions': [
           { 'word': 'a', 'equal': 1 },
           { 'word': 'b', 'equal': 1 }
-        ] ),
+        ],
         'completion_start_column': 6
       } )
     )
@@ -904,11 +906,11 @@ def OmniCompleter_GetCompletions_FiletypeDisabled_ForceSemantic_test( ycm ):
     assert_that(
       ycm.GetCompletionResponse(),
       has_entries( {
-        'completions': ToBytesOnPY2( [
+        'completions': [
           { 'word': 'a',    'equal': 1 },
           { 'word': 'b',    'equal': 1 },
           { 'word': 'cdef', 'equal': 1 }
-        ] ),
+        ],
         'completion_start_column': 6
       } )
     )
@@ -934,11 +936,11 @@ def OmniCompleter_GetCompletions_AllFiletypesDisabled_ForceSemantic_test( ycm ):
     assert_that(
       ycm.GetCompletionResponse(),
       has_entries( {
-        'completions': ToBytesOnPY2( [
+        'completions': [
           { 'word': 'a',    'equal': 1 },
           { 'word': 'b',    'equal': 1 },
           { 'word': 'cdef', 'equal': 1 }
-        ] ),
+        ],
         'completion_start_column': 6
       } )
     )

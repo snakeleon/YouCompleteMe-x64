@@ -1,4 +1,4 @@
-# Copyright (C) 2014 Google Inc.
+# Copyright (C) 2020 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -15,15 +15,7 @@
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
 from hamcrest import raises, assert_that, calling
-from nose.tools import ok_
 from ycmd.request_validation import EnsureRequestValid
 from ycmd.responses import ServerError
 
@@ -43,7 +35,7 @@ def BasicData():
 
 
 def EnsureRequestValid_AllOk_test():
-  ok_( EnsureRequestValid( BasicData() ) )
+  assert_that( EnsureRequestValid( BasicData() ) )
 
 
 def EnsureRequestValid_MissingLineNum_test():

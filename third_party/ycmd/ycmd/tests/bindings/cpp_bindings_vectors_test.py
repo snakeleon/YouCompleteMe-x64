@@ -1,4 +1,4 @@
-# Copyright (C) 2018 ycmd contributors
+# Copyright (C) 2020 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -15,21 +15,13 @@
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
-from ycmd.utils import ToCppStringCompatible as ToCppStr
 from ycmd.completers.cpp.clang_completer import ConvertCompletionData
 from ycmd.responses import BuildDiagnosticData
 from ycmd.tests.bindings import PathToTestFile
 from ycmd.tests.test_utils import ClangOnly
 
 from hamcrest import ( assert_that,
-                       contains,
+                       contains_exactly,
                        contains_inanyorder,
                        contains_string,
                        has_entries,
@@ -46,27 +38,27 @@ def CppBindings_StringVector_test():
   str2 = 'bar'
   str3 = 'baz'
   string_vector = ycm_core.StringVector()
-  string_vector.append( ToCppStr( str1 ) )
-  EmplaceBack( string_vector, ToCppStr( str2 ) )
-  string_vector.append( ToCppStr( str3 ) )
+  string_vector.append( str1 )
+  EmplaceBack( string_vector, str2 )
+  string_vector.append( str3 )
   del str1
   del str2
   del str3
-  assert_that( string_vector, contains( 'foo', 'bar', 'baz' ) )
+  assert_that( string_vector, contains_exactly( 'foo', 'bar', 'baz' ) )
 
 
 @ClangOnly
 def CppBindings_UnsavedFileVector_test():
   unsaved_file_vector = ycm_core.UnsavedFileVector()
   unsaved_file = ycm_core.UnsavedFile()
-  unsaved_file.filename_ = ToCppStr( 'foo' )
-  unsaved_file.contents_ = ToCppStr( 'bar' )
+  unsaved_file.filename_ = 'foo'
+  unsaved_file.contents_ = 'bar'
   unsaved_file.length_ = 3
   unsaved_file_vector.append( unsaved_file )
   EmplaceBack( unsaved_file_vector, unsaved_file )
   del unsaved_file
   assert_that( unsaved_file_vector,
-               contains(
+               contains_exactly(
                  has_properties( {
                    'filename_': 'foo',
                    'contents_': 'bar',
@@ -83,13 +75,13 @@ def CppBindings_UnsavedFileVector_test():
 @ClangOnly
 def CppBindings_FixItVector_test():
   flags = ycm_core.StringVector()
-  flags.append( ToCppStr( '-xc++' ) )
+  flags.append( '-xc++' )
   clang_completer = ycm_core.ClangCompleter()
   translation_unit = PathToTestFile( 'foo.c' )
-  filename = ToCppStr( PathToTestFile( 'foo.c' ) )
+  filename = PathToTestFile( 'foo.c' )
   fixits = ( clang_completer
-               .GetFixItsForLocationInFile( ToCppStr( translation_unit ),
-                                            ToCppStr( filename ),
+               .GetFixItsForLocationInFile( translation_unit,
+                                            filename,
                                             3,
                                             5,
                                             ycm_core.UnsavedFileVector(),
@@ -104,7 +96,7 @@ def CppBindings_FixItVector_test():
   del clang_completer
   assert_that(
     fixits,
-    contains(
+    contains_exactly(
       has_properties( {
         'text': ( PathToTestFile( 'foo.c' ) +
                   ':3:16: error: expected \';\' at end of declaration' ),
@@ -113,7 +105,7 @@ def CppBindings_FixItVector_test():
           'column_number_': 16,
           'filename_': PathToTestFile( 'foo.c' )
         } ),
-        'chunks': contains( has_properties( {
+        'chunks': contains_exactly( has_properties( {
           'replacement_text': ';',
           'range': has_properties( {
             'start_': has_properties( {
@@ -135,7 +127,7 @@ def CppBindings_FixItVector_test():
           'column_number_': 16,
           'filename_': PathToTestFile( 'foo.c' )
         } ),
-        'chunks': contains( has_properties( {
+        'chunks': contains_exactly( has_properties( {
           'replacement_text': ';',
           'range': has_properties( {
             'start_': has_properties( {
@@ -154,13 +146,13 @@ def CppBindings_FixItVector_test():
 @ClangOnly
 def CppBindings_FixItChunkVector_test():
   flags = ycm_core.StringVector()
-  flags.append( ToCppStr( '-xc++' ) )
+  flags.append( '-xc++' )
   clang_completer = ycm_core.ClangCompleter()
   translation_unit = PathToTestFile( 'foo.c' )
   filename = PathToTestFile( 'foo.c' )
   fixits = ( clang_completer
-               .GetFixItsForLocationInFile( ToCppStr( translation_unit ),
-                                            ToCppStr( filename ),
+               .GetFixItsForLocationInFile( translation_unit,
+                                            filename,
                                             3,
                                             5,
                                             ycm_core.UnsavedFileVector(),
@@ -174,7 +166,7 @@ def CppBindings_FixItChunkVector_test():
   del filename
   del clang_completer
   del fixits
-  assert_that( fixit_chunks, contains(
+  assert_that( fixit_chunks, contains_exactly(
                                has_properties( {
                                  'replacement_text': ';',
                                  'range': has_properties( {
@@ -206,14 +198,14 @@ def CppBindings_FixItChunkVector_test():
 @ClangOnly
 def CppBindings_RangeVector_test():
   flags = ycm_core.StringVector()
-  flags.append( ToCppStr( '-xc++' ) )
+  flags.append( '-xc++' )
   clang_completer = ycm_core.ClangCompleter()
   translation_unit = PathToTestFile( 'foo.c' )
   filename = PathToTestFile( 'foo.c' )
 
   fixits = ( clang_completer
-               .GetFixItsForLocationInFile( ToCppStr( translation_unit ),
-                                            ToCppStr( filename ),
+               .GetFixItsForLocationInFile( translation_unit,
+                                            filename,
                                             3,
                                             5,
                                             ycm_core.UnsavedFileVector(),
@@ -229,7 +221,7 @@ def CppBindings_RangeVector_test():
   del clang_completer
   del fixits
   del fixit_range
-  assert_that( ranges, contains(
+  assert_that( ranges, contains_exactly(
                          has_properties( {
                            'start_': has_properties( {
                              'line_number_': 3,
@@ -258,10 +250,10 @@ def CppBindings_DiagnosticVector_test():
   filename = PathToTestFile( 'foo.c' )
   unsaved_file_vector = ycm_core.UnsavedFileVector()
   flags = ycm_core.StringVector()
-  flags.append( ToCppStr( '-xc++' ) )
+  flags.append( '-xc++' )
   clang_completer = ycm_core.ClangCompleter()
 
-  diag_vector = clang_completer.UpdateTranslationUnit( ToCppStr( filename ),
+  diag_vector = clang_completer.UpdateTranslationUnit( filename,
                                                        unsaved_file_vector,
                                                        flags )
 
@@ -279,11 +271,11 @@ def CppBindings_DiagnosticVector_test():
 
   assert_that(
     diags,
-    contains(
+    contains_exactly(
       has_entries( {
         'kind': 'ERROR',
         'text': contains_string( 'expected \';\' at end of declaration' ),
-        'ranges': contains(),
+        'ranges': contains_exactly(),
         'location': has_entries( {
           'line_num': 3,
           'column_num': 16,
@@ -302,7 +294,7 @@ def CppBindings_DiagnosticVector_test():
       has_entries( {
         'kind': 'ERROR',
         'text': contains_string( 'expected \';\' at end of declaration' ),
-        'ranges': contains(),
+        'ranges': contains_exactly(),
         'location': has_entries( {
           'line_num': 3,
           'column_num': 16,
@@ -323,13 +315,13 @@ def CppBindings_DiagnosticVector_test():
 
 @ClangOnly
 def CppBindings_CompletionDataVector_test():
-  translation_unit = ToCppStr( PathToTestFile( 'foo.c' ) )
-  filename = ToCppStr( PathToTestFile( 'foo.c' ) )
+  translation_unit = PathToTestFile( 'foo.c' )
+  filename = PathToTestFile( 'foo.c' )
   line = 11
   column = 6
   unsaved_file_vector = ycm_core.UnsavedFileVector()
   flags = ycm_core.StringVector()
-  flags.append( ToCppStr( '-xc' ) )
+  flags.append( '-xc' )
   clang_completer = ycm_core.ClangCompleter()
 
   candidates = ( clang_completer

@@ -1,4 +1,4 @@
-# Copyright (C) 2015-2018 ycmd contributors
+# Copyright (C) 2015-2020 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -15,22 +15,16 @@
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import absolute_import
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
 from hamcrest import ( assert_that,
-                       contains,
+                       contains_exactly,
+                       equal_to,
                        has_item,
                        has_entries,
                        has_entry,
                        matches_regexp )
-from hamcrest.library.text.stringmatches import StringMatchesPattern
-from nose.tools import eq_
 from pprint import pformat
+import os
+import pytest
 import requests
 
 from ycmd.utils import ReadFile
@@ -39,6 +33,10 @@ from ycmd.tests.test_utils import ( BuildRequest,
                                     CombineRequest,
                                     LocationMatcher,
                                     ErrorMatcher )
+
+TYPESHED_PATH = os.path.normpath(
+  PathToTestFile( '..', '..', '..', '..', 'third_party', 'jedi_deps', 'jedi',
+    'jedi', 'third_party', 'typeshed', 'stdlib', '2and3', 'builtins.pyi' ) )
 
 
 def RunTest( app, test ):
@@ -59,29 +57,21 @@ def RunTest( app, test ):
 
   print( 'completer response: {0}'.format( pformat( response.json ) ) )
 
-  eq_( response.status_code, test[ 'expect' ][ 'response' ] )
+  assert_that( response.status_code,
+               equal_to( test[ 'expect' ][ 'response' ] ) )
 
   assert_that( response.json, test[ 'expect' ][ 'data' ] )
 
 
-@SharedYcmd
 def Subcommands_GoTo( app, test, command ):
   if isinstance( test[ 'response' ], tuple ):
-    if not isinstance( test[ 'response' ][ 0 ], StringMatchesPattern ):
-      expect = {
-        'response': requests.codes.ok,
-        'data': LocationMatcher( PathToTestFile( 'goto',
-                                                 test[ 'response' ][ 0 ] ),
-                                 test[ 'response' ][ 1 ],
-                                 test[ 'response' ][ 2 ] )
-      }
-    else:
-      expect = {
-        'response': requests.codes.ok,
-        'data': LocationMatcher( test[ 'response' ][ 0 ],
-                                 test[ 'response' ][ 1 ],
-                                 test[ 'response' ][ 2 ] )
-      }
+    expect = {
+      'response': requests.codes.ok,
+      'data': LocationMatcher( PathToTestFile( 'goto',
+                                               test[ 'response' ][ 0 ] ),
+                               test[ 'response' ][ 1 ],
+                               test[ 'response' ][ 2 ] )
+    }
   else:
     expect = {
       'response': requests.codes.internal_server_error,
@@ -101,56 +91,56 @@ def Subcommands_GoTo( app, test, command ):
   } )
 
 
-def Subcommands_GoTo_test():
-  builtins_pyi = matches_regexp( 'typeshed' )
-  tests = [
+@pytest.mark.parametrize( 'cmd', [ 'GoTo',
+                                   'GoToDefinition',
+                                   'GoToDeclaration' ] )
+@pytest.mark.parametrize( 'test', [
     # Nothing
     { 'request': ( 'basic.py', 3,  5 ), 'response': 'Can\'t jump to '
-                                                    'type definition.' },
+                                                    'definition.' },
     # Keyword
     { 'request': ( 'basic.py', 4,  3 ), 'response': 'Can\'t jump to '
-                                                    'type definition.' },
+                                                    'definition.' },
     # Builtin
-    { 'request': ( 'basic.py', 1,  4 ), 'response': ( builtins_pyi, 927, 7 ) },
-    { 'request': ( 'basic.py', 1, 12 ), 'response': ( builtins_pyi, 927, 7 ) },
-    { 'request': ( 'basic.py', 2,  2 ), 'response': ( builtins_pyi, 927, 7 ) },
+    { 'request': ( 'basic.py', 1,  4 ), 'response': ( 'basic.py', 1, 1 ) },
+    { 'request': ( 'basic.py', 1, 12 ), 'response': ( TYPESHED_PATH, 947, 7 ) },
+    { 'request': ( 'basic.py', 2,  2 ), 'response': ( 'basic.py', 1, 1 ) },
     # Class
     { 'request': ( 'basic.py', 4,  7 ), 'response': ( 'basic.py', 4, 7 ) },
     { 'request': ( 'basic.py', 4, 11 ), 'response': ( 'basic.py', 4, 7 ) },
     { 'request': ( 'basic.py', 7, 19 ), 'response': ( 'basic.py', 4, 7 ) },
     # Instance
-    { 'request': ( 'basic.py', 7,  1 ), 'response': ( 'basic.py', 4, 7 ) },
-    { 'request': ( 'basic.py', 7, 11 ), 'response': ( 'basic.py', 4, 7 ) },
-    { 'request': ( 'basic.py', 8, 23 ), 'response': ( 'basic.py', 4, 7 ) },
+    { 'request': ( 'basic.py', 7,  1 ), 'response': ( 'basic.py', 7, 1 ) },
+    { 'request': ( 'basic.py', 7, 11 ), 'response': ( 'basic.py', 7, 1 ) },
+    { 'request': ( 'basic.py', 8, 23 ), 'response': ( 'basic.py', 7, 1 ) },
     # Instance reference
-    { 'request': ( 'basic.py', 8,  1 ), 'response': ( 'basic.py', 4, 7 ) },
-    { 'request': ( 'basic.py', 8,  5 ), 'response': ( 'basic.py', 4, 7 ) },
-    { 'request': ( 'basic.py', 9, 12 ), 'response': ( 'basic.py', 4, 7 ) },
+    { 'request': ( 'basic.py', 8,  1 ), 'response': ( 'basic.py', 8, 1 ) },
+    { 'request': ( 'basic.py', 8,  5 ), 'response': ( 'basic.py', 8, 1 ) },
+    { 'request': ( 'basic.py', 9, 12 ), 'response': ( 'basic.py', 8, 1 ) },
     # Member access
-    { 'request':  ( 'child.py', 4, 12 ), 'response': ( 'parent.py', 2, 7 ) },
+    { 'request':  ( 'child.py', 4, 12 ),
+      'response': ( 'parent.py', 2, 7 ) },
     # Builtin from different file
     { 'request':  ( 'multifile1.py', 2, 30 ),
-      'response': ( builtins_pyi, 130, 7 ) },
+      'response': ( 'multifile2.py', 1, 24 ) },
     { 'request':  ( 'multifile1.py', 4,  5 ),
-      'response': ( builtins_pyi, 130, 7 ) },
+      'response': ( 'multifile1.py', 2, 24 ) },
     # Function from different file
     { 'request':  ( 'multifile1.py', 1, 24 ),
       'response': ( 'multifile3.py', 3,  5 ) },
     { 'request':  ( 'multifile1.py', 5,  4 ),
-      'response': ( 'multifile3.py', 3,  5 ) },
+      'response': ( 'multifile1.py', 1, 24 ) },
     # Alias from different file
     { 'request':  ( 'multifile1.py', 2, 47 ),
-      'response': ( 'multifile3.py', 3,  5 ) },
+      'response': ( 'multifile2.py', 1, 51 ) },
     { 'request':  ( 'multifile1.py', 6, 14 ),
-      'response': ( 'multifile3.py', 3,  5 ) },
-  ]
-
-  for test in tests:
-    for cmd in [ 'GoTo', 'GoToDefinition', 'GoToDeclaration' ]:
-      yield Subcommands_GoTo, test, cmd
-
-
+      'response': ( 'multifile1.py', 2, 36 ) },
+  ] )
 @SharedYcmd
+def Subcommands_GoTo_test( app, cmd, test ):
+  Subcommands_GoTo( app, test, cmd )
+
+
 def Subcommands_GetType( app, position, expected_message ):
   filepath = PathToTestFile( 'GetType.py' )
   contents = ReadFile( filepath )
@@ -168,8 +158,7 @@ def Subcommands_GetType( app, position, expected_message ):
   )
 
 
-def Subcommands_GetType_test():
-  tests = (
+@pytest.mark.parametrize( 'position,expected_message',  [
     ( ( 11,  7 ), 'instance int' ),
     ( ( 11, 20 ), 'def some_function()' ),
     ( ( 12, 15 ), 'class SomeClass(*args, **kwargs)' ),
@@ -177,9 +166,10 @@ def Subcommands_GetType_test():
     ( ( 13, 17 ), 'def SomeMethod(first_param, second_param)' ),
     ( ( 19,  4 ), matches_regexp( '^(instance str, instance int|'
                                   'instance int, instance str)$' ) )
-  )
-  for test in tests:
-    yield Subcommands_GetType, test[ 0 ], test[ 1 ]
+  ] )
+@SharedYcmd
+def Subcommands_GetType_test( app, position, expected_message ):
+  Subcommands_GetType( app, position, expected_message )
 
 
 @SharedYcmd
@@ -231,14 +221,14 @@ def Subcommands_GetDoc_Class_test( app ):
   command_data = BuildRequest( filepath = filepath,
                                filetype = 'python',
                                line_num = 19,
-                               column_num = 2,
+                               column_num = 6,
                                contents = contents,
                                command_arguments = [ 'GetDoc' ] )
 
   response = app.post_json( '/run_completer_command', command_data ).json
 
   assert_that( response, has_entry(
-    'detailed_info', 'Class Documentation',
+    'detailed_info', 'TestClass()\n\nClass Documentation',
   ) )
 
 
@@ -262,6 +252,17 @@ def Subcommands_GetDoc_NoDocumentation_test( app ):
                ErrorMatcher( RuntimeError, 'No documentation available.' ) )
 
 
+@pytest.mark.parametrize( 'test', [
+    { 'request':  ( 'basic.py', 2, 1 ), 'response': ( TYPESHED_PATH, 947, 7 ) },
+    { 'request':  ( 'basic.py', 8, 1 ), 'response': ( 'basic.py', 4, 7 ) },
+    { 'request':  ( 'basic.py', 3, 1 ),
+      'response': 'Can\'t jump to type definition.' },
+  ] )
+@SharedYcmd
+def Subcommands_GoToType_test( app, test ):
+  Subcommands_GoTo( app, test, 'GoToType' )
+
+
 @SharedYcmd
 def Subcommands_GoToReferences_Function_test( app ):
   filepath = PathToTestFile( 'goto', 'references.py' )
@@ -276,7 +277,7 @@ def Subcommands_GoToReferences_Function_test( app ):
 
   assert_that(
     app.post_json( '/run_completer_command', command_data ).json,
-    contains(
+    contains_exactly(
       has_entries( {
         'filepath': filepath,
         'line_num': 1,

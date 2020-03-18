@@ -45,6 +45,9 @@ b[int():]
 #? list()
 b[:]
 
+#? 3
+b[:]
+
 #? int()
 b[:, 1]
 #? int()
@@ -261,10 +264,16 @@ def y(a):
 #?
 y(**d)
 
+#? str()
+d['a']
+
 # problem with more complicated casts
 dic = {str(key): ''}
 #? str()
 dic['']
+
+# Just skip Python 2 tests from here. EoL soon, I'm too lazy for it.
+# python > 2.7
 
 
 for x in {1: 3.0, '': 1j}:
@@ -278,10 +287,29 @@ d = dict(a=3, b='')
 x, = d.values()
 #? int() str()
 x
-#? int() str()
+#? int()
 d['a']
 #? int() str() None
 d.get('a')
+
+some_dct = dict({'a': 1, 'b': ''}, a=1.0)
+#? float()
+some_dct['a']
+#? str()
+some_dct['b']
+#? int() float() str()
+some_dct['c']
+
+class Foo:
+    pass
+
+objects = {object(): 1, Foo: '', Foo(): 3.0}
+#? int() float() str()
+objects[Foo]
+#? int() float() str()
+objects[Foo()]
+#? int() float() str()
+objects['']
 
 # -----------------
 # with variable as index

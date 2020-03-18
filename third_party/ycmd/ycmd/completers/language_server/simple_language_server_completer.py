@@ -1,4 +1,4 @@
-# Copyright (C) 2018-2019 ycmd contributors
+# Copyright (C) 2018-2020 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -14,13 +14,6 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
-
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
 
 from ycmd.completers.language_server import language_server_completer as lsc
 
@@ -52,7 +45,7 @@ class SimpleLSPCompleter( lsc.LanguageServerCompleter ):
 
 
   def __init__( self, user_options ):
-    super( SimpleLSPCompleter, self ).__init__( user_options )
+    super().__init__( user_options )
 
     self._server_state_mutex = threading.RLock()
     self._server_keep_logfiles = user_options[ 'server_keep_logfiles' ]
@@ -72,21 +65,26 @@ class SimpleLSPCompleter( lsc.LanguageServerCompleter ):
 
 
   def GetConnection( self ):
-    with self._server_state_mutex:
-      return self._connection
+    return self._connection
 
 
   def ExtraDebugItems( self, request_data ):
     return []
 
 
+  def AdditionalLogFiles( self ):
+    return []
+
+
   def DebugInfo( self, request_data ):
     with self._server_state_mutex:
       extras = self.CommonDebugItems() + self.ExtraDebugItems( request_data )
+      logfiles = [ self._stderr_file ]
+      logfiles.extend( self.AdditionalLogFiles() )
       server = responses.DebugInfoServer( name = self.GetServerName(),
                                           handle = self._server_handle,
                                           executable = self.GetCommandLine(),
-                                          logfiles = [ self._stderr_file ],
+                                          logfiles = logfiles,
                                           extras = extras )
 
     return responses.BuildDebugInfoResponse( name = self.GetCompleterName(),
@@ -185,7 +183,3 @@ class SimpleLSPCompleter( lsc.LanguageServerCompleter ):
     with self._server_state_mutex:
       self.Shutdown()
       self._StartAndInitializeServer( request_data )
-
-
-  def HandleServerCommand( self, request_data, command ):
-    return None

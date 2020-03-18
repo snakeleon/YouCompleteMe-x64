@@ -1,5 +1,4 @@
-# Copyright (C) 2015-2018 ycmd contributors
-# encoding: utf-8
+# Copyright (C) 2015-2020 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -16,20 +15,13 @@
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import unicode_literals
-from __future__ import division
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
 from hamcrest import ( assert_that,
-                       contains,
+                       contains_exactly,
                        contains_inanyorder,
+                       equal_to,
                        has_entry,
                        has_entries )
-from mock import patch
-from nose.tools import eq_
+from unittest.mock import patch
 from pprint import pformat
 import requests
 
@@ -48,15 +40,15 @@ from ycmd.utils import ReadFile
 def Subcommands_DefinedSubcommands_test( app ):
   subcommands_data = BuildRequest( completer_target = 'javascript' )
 
-  eq_( sorted( [ 'GoToDefinition',
+  assert_that( app.post_json( '/defined_subcommands', subcommands_data ).json,
+               contains_inanyorder(
+                 'GoToDefinition',
                  'GoTo',
                  'GetDoc',
                  'GetType',
                  'GoToReferences',
                  'RefactorRename',
-                 'RestartServer' ] ),
-       app.post_json( '/defined_subcommands',
-                      subcommands_data ).json )
+                 'RestartServer' ) )
 
 
 def RunTest( app, test, contents = None ):
@@ -91,7 +83,8 @@ def RunTest( app, test, contents = None ):
 
   print( 'completer response: {0}'.format( pformat( response.json ) ) )
 
-  eq_( response.status_code, test[ 'expect' ][ 'response' ] )
+  assert_that( response.status_code,
+               equal_to( test[ 'expect' ][ 'response' ] ) )
 
   assert_that( response.json, test[ 'expect' ][ 'data' ] )
 
@@ -321,8 +314,8 @@ def Subcommands_RefactorRename_Simple_test( app ):
     'expect': {
       'response': requests.codes.ok,
       'data': has_entries( {
-        'fixits': contains( has_entries( {
-          'chunks': contains(
+        'fixits': contains_exactly( has_entries( {
+          'chunks': contains_exactly(
               ChunkMatcher( 'test',
                             LocationMatcher( filepath, 1, 5 ),
                             LocationMatcher( filepath, 1, 22 ) ),
@@ -369,8 +362,8 @@ def Subcommands_RefactorRename_MultipleFiles_test( app ):
     'expect': {
       'response': requests.codes.ok,
       'data': has_entries( {
-        'fixits': contains( has_entries( {
-          'chunks': contains(
+        'fixits': contains_exactly( has_entries( {
+          'chunks': contains_exactly(
             ChunkMatcher(
               'a-quite-long-string',
               LocationMatcher( file1, 1, 5 ),
@@ -432,8 +425,8 @@ def Subcommands_RefactorRename_MultipleFiles_OnFileReadyToParse_test( app ):
     'expect': {
       'response': requests.codes.ok,
       'data': has_entries( {
-        'fixits': contains( has_entries( {
-          'chunks': contains(
+        'fixits': contains_exactly( has_entries( {
+          'chunks': contains_exactly(
             ChunkMatcher(
               'a-quite-long-string',
               LocationMatcher( file1, 1, 5 ),
@@ -496,8 +489,8 @@ def Subcommands_RefactorRename_Unicode_test( app ):
     'expect': {
       'response': requests.codes.ok,
       'data': has_entries( {
-        'fixits': contains( has_entries( {
-          'chunks': contains(
+        'fixits': contains_exactly( has_entries( {
+          'chunks': contains_exactly(
               ChunkMatcher( '†es†',
                             LocationMatcher( filepath, 5, 5 ),
                             LocationMatcher( filepath, 5, 13 ) ),
@@ -533,7 +526,7 @@ def Subcommands_StopServer_Timeout_test( app ):
   assert_that( app.post_json( '/debug_info', request_data ).json,
                has_entry(
                  'completer',
-                 has_entry( 'servers', contains(
+                 has_entry( 'servers', contains_exactly(
                    has_entry( 'is_running', False )
                  ) )
                ) )

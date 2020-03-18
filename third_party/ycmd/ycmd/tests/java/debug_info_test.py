@@ -1,4 +1,4 @@
-# Copyright (C) 2017 ycmd contributors
+# Copyright (C) 2020 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -15,21 +15,14 @@
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import unicode_literals
-from __future__ import division
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
 from hamcrest import ( assert_that,
-                       contains,
+                       contains_exactly,
                        equal_to,
                        has_entry,
                        has_entries,
                        instance_of )
 
-from mock import patch
+from unittest.mock import patch
 from ycmd.tests.java import ( DEFAULT_PROJECT_DIR,
                               IsolatedYcmd,
                               PathToTestFile,
@@ -86,14 +79,26 @@ def DebugInfo_test( app ):
     app.post_json( '/debug_info', request_data ).json,
     has_entry( 'completer', has_entries( {
       'name': 'Java',
-      'servers': contains( has_entries( {
-        'name': 'jdt.ls Java Language Server',
+      'servers': contains_exactly( has_entries( {
+        'name': 'jdt.ls',
         'is_running': instance_of( bool ),
-        'executable': instance_of( str ),
+        'executable': instance_of( list ),
         'pid': instance_of( int ),
-        'logfiles': contains( instance_of( str ),
-                              instance_of( str ) ),
-        'extras': contains(
+        'logfiles': contains_exactly( instance_of( str ), instance_of( str ) ),
+        'extras': contains_exactly(
+          has_entries( { 'key': 'Server State',
+                         'value': 'Initialized' } ),
+          has_entries( {
+            'key': 'Project Directory',
+            'value': PathToTestFile( 'simple_eclipse_project' )
+          } ),
+          has_entries( {
+            'key': 'Settings',
+            'value': json.dumps(
+              { 'bundles': [] },
+              indent = 2,
+              sort_keys = True )
+          } ),
           has_entries( { 'key': 'Startup Status',
                          'value': 'Ready' } ),
           has_entries( { 'key': 'Java Path',
@@ -103,17 +108,7 @@ def DebugInfo_test( app ):
           has_entries( { 'key': 'Workspace Path',
                          'value': instance_of( str ) } ),
           has_entries( { 'key': 'Extension Path',
-                         'value': contains( instance_of( str ) ) } ),
-          has_entries( { 'key': 'Server State',
-                         'value': 'Initialized' } ),
-          has_entries( { 'key': 'Project Directory',
-                         'value': PathToTestFile( DEFAULT_PROJECT_DIR ) } ),
-          has_entries( {
-            'key': 'Settings',
-            'value': json.dumps( { 'bundles': [] },
-                                 indent = 2,
-                                 sort_keys = True )
-          } )
+                         'value': contains_exactly( instance_of( str ) ) } ),
         )
       } ) )
     } ) )
@@ -137,24 +132,13 @@ def Subcommands_ExtraConf_SettingsValid_test( app ):
     app.post_json( '/debug_info', request_data ).json,
     has_entry( 'completer', has_entries( {
       'name': 'Java',
-      'servers': contains( has_entries( {
-        'name': 'jdt.ls Java Language Server',
+      'servers': contains_exactly( has_entries( {
+        'name': 'jdt.ls',
         'is_running': instance_of( bool ),
-        'executable': instance_of( str ),
+        'executable': instance_of( list ),
         'pid': instance_of( int ),
-        'logfiles': contains( instance_of( str ),
-                              instance_of( str ) ),
-        'extras': contains(
-          has_entries( { 'key': 'Startup Status',
-                         'value': 'Ready' } ),
-          has_entries( { 'key': 'Java Path',
-                         'value': instance_of( str ) } ),
-          has_entries( { 'key': 'Launcher Config.',
-                         'value': instance_of( str ) } ),
-          has_entries( { 'key': 'Workspace Path',
-                         'value': instance_of( str ) } ),
-          has_entries( { 'key': 'Extension Path',
-                         'value': contains( instance_of( str ) ) } ),
+        'logfiles': contains_exactly( instance_of( str ), instance_of( str ) ),
+        'extras': contains_exactly(
           has_entries( { 'key': 'Server State',
                          'value': 'Initialized' } ),
           has_entries( {
@@ -169,6 +153,16 @@ def Subcommands_ExtraConf_SettingsValid_test( app ):
               indent = 2,
               sort_keys = True )
           } ),
+          has_entries( { 'key': 'Startup Status',
+                         'value': 'Ready' } ),
+          has_entries( { 'key': 'Java Path',
+                         'value': instance_of( str ) } ),
+          has_entries( { 'key': 'Launcher Config.',
+                         'value': instance_of( str ) } ),
+          has_entries( { 'key': 'Workspace Path',
+                         'value': instance_of( str ) } ),
+          has_entries( { 'key': 'Extension Path',
+                         'value': contains_exactly( instance_of( str ) ) } ),
         )
       } ) )
     } ) )

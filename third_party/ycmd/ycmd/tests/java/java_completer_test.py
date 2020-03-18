@@ -1,4 +1,4 @@
-# Copyright (C) 2017 ycmd contributors
+# Copyright (C) 2020 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -15,17 +15,10 @@
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
 import os
 
 from hamcrest import assert_that, equal_to, calling, has_entries, is_not, raises
-from mock import patch
+from unittest.mock import patch
 
 from ycmd import handlers
 from ycmd.tests.test_utils import BuildRequest
@@ -216,19 +209,6 @@ def JavaCompleter_GetDoc_test( app ):
                      return_value = { 'kind': 'plaintext', 'value': 'test' } ):
     assert_that( calling( completer.GetDoc ).with_args( BuildRequest() ),
                  raises( RuntimeError, NO_DOCUMENTATION_MESSAGE ) )
-
-
-@SharedYcmd
-def JavaCompleter_UnknownCommand_test( app ):
-  completer = handlers._server_state.GetFiletypeCompleter( [ 'java' ] )
-
-  notification = {
-    'command': 'this_is_not_a_real_command',
-    'params': {}
-  }
-  assert_that( completer.HandleServerCommand( BuildRequest(), notification ),
-               equal_to( None ) )
-
 
 
 @patch( 'ycmd.completers.java.hook.ShouldEnableJavaCompleter',

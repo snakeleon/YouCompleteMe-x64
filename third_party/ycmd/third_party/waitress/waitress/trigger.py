@@ -12,11 +12,12 @@
 #
 ##############################################################################
 
-import asyncore
 import os
 import socket
 import errno
 import threading
+
+from . import wasyncore
 
 # Wake up a call to select() running in the main thread.
 #
@@ -48,10 +49,11 @@ import threading
 # new data onto a channel's outgoing data queue at the same time that
 # the main thread is trying to remove some]
 
+
 class _triggerbase(object):
     """OS-independent base class for OS-dependent trigger class."""
 
-    kind = None # subclass must set to "pipe" or "loopback"; used by repr
+    kind = None  # subclass must set to "pipe" or "loopback"; used by repr
 
     def __init__(self):
         self._closed = False
@@ -61,7 +63,7 @@ class _triggerbase(object):
         self.lock = threading.Lock()
 
         # List of no-argument callbacks to invoke when the trigger is
-        # pulled.  These run in the thread running the asyncore mainloop,
+        # pulled.  These run in the thread running the wasyncore mainloop,
         # regardless of which thread pulls the trigger.
         self.thunks = []
 
@@ -77,7 +79,7 @@ class _triggerbase(object):
     def handle_close(self):
         self.close()
 
-    # Override the asyncore close() method, because it doesn't know about
+    # Override the wasyncore close() method, because it doesn't know about
     # (so can't close) all the gimmicks we have open.  Subclass must
     # supply a _close() method to do platform-specific closing work.  _close()
     # will be called iff we're not already closed.
@@ -85,7 +87,7 @@ class _triggerbase(object):
         if not self._closed:
             self._closed = True
             self.del_channel()
-            self._close() # subclass does OS-specific stuff
+            self._close()  # subclass does OS-specific stuff
 
     def pull_trigger(self, thunk=None):
         if thunk:
@@ -103,35 +105,38 @@ class _triggerbase(object):
                 try:
                     thunk()
                 except:
-                    nil, t, v, tbinfo = asyncore.compact_traceback()
+                    nil, t, v, tbinfo = wasyncore.compact_traceback()
                     self.log_info(
-                        'exception in trigger thunk: (%s:%s %s)' %
-                        (t, v, tbinfo))
+                        "exception in trigger thunk: (%s:%s %s)" % (t, v, tbinfo)
+                    )
             self.thunks = []
 
-if os.name == 'posix':
 
-    class trigger(_triggerbase, asyncore.file_dispatcher):
+if os.name == "posix":
+
+    class trigger(_triggerbase, wasyncore.file_dispatcher):
         kind = "pipe"
 
         def __init__(self, map):
             _triggerbase.__init__(self)
             r, self.trigger = self._fds = os.pipe()
-            asyncore.file_dispatcher.__init__(self, r, map=map)
+            wasyncore.file_dispatcher.__init__(self, r, map=map)
 
         def _close(self):
             for fd in self._fds:
                 os.close(fd)
             self._fds = []
+            wasyncore.file_dispatcher.close(self)
 
         def _physical_pull(self):
-            os.write(self.trigger, b'x')
+            os.write(self.trigger, b"x")
 
-else: # pragma: no cover
+
+else:  # pragma: no cover
     # Windows version; uses just sockets, because a pipe isn't select'able
     # on Windows.
 
-    class trigger(_triggerbase, asyncore.dispatcher):
+    class trigger(_triggerbase, wasyncore.dispatcher):
         kind = "loopback"
 
         def __init__(self, map):
@@ -139,12 +144,12 @@ else: # pragma: no cover
 
             # Get a pair of connected sockets.  The trigger is the 'w'
             # end of the pair, which is connected to 'r'.  'r' is put
-            # in the asyncore socket map.  "pulling the trigger" then
+            # in the wasyncore socket map.  "pulling the trigger" then
             # means writing something on w, which will wake up r.
 
             w = socket.socket()
             # Disable buffering -- pulling the trigger sends 1 byte,
-            # and we want that sent immediately, to wake up asyncore's
+            # and we want that sent immediately, to wake up wasyncore's
             # select() ASAP.
             w.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 
@@ -163,11 +168,11 @@ else: # pragma: no cover
                 # for hideous details.
                 a = socket.socket()
                 a.bind(("127.0.0.1", 0))
-                connect_address = a.getsockname() # assigned (host, port) pair
+                connect_address = a.getsockname()  # assigned (host, port) pair
                 a.listen(1)
                 try:
                     w.connect(connect_address)
-                    break # success
+                    break  # success
                 except socket.error as detail:
                     if detail[0] != errno.WSAEADDRINUSE:
                         # "Address already in use" is the only error
@@ -176,7 +181,7 @@ else: # pragma: no cover
                         raise
                     # (10048, 'Address already in use')
                     # assert count <= 2 # never triggered in Tim's tests
-                    if count >= 10: # I've never seen it go above 2
+                    if count >= 10:  # I've never seen it go above 2
                         a.close()
                         w.close()
                         raise RuntimeError("Cannot bind trigger!")
@@ -184,10 +189,10 @@ else: # pragma: no cover
                     # sleep() here, but it didn't appear to help or hurt.
                     a.close()
 
-            r, addr = a.accept() # r becomes asyncore's (self.)socket
+            r, addr = a.accept()  # r becomes wasyncore's (self.)socket
             a.close()
             self.trigger = w
-            asyncore.dispatcher.__init__(self, r, map=map)
+            wasyncore.dispatcher.__init__(self, r, map=map)
 
         def _close(self):
             # self.socket is r, and self.trigger is w, from __init__
@@ -195,4 +200,4 @@ else: # pragma: no cover
             self.trigger.close()
 
         def _physical_pull(self):
-            self.trigger.send(b'x')
+            self.trigger.send(b"x")

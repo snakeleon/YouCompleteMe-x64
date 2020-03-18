@@ -3,7 +3,7 @@ import os
 import pytest
 
 from jedi import api
-from jedi.evaluate import imports
+from jedi.inference import imports
 from ..helpers import cwd_at
 
 
@@ -17,8 +17,8 @@ def test_add_dynamic_mods(Script):
     # Other fictional modules in another place in the fs.
     src2 = 'from .. import setup; setup.r(1)'
     script = Script(src1, path='../setup.py')
-    imports.load_module(script._evaluator, os.path.abspath(fname), src2)
-    result = script.goto_definitions()
+    imports.load_module(script._inference_state, os.path.abspath(fname), src2)
+    result = script.infer()
     assert len(result) == 1
     assert result[0].description == 'class int'
 
@@ -30,5 +30,5 @@ def test_add_bracket_after_function(monkeypatch, Script):
 def foo():
     pass
 foo''')
-    completions = script.completions()
+    completions = script.complete()
     assert completions[0].complete == '('

@@ -1,4 +1,4 @@
-# Copyright (C) 2016-2018 ycmd contributors
+# Copyright (C) 2016-2020 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -15,14 +15,11 @@
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
-from hamcrest import assert_that, contains, has_entry, has_entries, instance_of
+from hamcrest import ( assert_that,
+                       contains_exactly,
+                       has_entry,
+                       has_entries,
+                       instance_of )
 
 from ycmd.tests.python import SharedYcmd
 from ycmd.tests.test_utils import BuildRequest
@@ -35,7 +32,7 @@ def DebugInfo_test( app ):
     app.post_json( '/debug_info', request_data ).json,
     has_entry( 'completer', has_entries( {
       'name': 'Python',
-      'items': contains(
+      'items': contains_exactly(
         has_entries( {
           'key': 'Python interpreter',
           'value': instance_of( str )

@@ -1,4 +1,4 @@
-# Copyright (C) 2019 ycmd contributors
+# Copyright (C) 2020 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -15,20 +15,17 @@
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import unicode_literals
-from __future__ import division
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
-from future.utils import iterkeys
-from hamcrest import assert_that, contains, contains_inanyorder, has_entries
+from hamcrest import ( assert_that,
+                       contains_exactly,
+                       contains_inanyorder,
+                       has_entries,
+                       has_entry )
 from pprint import pformat
 import json
 
 from ycmd.tests.rust import PathToTestFile, SharedYcmd
-from ycmd.tests.test_utils import ( LocationMatcher,
+from ycmd.tests.test_utils import ( BuildRequest,
+                                    LocationMatcher,
                                     PollForMessages,
                                     PollForMessagesTimeoutException,
                                     RangeMatcher,
@@ -45,13 +42,30 @@ DIAG_MATCHERS_PER_FILE = {
           'no field `build_` on type `test::Builder`\n\nunknown field [E0609]',
       'location': LocationMatcher( MAIN_FILEPATH, 14, 13 ),
       'location_extent': RangeMatcher( MAIN_FILEPATH, ( 14, 13 ), ( 14, 19 ) ),
-      'ranges': contains( RangeMatcher( MAIN_FILEPATH,
+      'ranges': contains_exactly( RangeMatcher( MAIN_FILEPATH,
                                         ( 14, 13 ),
                                         ( 14, 19 ) ) ),
       'fixit_available': False
     } )
   )
 }
+
+
+@SharedYcmd
+def Diagnostics_DetailedDiags_test( app ):
+  filepath = PathToTestFile( 'common', 'src', 'main.rs' )
+  contents = ReadFile( filepath )
+  WaitForDiagnosticsToBeReady( app, filepath, contents, 'rust' )
+  request_data = BuildRequest( contents = contents,
+                               filepath = filepath,
+                               filetype = 'rust',
+                               line_num = 14,
+                               column_num = 13 )
+
+  results = app.post_json( '/detailed_diagnostic', request_data ).json
+  assert_that( results, has_entry(
+      'message',
+      'no field `build_` on type `test::Builder`\n\nunknown field' ) )
 
 
 @SharedYcmd
@@ -72,7 +86,7 @@ def Diagnostics_Poll_test( app ):
   contents = ReadFile( filepath )
 
   # Poll until we receive _all_ the diags asynchronously.
-  to_see = sorted( iterkeys( DIAG_MATCHERS_PER_FILE ) )
+  to_see = sorted( DIAG_MATCHERS_PER_FILE.keys() )
   seen = {}
 
   try:
@@ -92,7 +106,7 @@ def Diagnostics_Poll_test( app ):
           'filepath': message[ 'filepath' ]
         } ) )
 
-      if sorted( iterkeys( seen ) ) == to_see:
+      if sorted( seen.keys() ) == to_see:
         break
 
       # Eventually PollForMessages will throw a timeout exception and we'll fail
@@ -103,4 +117,4 @@ def Diagnostics_Poll_test( app ):
       'Timed out waiting for full set of diagnostics. '
       'Expected to see diags for {}, but only saw {}.'.format(
         json.dumps( to_see, indent=2 ),
-        json.dumps( sorted( iterkeys( seen ) ), indent=2 ) ) )
+        json.dumps( sorted( seen.keys() ), indent=2 ) ) )

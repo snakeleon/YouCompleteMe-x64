@@ -1,6 +1,4 @@
-# encoding: utf-8
-#
-# Copyright (C) 2015-2018 ycmd contributors
+# Copyright (C) 2015-2020 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -17,22 +15,15 @@
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import absolute_import
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
 from hamcrest import ( assert_that,
                        calling,
-                       contains,
+                       contains_exactly,
                        contains_inanyorder,
+                       equal_to,
                        has_entries,
                        has_item,
                        matches_regexp,
                        raises )
-from nose.tools import eq_
 from webtest import AppError
 import pprint
 import requests
@@ -49,12 +40,12 @@ from ycmd.utils import ReadFile
 
 def RunTest( app, test ):
   contents = ReadFile( test[ 'request' ][ 'filepath' ] )
-
+  filetype = test[ 'request' ].get( 'filetype', 'typescript' )
   app.post_json(
     '/event_notification',
     CombineRequest( test[ 'request' ], {
       'contents': contents,
-      'filetype': 'typescript',
+      'filetype': filetype,
       'event_name': 'BufferVisit'
     } )
   )
@@ -70,7 +61,8 @@ def RunTest( app, test ):
 
   print( 'completer response: {0}'.format( pprint.pformat( response.json ) ) )
 
-  eq_( response.status_code, test[ 'expect' ][ 'response' ] )
+  assert_that( response.status_code,
+               equal_to( test[ 'expect' ][ 'response' ] ) )
 
   assert_that( response.json, test[ 'expect' ][ 'data' ] )
 
@@ -139,6 +131,53 @@ def GetCompletions_Basic_test( app ):
               'kind': 'method',
               'detailed_info': '(method) Foo.methodA(): void\n\n'
                                'Unicode string: 说话'
+            }
+          )
+        )
+      } )
+    }
+  } )
+
+
+@IsolatedYcmd( { 'disable_signature_help': True } )
+def GetCompletions_Basic_NoSigHelp_test( app ):
+  RunTest( app, {
+    'description': 'Extra and detailed info when completions are methods',
+    'request': {
+      'line_num': 17,
+      'column_num': 6,
+      'filepath': PathToTestFile( 'test.ts' )
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': has_entries( {
+        'completions': contains_inanyorder(
+          CompletionEntryMatcher(
+            'methodA',
+            '(method) Foo.methodA(): void',
+            extra_params = {
+              'kind': 'method',
+              'detailed_info': '(method) Foo.methodA(): void\n\n'
+                               'Unicode string: 说话'
+            }
+          ),
+          CompletionEntryMatcher(
+            'methodB',
+            '(method) Foo.methodB(): void',
+            extra_params = {
+              'kind': 'method',
+              'detailed_info': '(method) Foo.methodB(): void'
+            }
+          ),
+          CompletionEntryMatcher(
+            'methodC',
+            '(method) Foo.methodC(a: { foo: string; bar: number; }): void',
+            extra_params = {
+              'kind': 'method',
+              'detailed_info': '(method) Foo.methodC(a: {\n'
+                               '    foo: string;\n'
+                               '    bar: number;\n'
+                               '}): void'
             }
           )
         )
@@ -274,7 +313,7 @@ def GetCompletions_AutoImport_test( app ):
             'fixits': contains_inanyorder(
               has_entries( {
                 'text': 'Import \'Bår\' from module "./unicode"',
-                'chunks': contains(
+                'chunks': contains_exactly(
                   ChunkMatcher(
                     matches_regexp( '^import { Bår } from "./unicode";\r?\n' ),
                     LocationMatcher( filepath, 1, 1 ),
@@ -285,6 +324,31 @@ def GetCompletions_AutoImport_test( app ):
               } )
             )
           } )
+        } ) )
+      } )
+    }
+  } )
+
+
+@SharedYcmd
+def GetCompletions_TypeScriptReact_DefaultTriggers_test( app ):
+  filepath = PathToTestFile( 'test.tsx' )
+  RunTest( app, {
+    'description': 'No need to force after a semantic trigger',
+    'request': {
+      'line_num': 17,
+      'column_num': 3,
+      'filepath': filepath,
+      'filetype': 'typescriptreact'
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': has_entries( {
+        'completions': has_item( has_entries( {
+          'insertion_text':  'foo',
+          'extra_menu_info': "(property) 'foo': number",
+          'detailed_info':   "(property) 'foo': number",
+          'kind':            'property',
         } ) )
       } )
     }

@@ -1,4 +1,4 @@
-# Copyright (C) 2019 ycmd contributors
+# Copyright (C) 2020 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -15,21 +15,14 @@
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
 import json
 import logging
 import os
 
 from ycmd import responses
 from ycmd import utils
-from ycmd.completers.language_server import ( simple_language_server_completer,
-                                              language_server_completer )
+from ycmd.completers.language_server import simple_language_server_completer
+from ycmd.completers.language_server import language_server_completer
 
 
 PATH_TO_GOPLS = os.path.abspath( os.path.join( os.path.dirname( __file__ ),
@@ -56,10 +49,6 @@ def ShouldEnableGoCompleter( user_options ):
 
 
 class GoCompleter( simple_language_server_completer.SimpleLSPCompleter ):
-  def __init__( self, user_options ):
-    super( GoCompleter, self ).__init__( user_options )
-
-
   def GetServerName( self ):
     return 'gopls'
 
@@ -84,15 +73,13 @@ class GoCompleter( simple_language_server_completer.SimpleLSPCompleter ):
 
 
   def GetDoc( self, request_data ):
-    assert self._settings[ 'hoverKind' ] == 'Structured'
+    assert self._settings[ 'ls' ][ 'hoverKind' ] == 'Structured'
     try:
       result = json.loads( self.GetHoverResponse( request_data )[ 'value' ] )
       docs = result[ 'signature' ] + '\n' + result[ 'fullDocumentation' ]
-      return responses.BuildDisplayMessageResponse( docs.strip() )
-    except RuntimeError as e:
-      if e.args[ 0 ] == 'No hover information.':
-        raise RuntimeError( 'No documentation available.' )
-      raise
+      return responses.BuildDetailedInfoResponse( docs.strip() )
+    except language_server_completer.NoHoverInfoException:
+      raise RuntimeError( 'No documentation available.' )
 
 
   def GetType( self, request_data ):
@@ -100,37 +87,12 @@ class GoCompleter( simple_language_server_completer.SimpleLSPCompleter ):
       result = json.loads(
           self.GetHoverResponse( request_data )[ 'value' ] )[ 'signature' ]
       return responses.BuildDisplayMessageResponse( result )
-    except RuntimeError as e:
-      if e.args[ 0 ] == 'No hover information.':
-        raise RuntimeError( 'Unknown type.' )
-      raise
+    except language_server_completer.NoHoverInfoException:
+      raise RuntimeError( 'Unknown type.' )
 
 
   def DefaultSettings( self, request_data ):
-    return { 'hoverKind': 'Structured',
-             'fuzzyMatching': False }
-
-
-  def GetCustomSubcommands( self ):
     return {
-      'RestartServer': (
-        lambda self, request_data, args: self._RestartServer( request_data )
-      ),
-      'FixIt': (
-        lambda self, request_data, args: self.GetCodeActions( request_data,
-                                                              args )
-      ),
-      'GetDoc': (
-        lambda self, request_data, args: self.GetDoc( request_data )
-      ),
-      'GetType': (
-        lambda self, request_data, args: self.GetType( request_data )
-      ),
+      'hoverKind': 'Structured',
+      'fuzzyMatching': False,
     }
-
-
-  def HandleServerCommand( self, request_data, command ):
-    return language_server_completer.WorkspaceEditToFixIt(
-      request_data,
-      command[ 'edit' ],
-      text = command[ 'title' ] )

@@ -3,6 +3,33 @@
 Changelog
 ---------
 
+0.6.1 (2020-02-03)
+++++++++++++++++++
+
+- Add ``parso.normalizer.Issue.end_pos`` to make it possible to know where an
+  issue ends
+
+0.6.0 (2020-01-26)
+++++++++++++++++++
+
+- Dropped Python 2.6/Python 3.3 support
+- del_stmt names are now considered as a definition
+  (for ``name.is_definition()``)
+- Bugfixes
+
+0.5.2 (2019-12-15)
+++++++++++++++++++
+
+- Add include_setitem to get_definition/is_definition and get_defined_names (#66)
+- Fix named expression error listing (#89, #90)
+- Fix some f-string tokenizer issues (#93)
+
+0.5.1 (2019-07-13)
+++++++++++++++++++
+
+- Fix: Some unicode identifiers were not correctly tokenized
+- Fix: Line continuations in f-strings are now working
+
 0.5.0 (2019-06-20)
 ++++++++++++++++++
 
@@ -17,19 +44,19 @@ Changelog
 - Python 3.8 support
 - FileIO support, it's now possible to use abstract file IO, support is alpha
 
-0.3.4 (2018-02-13)
+0.3.4 (2019-02-13)
 +++++++++++++++++++
 
 - Fix an f-string tokenizer error
 
-0.3.3 (2018-02-06)
+0.3.3 (2019-02-06)
 +++++++++++++++++++
 
 - Fix async errors in the diff parser
 - A fix in iter_errors
 - This is a very small bugfix release
 
-0.3.2 (2018-01-24)
+0.3.2 (2019-01-24)
 +++++++++++++++++++
 
 - 20+ bugfixes in the diff parser and 3 in the tokenizer

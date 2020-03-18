@@ -58,7 +58,7 @@ Standard options:
             --listen=[::1]:8080
             --listen=*:8080
 
-        This option may be used multiple times to listen on multipe sockets.
+        This option may be used multiple times to listen on multiple sockets.
         A wildcard for the hostname is also supported and will bind to both
         IPv4/IPv6 depending on whether they are enabled or disabled.
 
@@ -126,12 +126,17 @@ Tuning options:
         A temporary file should be created if the pending output is larger
         than this. Default is 1048576 (1MB).
 
+    --outbuf-high-watermark=INT
+        The app_iter will pause when pending output is larger than this value
+        and will resume once enough data is written to the socket to fall below
+        this threshold. Default is 16777216 (16MB).
+
     --inbuf-overflow=INT
         A temporary file should be created if the pending input is larger
         than this. Default is 524288 (512KB).
 
     --connection-limit=INT
-        Stop creating new channelse if too many are already active.
+        Stop creating new channels if too many are already active.
         Default is 100.
 
     --cleanup-interval=INT
@@ -140,11 +145,11 @@ Tuning options:
 
     --channel-timeout=INT
         Maximum number of seconds to leave inactive connections open.
-        Default is 120. 'Inactive' is defined as 'has recieved no data
+        Default is 120. 'Inactive' is defined as 'has received no data
         from the client and has sent no data to the client'.
 
     --[no-]log-socket-errors
-        Toggle whether premature client disconnect tracepacks ought to be
+        Toggle whether premature client disconnect tracebacks ought to be
         logged. On by default.
 
     --max-request-header-size=INT
@@ -167,7 +172,8 @@ Tuning options:
 
 """
 
-RUNNER_PATTERN = re.compile(r"""
+RUNNER_PATTERN = re.compile(
+    r"""
     ^
     (?P<module>
         [a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)*
@@ -177,13 +183,17 @@ RUNNER_PATTERN = re.compile(r"""
         [a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)*
     )
     $
-    """, re.I | re.X)
+    """,
+    re.I | re.X,
+)
+
 
 def match(obj_name):
     matches = RUNNER_PATTERN.match(obj_name)
     if not matches:
         raise ValueError("Malformed application '{0}'".format(obj_name))
-    return matches.group('module'), matches.group('object')
+    return matches.group("module"), matches.group("object")
+
 
 def resolve(module_name, object_name):
     """Resolve a named object in a module."""
@@ -197,34 +207,35 @@ def resolve(module_name, object_name):
     # but I've yet to go over the commits. I know, however, that the NEWS
     # file makes no mention of such a change to the behaviour of
     # ``__import__``.
-    segments = [str(segment) for segment in object_name.split('.')]
+    segments = [str(segment) for segment in object_name.split(".")]
     obj = __import__(module_name, fromlist=segments[:1])
     for segment in segments:
         obj = getattr(obj, segment)
     return obj
 
-def show_help(stream, name, error=None): # pragma: no cover
+
+def show_help(stream, name, error=None):  # pragma: no cover
     if error is not None:
-        print('Error: {0}\n'.format(error), file=stream)
+        print("Error: {0}\n".format(error), file=stream)
     print(HELP.format(name), file=stream)
+
 
 def show_exception(stream):
     exc_type, exc_value = sys.exc_info()[:2]
-    args = getattr(exc_value, 'args', None)
+    args = getattr(exc_value, "args", None)
     print(
-        (
-            'There was an exception ({0}) importing your module.\n'
-        ).format(
+        ("There was an exception ({0}) importing your module.\n").format(
             exc_type.__name__,
         ),
-        file=stream
+        file=stream,
     )
     if args:
-        print('It had these arguments: ', file=stream)
+        print("It had these arguments: ", file=stream)
         for idx, arg in enumerate(args, start=1):
-            print('{0}. {1}\n'.format(idx, arg), file=stream)
+            print("{0}. {1}\n".format(idx, arg), file=stream)
     else:
-        print('It had no arguments.', file=stream)
+        print("It had no arguments.", file=stream)
+
 
 def run(argv=sys.argv, _serve=serve):
     """Command line runner."""
@@ -236,12 +247,12 @@ def run(argv=sys.argv, _serve=serve):
         show_help(sys.stderr, name, str(exc))
         return 1
 
-    if kw['help']:
+    if kw["help"]:
         show_help(sys.stdout, name)
         return 0
 
     if len(args) != 1:
-        show_help(sys.stderr, name, 'Specify one application only')
+        show_help(sys.stderr, name, "Specify one application only")
         return 1
 
     try:
@@ -265,11 +276,11 @@ def run(argv=sys.argv, _serve=serve):
         show_help(sys.stderr, name, "Bad object name '{0}'".format(obj_name))
         show_exception(sys.stderr)
         return 1
-    if kw['call']:
+    if kw["call"]:
         app = app()
 
     # These arguments are specific to the runner, not waitress itself.
-    del kw['call'], kw['help']
+    del kw["call"], kw["help"]
 
     _serve(app, **kw)
     return 0

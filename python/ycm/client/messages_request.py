@@ -15,13 +15,6 @@
 # You should have received a copy of the GNU General Public License
 # along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
 from ycm.client.base_request import BaseRequest, BuildRequestData
 from ycm.vimsupport import PostVimMessage
 
@@ -34,9 +27,9 @@ TIMEOUT_SECONDS = 60
 
 
 class MessagesPoll( BaseRequest ):
-  def __init__( self ):
+  def __init__( self, buff ):
     super( MessagesPoll, self ).__init__()
-    self._request_data = BuildRequestData()
+    self._request_data = BuildRequestData( buff.number )
     self._response_future = None
 
 

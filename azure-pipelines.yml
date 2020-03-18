@@ -15,15 +15,11 @@ jobs:
   pool:
     # List of available software on this image:
     # https://github.com/Microsoft/azure-pipelines-image-generation/blob/master/images/linux/Ubuntu1604-README.md
-    vmImage: 'ubuntu-16.04'
+    vmImage: 'ubuntu-18.04'
   strategy:
     matrix:
-      'Python 2.7':
-        # Tests are failing on Python 2.7.0 with the exception
-        # "TypeError: argument can't be <type 'unicode'>"
-        YCM_PYTHON_VERSION: '2.7.13'
-      'Python 3.5':
-        YCM_PYTHON_VERSION: '3.5.3'
+      'Python 3.6':
+        YCM_PYTHON_VERSION: '3.6.3'
     maxParallel: 2
   variables:
     COVERAGE: true
@@ -46,13 +42,10 @@ jobs:
   pool:
     # List of available software on this image:
     # https://github.com/Microsoft/azure-pipelines-image-generation/blob/master/images/linux/Ubuntu1604-README.md
-    vmImage: 'ubuntu-16.04'
+    vmImage: 'ubuntu-18.04'
   strategy:
     matrix:
-      'Python 2.7':
-        IMAGE: ycm-vim-py2
-        PIP: pip
-      'Python 3.5':
+      'Python 3.6':
         IMAGE: ycm-vim-py3
         PIP: pip3
     maxParallel: 2
@@ -79,15 +72,11 @@ jobs:
   pool:
     # List of available software on this image:
     # https://github.com/Microsoft/azure-pipelines-image-generation/blob/master/images/macos/macos-10.13-Readme.md
-    vmImage: 'macOS-10.13'
+    vmImage: 'macOS-10.15'
   strategy:
     matrix:
-      'Python 2.7':
-        # Prior versions fail to compile with error "ld: library not found for
-        # -lSystemStubs"
-        YCM_PYTHON_VERSION: '2.7.2'
-      'Python 3.5':
-        YCM_PYTHON_VERSION: '3.5.1'
+      'Python 3.6':
+        YCM_PYTHON_VERSION: '3.6.3'
     maxParallel: 2
   variables:
     COVERAGE: true
@@ -111,10 +100,6 @@ jobs:
     vmImage: 'windows-2019'
   strategy:
     matrix:
-      # We only test Python 2.7 on 64-bit.
-      'Python 2.7 64-bit':
-        YCM_PYTHON_VERSION: '2.7'
-        YCM_ARCH: x64
       'Python 3.7 32-bit':
         YCM_PYTHON_VERSION: '3.7'
         YCM_ARCH: x86

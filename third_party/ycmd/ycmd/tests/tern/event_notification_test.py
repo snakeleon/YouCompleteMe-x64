@@ -1,4 +1,4 @@
-# Copyright (C) 2015-2018 ycmd contributors
+# Copyright (C) 2015-2020 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -15,16 +15,13 @@
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import unicode_literals
-from __future__ import division
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
-from hamcrest import assert_that, contains, empty, has_entries, none
-from mock import patch
-from nose.tools import eq_
+from hamcrest import ( assert_that,
+                       contains_exactly,
+                       empty,
+                       equal_to,
+                       has_entries,
+                       none )
+from unittest.mock import patch
 from pprint import pformat
 import os
 import requests
@@ -43,14 +40,14 @@ def EventNotification_OnFileReadyToParse_ProjectFile_cwd_test( app ):
                               filetype = 'javascript' ),
                             expect_errors = True )
 
-  eq_( response.status_code, requests.codes.ok )
+  assert_that( response.status_code, equal_to( requests.codes.ok ) )
   assert_that( response.json, empty() )
 
   debug_info = app.post_json( '/debug_info',
                               BuildRequest( filetype = 'javascript' ) ).json
   assert_that(
     debug_info[ 'completer' ][ 'servers' ][ 0 ][ 'extras' ],
-    contains(
+    contains_exactly(
       has_entries( {
         'key': 'configuration file',
         'value': PathToTestFile( '.tern-project' )
@@ -72,14 +69,14 @@ def EventNotification_OnFileReadyToParse_ProjectFile_parentdir_test( app ):
                               filetype = 'javascript' ),
                             expect_errors = True )
 
-  eq_( response.status_code, requests.codes.ok )
+  assert_that( response.status_code, equal_to( requests.codes.ok ) )
   assert_that( response.json, empty() )
 
   debug_info = app.post_json( '/debug_info',
                               BuildRequest( filetype = 'javascript' ) ).json
   assert_that(
     debug_info[ 'completer' ][ 'servers' ][ 0 ][ 'extras' ],
-    contains(
+    contains_exactly(
       has_entries( {
         'key': 'configuration file',
         'value': PathToTestFile( '.tern-project' )
@@ -95,7 +92,8 @@ def EventNotification_OnFileReadyToParse_ProjectFile_parentdir_test( app ):
 @IsolatedYcmd
 @patch( 'ycmd.completers.javascript.tern_completer.GlobalConfigExists',
         return_value = False )
-def EventNotification_OnFileReadyToParse_NoProjectFile_test( app, *args ):
+def EventNotification_OnFileReadyToParse_NoProjectFile_test(
+    global_config_exists, app ):
   # We raise an error if we can't detect a .tern-project file.
   # We only do this on the first OnFileReadyToParse event after a
   # server startup.
@@ -108,7 +106,8 @@ def EventNotification_OnFileReadyToParse_NoProjectFile_test( app, *args ):
 
   print( 'event response: {0}'.format( pformat( response.json ) ) )
 
-  eq_( response.status_code, requests.codes.internal_server_error )
+  assert_that( response.status_code,
+               equal_to( requests.codes.internal_server_error ) )
 
   assert_that(
     response.json,
@@ -125,7 +124,7 @@ def EventNotification_OnFileReadyToParse_NoProjectFile_test( app, *args ):
                               BuildRequest( filetype = 'javascript' ) ).json
   assert_that(
     debug_info[ 'completer' ][ 'servers' ][ 0 ][ 'extras' ],
-    contains(
+    contains_exactly(
       has_entries( {
         'key': 'configuration file',
         'value': none()
@@ -145,7 +144,7 @@ def EventNotification_OnFileReadyToParse_NoProjectFile_test( app, *args ):
 
   print( 'event response: {0}'.format( pformat( response.json ) ) )
 
-  eq_( response.status_code, requests.codes.ok )
+  assert_that( response.status_code, equal_to( requests.codes.ok ) )
   assert_that( response.json, empty() )
 
   # Restart the server and check that it raises it again.
@@ -162,7 +161,8 @@ def EventNotification_OnFileReadyToParse_NoProjectFile_test( app, *args ):
 
   print( 'event response: {0}'.format( pformat( response.json ) ) )
 
-  eq_( response.status_code, requests.codes.internal_server_error )
+  assert_that( response.status_code,
+               equal_to( requests.codes.internal_server_error ) )
 
   assert_that(
     response.json,
@@ -190,14 +190,14 @@ def EventNotification_OnFileReadyToParse_NoProjectFile_test( app, *args ):
 
   print( 'event response: {0}'.format( pformat( response.json ) ) )
 
-  eq_( response.status_code, requests.codes.ok )
+  assert_that( response.status_code, equal_to( requests.codes.ok ) )
   assert_that( response.json, empty() )
 
   debug_info = app.post_json( '/debug_info',
                               BuildRequest( filetype = 'javascript' ) ).json
   assert_that(
     debug_info[ 'completer' ][ 'servers' ][ 0 ][ 'extras' ],
-    contains(
+    contains_exactly(
       has_entries( {
         'key': 'configuration file',
         'value': PathToTestFile( '.tern-project' )
@@ -213,7 +213,8 @@ def EventNotification_OnFileReadyToParse_NoProjectFile_test( app, *args ):
 @IsolatedYcmd
 @patch( 'ycmd.completers.javascript.tern_completer.GlobalConfigExists',
         return_value = True )
-def EventNotification_OnFileReadyToParse_UseGlobalConfig_test( app, *args ):
+def EventNotification_OnFileReadyToParse_UseGlobalConfig_test(
+    global_config_exists, app ):
   # No working directory is given.
   response = app.post_json( '/event_notification',
                             BuildRequest( filepath = PathToTestFile( '..' ),
@@ -223,14 +224,14 @@ def EventNotification_OnFileReadyToParse_UseGlobalConfig_test( app, *args ):
 
   print( 'event response: {0}'.format( pformat( response.json ) ) )
 
-  eq_( response.status_code, requests.codes.ok )
+  assert_that( response.status_code, equal_to( requests.codes.ok ) )
   assert_that( response.json, empty() )
 
   debug_info = app.post_json( '/debug_info',
                               BuildRequest( filetype = 'javascript' ) ).json
   assert_that(
     debug_info[ 'completer' ][ 'servers' ][ 0 ][ 'extras' ],
-    contains(
+    contains_exactly(
       has_entries( {
         'key': 'configuration file',
         'value': os.path.join( os.path.expanduser( '~' ), '.tern-config' )
@@ -253,7 +254,7 @@ def EventNotification_OnFileReadyToParse_UseGlobalConfig_test( app, *args ):
                               BuildRequest( filetype = 'javascript' ) ).json
   assert_that(
     debug_info[ 'completer' ][ 'servers' ][ 0 ][ 'extras' ],
-    contains(
+    contains_exactly(
       has_entries( {
         'key': 'configuration file',
         'value': os.path.join( os.path.expanduser( '~' ), '.tern-config' )

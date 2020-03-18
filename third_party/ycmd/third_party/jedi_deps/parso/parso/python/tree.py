@@ -43,7 +43,10 @@ Parser Tree Classes
 """
 
 import re
-from collections import Mapping
+try:
+    from collections.abc import Mapping
+except ImportError:
+    from collections import Mapping
 
 from parso._compatibility import utf8_repr, unicode
 from parso.tree import Node, BaseNode, Leaf, ErrorNode, ErrorLeaf, \
@@ -54,10 +57,14 @@ from parso.utils import split_lines
 _FLOW_CONTAINERS = set(['if_stmt', 'while_stmt', 'for_stmt', 'try_stmt',
                         'with_stmt', 'async_stmt', 'suite'])
 _RETURN_STMT_CONTAINERS = set(['suite', 'simple_stmt']) | _FLOW_CONTAINERS
-_FUNC_CONTAINERS = set(['suite', 'simple_stmt', 'decorated']) | _FLOW_CONTAINERS
+
+_FUNC_CONTAINERS = set(
+    ['suite', 'simple_stmt', 'decorated', 'async_funcdef']
+) | _FLOW_CONTAINERS
+
 _GET_DEFINITION_TYPES = set([
     'expr_stmt', 'sync_comp_for', 'with_stmt', 'for_stmt', 'import_name',
-    'import_from', 'param'
+    'import_from', 'param', 'del_stmt',
 ])
 _IMPORTS = set(['import_name', 'import_from'])
 
@@ -92,7 +99,7 @@ class DocstringMixin(object):
 
 class PythonMixin(object):
     """
-    Some Python specific utitilies.
+    Some Python specific utilities.
     """
     __slots__ = ()
 
@@ -197,25 +204,22 @@ class Name(_LeafWithoutNewlines):
         return "<%s: %s@%s,%s>" % (type(self).__name__, self.value,
                                    self.line, self.column)
 
-    def is_definition(self):
+    def is_definition(self, include_setitem=False):
         """
         Returns True if the name is being defined.
         """
-        return self.get_definition() is not None
+        return self.get_definition(include_setitem=include_setitem) is not None
 
-    def get_definition(self, import_name_always=False):
+    def get_definition(self, import_name_always=False, include_setitem=False):
         """
-        Returns None if there's on definition for a name.
+        Returns None if there's no definition for a name.
 
-        :param import_name_alway: Specifies if an import name is always a
+        :param import_name_always: Specifies if an import name is always a
             definition. Normally foo in `from foo import bar` is not a
             definition.
         """
         node = self.parent
         type_ = node.type
-        if type_ in ('power', 'atom_expr'):
-            # In `self.x = 3` self is not a definition, but x is.
-            return None
 
         if type_ in ('funcdef', 'classdef'):
             if self == node.name:
@@ -233,8 +237,10 @@ class Name(_LeafWithoutNewlines):
         while node is not None:
             if node.type == 'suite':
                 return None
+            if node.type == 'namedexpr_test':
+                return node.children[0]
             if node.type in _GET_DEFINITION_TYPES:
-                if self in node.get_defined_names():
+                if self in node.get_defined_names(include_setitem):
                     return node
                 if import_name_always and node.type in _IMPORTS:
                     return node
@@ -772,8 +778,8 @@ class ForStmt(Flow):
         """
         return self.children[3]
 
-    def get_defined_names(self):
-        return _defined_names(self.children[1])
+    def get_defined_names(self, include_setitem=False):
+        return _defined_names(self.children[1], include_setitem)
 
 
 class TryStmt(Flow):
@@ -796,7 +802,7 @@ class WithStmt(Flow):
     type = 'with_stmt'
     __slots__ = ()
 
-    def get_defined_names(self):
+    def get_defined_names(self, include_setitem=False):
         """
         Returns the a list of `Name` that the with statement defines. The
         defined names are set after `as`.
@@ -805,7 +811,7 @@ class WithStmt(Flow):
         for with_item in self.children[1:-2:2]:
             # Check with items for 'as' names.
             if with_item.type == 'with_item':
-                names += _defined_names(with_item.children[2])
+                names += _defined_names(with_item.children[2], include_setitem)
         return names
 
     def get_test_node_from_name(self, name):
@@ -846,7 +852,7 @@ class ImportFrom(Import):
     type = 'import_from'
     __slots__ = ()
 
-    def get_defined_names(self):
+    def get_defined_names(self, include_setitem=False):
         """
         Returns the a list of `Name` that the import defines. The
         defined names are set after `import` or in case an alias - `as` - is
@@ -917,7 +923,7 @@ class ImportName(Import):
     type = 'import_name'
     __slots__ = ()
 
-    def get_defined_names(self):
+    def get_defined_names(self, include_setitem=False):
         """
         Returns the a list of `Name` that the import defines. The defined names
         is always the first name after `import` or in case an alias - `as` - is
@@ -993,6 +999,14 @@ class KeywordStatement(PythonBaseNode):
     def keyword(self):
         return self.children[0].value
 
+    def get_defined_names(self, include_setitem=False):
+        keyword = self.keyword
+        if keyword == 'del':
+            return _defined_names(self.children[1], include_setitem)
+        if keyword in ('global', 'nonlocal'):
+            return self.children[1::2]
+        return []
+
 
 class AssertStmt(KeywordStatement):
     __slots__ = ()
@@ -1018,7 +1032,7 @@ class YieldExpr(PythonBaseNode):
     __slots__ = ()
 
 
-def _defined_names(current):
+def _defined_names(current, include_setitem):
     """
     A helper function to find the defined names in statements, for loops and
     list comprehensions.
@@ -1026,14 +1040,22 @@ def _defined_names(current):
     names = []
     if current.type in ('testlist_star_expr', 'testlist_comp', 'exprlist', 'testlist'):
         for child in current.children[::2]:
-            names += _defined_names(child)
+            names += _defined_names(child, include_setitem)
     elif current.type in ('atom', 'star_expr'):
-        names += _defined_names(current.children[1])
+        names += _defined_names(current.children[1], include_setitem)
     elif current.type in ('power', 'atom_expr'):
         if current.children[-2] != '**':  # Just if there's no operation
             trailer = current.children[-1]
             if trailer.children[0] == '.':
                 names.append(trailer.children[1])
+            elif trailer.children[0] == '[' and include_setitem:
+                for node in current.children[-2::-1]:
+                    if node.type == 'trailer':
+                        names.append(node.children[1])
+                        break
+                    if node.type == 'name':
+                        names.append(node)
+                        break
     else:
         names.append(current)
     return names
@@ -1043,18 +1065,18 @@ class ExprStmt(PythonBaseNode, DocstringMixin):
     type = 'expr_stmt'
     __slots__ = ()
 
-    def get_defined_names(self):
+    def get_defined_names(self, include_setitem=False):
         """
         Returns a list of `Name` defined before the `=` sign.
         """
         names = []
         if self.children[1].type == 'annassign':
-            names = _defined_names(self.children[0])
+            names = _defined_names(self.children[0], include_setitem)
         return [
             name
             for i in range(0, len(self.children) - 2, 2)
             if '=' in self.children[i + 1].value
-            for name in _defined_names(self.children[i])
+            for name in _defined_names(self.children[i], include_setitem)
         ] + names
 
     def get_rhs(self):
@@ -1147,7 +1169,7 @@ class Param(PythonBaseNode):
         else:
             return self._tfpdef()
 
-    def get_defined_names(self):
+    def get_defined_names(self, include_setitem=False):
         return [self.name]
 
     @property
@@ -1205,12 +1227,12 @@ class SyncCompFor(PythonBaseNode):
     type = 'sync_comp_for'
     __slots__ = ()
 
-    def get_defined_names(self):
+    def get_defined_names(self, include_setitem=False):
         """
         Returns the a list of `Name` that the comprehension defines.
         """
         # allow async for
-        return _defined_names(self.children[1])
+        return _defined_names(self.children[1], include_setitem)
 
 
 # This is simply here so an older Jedi version can work with this new parso

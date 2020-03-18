@@ -1,5 +1,4 @@
-# Copyright (C) 2017-2019 ycmd contributors
-# encoding: utf-8
+# Copyright (C) 2017-2020 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -16,25 +15,17 @@
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import print_function
-from __future__ import absolute_import
-from __future__ import unicode_literals
-from __future__ import division
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
 import contextlib
 import json
-from future.utils import iterkeys
 import time
 from hamcrest import ( assert_that,
-                       contains,
+                       contains_exactly,
                        contains_inanyorder,
                        empty,
                        equal_to,
                        has_entries,
+                       has_entry,
                        has_item )
-from nose.tools import eq_
 
 from ycmd.tests.java import ( DEFAULT_PROJECT_DIR,
                               IsolatedYcmd,
@@ -53,7 +44,7 @@ from ycmd.utils import ReadFile, StartThread
 from ycmd.completers import completer
 
 from pprint import pformat
-from mock import patch
+from unittest.mock import patch
 from ycmd.completers.language_server import language_server_protocol as lsp
 from ycmd import handlers
 
@@ -86,7 +77,8 @@ DIAG_MATCHERS_PER_FILE = {
               '[570425421]',
       'location': LocationMatcher( TestFactory, 15, 19 ),
       'location_extent': RangeMatcher( TestFactory, ( 15, 19 ), ( 15, 29 ) ),
-      'ranges': contains( RangeMatcher( TestFactory, ( 15, 19 ), ( 15, 29 ) ) ),
+      'ranges': contains_exactly(
+        RangeMatcher( TestFactory, ( 15, 19 ), ( 15, 29 ) ) ),
       'fixit_available': False
     } ),
     has_entries( {
@@ -94,7 +86,8 @@ DIAG_MATCHERS_PER_FILE = {
       'text': 'Wibble cannot be resolved to a type [16777218]',
       'location': LocationMatcher( TestFactory, 18, 24 ),
       'location_extent': RangeMatcher( TestFactory, ( 18, 24 ), ( 18, 30 ) ),
-      'ranges': contains( RangeMatcher( TestFactory, ( 18, 24 ), ( 18, 30 ) ) ),
+      'ranges': contains_exactly(
+        RangeMatcher( TestFactory, ( 18, 24 ), ( 18, 30 ) ) ),
       'fixit_available': False
     } ),
     has_entries( {
@@ -102,7 +95,8 @@ DIAG_MATCHERS_PER_FILE = {
       'text': 'Wibble cannot be resolved to a variable [33554515]',
       'location': LocationMatcher( TestFactory, 19, 15 ),
       'location_extent': RangeMatcher( TestFactory, ( 19, 15 ), ( 19, 21 ) ),
-      'ranges': contains( RangeMatcher( TestFactory, ( 19, 15 ), ( 19, 21 ) ) ),
+      'ranges': contains_exactly(
+        RangeMatcher( TestFactory, ( 19, 15 ), ( 19, 21 ) ) ),
       'fixit_available': False
     } ),
     has_entries( {
@@ -110,7 +104,8 @@ DIAG_MATCHERS_PER_FILE = {
       'text': 'Type mismatch: cannot convert from int to boolean [16777233]',
       'location': LocationMatcher( TestFactory, 27, 10 ),
       'location_extent': RangeMatcher( TestFactory, ( 27, 10 ), ( 27, 16 ) ),
-      'ranges': contains( RangeMatcher( TestFactory, ( 27, 10 ), ( 27, 16 ) ) ),
+      'ranges': contains_exactly(
+        RangeMatcher( TestFactory, ( 27, 10 ), ( 27, 16 ) ) ),
       'fixit_available': False
     } ),
     has_entries( {
@@ -118,7 +113,8 @@ DIAG_MATCHERS_PER_FILE = {
       'text': 'Type mismatch: cannot convert from int to boolean [16777233]',
       'location': LocationMatcher( TestFactory, 30, 10 ),
       'location_extent': RangeMatcher( TestFactory, ( 30, 10 ), ( 30, 16 ) ),
-      'ranges': contains( RangeMatcher( TestFactory, ( 30, 10 ), ( 30, 16 ) ) ),
+      'ranges': contains_exactly(
+        RangeMatcher( TestFactory, ( 30, 10 ), ( 30, 16 ) ) ),
       'fixit_available': False
     } ),
     has_entries( {
@@ -128,7 +124,8 @@ DIAG_MATCHERS_PER_FILE = {
               '(TestFactory.Bar) [67108979]',
       'location': LocationMatcher( TestFactory, 30, 23 ),
       'location_extent': RangeMatcher( TestFactory, ( 30, 23 ), ( 30, 47 ) ),
-      'ranges': contains( RangeMatcher( TestFactory, ( 30, 23 ), ( 30, 47 ) ) ),
+      'ranges': contains_exactly(
+        RangeMatcher( TestFactory, ( 30, 23 ), ( 30, 47 ) ) ),
       'fixit_available': False
     } ),
   ),
@@ -138,7 +135,7 @@ DIAG_MATCHERS_PER_FILE = {
       'text': 'The value of the local variable a is not used [536870973]',
       'location': LocationMatcher( TestWidgetImpl, 15, 9 ),
       'location_extent': RangeMatcher( TestWidgetImpl, ( 15, 9 ), ( 15, 10 ) ),
-      'ranges': contains( RangeMatcher( TestWidgetImpl,
+      'ranges': contains_exactly( RangeMatcher( TestWidgetImpl,
                                         ( 15, 9 ),
                                         ( 15, 10 ) ) ),
       'fixit_available': False
@@ -148,7 +145,7 @@ DIAG_MATCHERS_PER_FILE = {
       'text': 'ISR cannot be resolved to a variable [33554515]',
       'location': LocationMatcher( TestWidgetImpl, 34, 12 ),
       'location_extent': RangeMatcher( TestWidgetImpl, ( 34, 12 ), ( 34, 15 ) ),
-      'ranges': contains( RangeMatcher( TestWidgetImpl,
+      'ranges': contains_exactly( RangeMatcher( TestWidgetImpl,
                                         ( 34, 12 ),
                                         ( 34, 15 ) ) ),
       'fixit_available': False
@@ -159,7 +156,7 @@ DIAG_MATCHERS_PER_FILE = {
               '[1610612976]',
       'location': LocationMatcher( TestWidgetImpl, 34, 12 ),
       'location_extent': RangeMatcher( TestWidgetImpl, ( 34, 12 ), ( 34, 15 ) ),
-      'ranges': contains( RangeMatcher( TestWidgetImpl,
+      'ranges': contains_exactly( RangeMatcher( TestWidgetImpl,
                                         ( 34, 12 ),
                                         ( 34, 15 ) ) ),
       'fixit_available': False
@@ -173,7 +170,7 @@ DIAG_MATCHERS_PER_FILE = {
               'TestFactory) [67109264]',
       'location': LocationMatcher( TestLauncher, 28, 16 ),
       'location_extent': RangeMatcher( TestLauncher, ( 28, 16 ), ( 28, 28 ) ),
-      'ranges': contains( RangeMatcher( TestLauncher,
+      'ranges': contains_exactly( RangeMatcher( TestLauncher,
                                         ( 28, 16 ),
                                         ( 28, 28 ) ) ),
       'fixit_available': False
@@ -184,7 +181,7 @@ DIAG_MATCHERS_PER_FILE = {
               'must override or implement a supertype method [67109498]',
       'location': LocationMatcher( TestLauncher, 30, 19 ),
       'location_extent': RangeMatcher( TestLauncher, ( 30, 19 ), ( 30, 27 ) ),
-      'ranges': contains( RangeMatcher( TestLauncher,
+      'ranges': contains_exactly( RangeMatcher( TestLauncher,
                                         ( 30, 19 ),
                                         ( 30, 27 ) ) ),
       'fixit_available': False
@@ -195,13 +192,13 @@ DIAG_MATCHERS_PER_FILE = {
               '[33554506]',
       'location': LocationMatcher( TestLauncher, 31, 32 ),
       'location_extent': RangeMatcher( TestLauncher, ( 31, 32 ), ( 31, 39 ) ),
-      'ranges': contains( RangeMatcher( TestLauncher,
+      'ranges': contains_exactly( RangeMatcher( TestLauncher,
                                         ( 31, 32 ),
                                         ( 31, 39 ) ) ),
       'fixit_available': False
     } ),
   ),
-  youcompleteme_Test: contains(
+  youcompleteme_Test: contains_exactly(
     has_entries( {
       'kind': 'ERROR',
       'text': 'The method doUnicødeTes() in the type Test is not applicable '
@@ -210,7 +207,7 @@ DIAG_MATCHERS_PER_FILE = {
       'location_extent': RangeMatcher( youcompleteme_Test,
                                        ( 13, 10 ),
                                        ( 13, 23 ) ),
-      'ranges': contains( RangeMatcher( youcompleteme_Test,
+      'ranges': contains_exactly( RangeMatcher( youcompleteme_Test,
                                         ( 13, 10 ),
                                         ( 13, 23 ) ) ),
       'fixit_available': False
@@ -253,6 +250,24 @@ def _WaitForDiagnosticsForFile( app,
 
 @WithRetry
 @SharedYcmd
+def Diagnostics_DetailedDiags_test( app ):
+  filepath = TestFactory
+  contents = ReadFile( filepath )
+  WaitForDiagnosticsToBeReady( app, filepath, contents, 'java' )
+  request_data = BuildRequest( contents = contents,
+                               filepath = filepath,
+                               filetype = 'java',
+                               line_num = 15,
+                               column_num = 19 )
+
+  results = app.post_json( '/detailed_diagnostic', request_data ).json
+  assert_that( results, has_entry(
+      'message',
+      'The value of the field TestFactory.Bar.testString is not used' ) )
+
+
+@WithRetry
+@SharedYcmd
 def FileReadyToParse_Diagnostics_Simple_test( app ):
   filepath = ProjectPath( 'TestFactory.java' )
   contents = ReadFile( filepath )
@@ -286,15 +301,16 @@ def FileReadyToParse_Diagnostics_FileNotOnDisk_test( app ):
 
   # This is a new file, so the diagnostics can't possibly be available when the
   # initial parse request is sent. We receive these asynchronously.
-  eq_( results, {} )
+  assert_that( results, empty() )
 
-  diag_matcher = contains( has_entries( {
+  diag_matcher = contains_exactly( has_entries( {
     'kind': 'ERROR',
     'text': 'Syntax error, insert ";" to complete ClassBodyDeclarations '
             '[1610612976]',
     'location': LocationMatcher( filepath, 4, 21 ),
     'location_extent': RangeMatcher( filepath, ( 4, 21 ), ( 4, 25 ) ),
-    'ranges': contains( RangeMatcher( filepath, ( 4, 21 ), ( 4, 25 ) ) ),
+    'ranges': contains_exactly(
+      RangeMatcher( filepath, ( 4, 21 ), ( 4, 25 ) ) ),
     'fixit_available': False
   } ) )
 
@@ -333,7 +349,7 @@ def Poll_Diagnostics_ProjectWide_Eclipse_test( app ):
   contents = ReadFile( filepath )
 
   # Poll until we receive _all_ the diags asynchronously
-  to_see = sorted( iterkeys( DIAG_MATCHERS_PER_FILE ) )
+  to_see = sorted( DIAG_MATCHERS_PER_FILE.keys() )
   seen = {}
 
   try:
@@ -353,11 +369,11 @@ def Poll_Diagnostics_ProjectWide_Eclipse_test( app ):
           'filepath': message[ 'filepath' ]
         } ) )
 
-      if sorted( iterkeys( seen ) ) == to_see:
+      if sorted( seen.keys() ) == to_see:
         break
       else:
         print( 'Seen diagnostics for {0}, still waiting for {1}'.format(
-          json.dumps( sorted( iterkeys( seen ) ), indent=2 ),
+          json.dumps( sorted( seen.keys() ), indent=2 ),
           json.dumps( [ x for x in to_see if x not in seen ], indent=2 ) ) )
 
       # Eventually PollForMessages will throw
@@ -369,7 +385,7 @@ def Poll_Diagnostics_ProjectWide_Eclipse_test( app ):
       'Timed out waiting for full set of diagnostics. '
       'Expected to see diags for {0}, but only saw {1}.'.format(
         json.dumps( to_see, indent=2 ),
-        json.dumps( sorted( iterkeys( seen ) ), indent=2 ) ) )
+        json.dumps( sorted( seen.keys() ), indent=2 ) ) )
 
 
 @contextlib.contextmanager
@@ -443,7 +459,7 @@ public class Test {
           messages_for_filepath,
           has_item( has_entries( {
             'filepath': filepath,
-            'diagnostics': contains(
+            'diagnostics': contains_exactly(
               has_entries( {
                 'kind': 'ERROR',
                 'text': 'Duplicate field Test.test [33554772]',
@@ -451,7 +467,7 @@ public class Test {
                 'location_extent': RangeMatcher( youcompleteme_Test,
                                                  ( 4, 17 ),
                                                  ( 4, 21 ) ),
-                'ranges': contains( RangeMatcher( youcompleteme_Test,
+                'ranges': contains_exactly( RangeMatcher( youcompleteme_Test,
                                                   ( 4, 17 ),
                                                   ( 4, 21 ) ) ),
                 'fixit_available': False
@@ -463,7 +479,7 @@ public class Test {
                 'location_extent': RangeMatcher( youcompleteme_Test,
                                                  ( 5, 17 ),
                                                  ( 5, 21 ) ),
-                'ranges': contains( RangeMatcher( youcompleteme_Test,
+                'ranges': contains_exactly( RangeMatcher( youcompleteme_Test,
                                                   ( 5, 17 ),
                                                   ( 5, 21 ) ) ),
                 'fixit_available': False
@@ -762,4 +778,4 @@ def PollForMessages_AbortedWhenServerDies_test( app ):
   )
 
   message_poll_task.join()
-  eq_( state[ 'aborted' ], True )
+  assert_that( state[ 'aborted' ] )

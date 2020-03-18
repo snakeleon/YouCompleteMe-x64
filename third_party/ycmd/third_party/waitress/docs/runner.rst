@@ -3,14 +3,10 @@
 waitress-serve
 --------------
 
-Waitress comes bundled with a thin command-line wrapper around the
-``waitress.serve`` function called ``waitress-serve``. This is useful for
-development, and in production situations where serving of static assets is
-delegated to a reverse proxy, such as Nginx or Apache.
+.. versionadded:: 0.8.4
 
-.. note::
-
-   This feature is new as of Waitress 0.8.4.
+    Waitress comes bundled with a thin command-line wrapper around the ``waitress.serve`` function called ``waitress-serve``.
+    This is useful for development, and in production situations where serving of static assets is delegated to a reverse proxy, such as nginx or Apache.
 
 ``waitress-serve`` takes the very same :ref:`arguments <arguments>` as the
 ``waitress.serve`` function, but where the function's arguments have
@@ -147,19 +143,26 @@ Tuning options:
     8192.
 
 ``--send-bytes=INT``
-    Number of bytes to send to socket.send(). Default is 18000.
+    Number of bytes to send to socket.send(). Default is 1.
     Multiples of 9000 should avoid partly-filled TCP packets.
+
+    .. deprecated:: 1.3
 
 ``--outbuf-overflow=INT``
     A temporary file should be created if the pending output is larger than
     this. Default is 1048576 (1MB).
+
+``--outbuf-high-watermark=INT``
+    The app_iter will pause when pending output is larger than this value
+    and will resume once enough data is written to the socket to fall below
+    this threshold. Default is 16777216 (16MB).
 
 ``--inbuf-overflow=INT``
     A temporary file should be created if the pending input is larger than
     this. Default is 524288 (512KB).
 
 ``--connection-limit=INT``
-    Stop creating new channelse if too many are already active.  Default is
+    Stop creating new channels if too many are already active.  Default is
     100.
 
 ``--cleanup-interval=INT``
@@ -168,11 +171,11 @@ Tuning options:
 
 ``--channel-timeout=INT``
     Maximum number of seconds to leave inactive connections open.  Default is
-    120. 'Inactive' is defined as 'has recieved no data from the client and has
+    120. 'Inactive' is defined as 'has received no data from the client and has
     sent no data to the client'.
 
 ``--[no-]log-socket-errors``
-    Toggle whether premature client disconnect tracepacks ought to be logged.
+    Toggle whether premature client disconnect tracebacks ought to be logged.
     On by default.
 
 ``--max-request-header-size=INT``

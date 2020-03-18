@@ -15,18 +15,11 @@
 # You should have received a copy of the GNU General Public License
 # along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
 from ycm.tests.test_utils import MockVimModule, MockVimBuffers, VimBuffer
 MockVimModule()
 
-from hamcrest import assert_that, contains, has_entries
-from mock import patch
+from hamcrest import assert_that, contains_exactly, has_entries
+from unittest.mock import patch
 
 from ycm.tests import YouCompleteMeInstance
 
@@ -40,8 +33,8 @@ def SendCommandRequest_ExtraConfVimData_Works_test( ycm ):
       assert_that(
         # Positional arguments passed to SendCommandRequest.
         send_request.call_args[ 0 ],
-        contains(
-          contains( 'GoTo' ),
+        contains_exactly(
+          contains_exactly( 'GoTo' ),
           'aboveleft',
           'same-buffer',
           has_entries( {
@@ -66,8 +59,8 @@ def SendCommandRequest_ExtraConfData_UndefinedValue_test( ycm ):
       assert_that(
         # Positional arguments passed to SendCommandRequest.
         send_request.call_args[ 0 ],
-        contains(
-          contains( 'GoTo' ),
+        contains_exactly(
+          contains_exactly( 'GoTo' ),
           'belowright',
           'same-buffer',
           has_entries( {

@@ -17,7 +17,8 @@ the brackets) _before_ filing your issue:**
 - [ ] If filing a bug report, I have included which OS (including specific OS
   version) I am using.
 - [ ] If filing a bug report, I have included a minimal test case that reproduces
-  my issue, including what I expected to happen and what actually happened.
+  my issue, using `vim -Nu /path/to/YCM/vimrc_ycm_minimal`, including what I
+  expected to happen and what actually happened.
 - [ ] If filing a installation failure report, I have included the entire output
   of `install.py` (or `cmake`/`make`/`ninja`) including its invocation
 - [ ] **I understand this is an open-source project staffed by volunteers and
@@ -38,8 +39,18 @@ quickly and that neither your nor our time is needlessly wasted.
 
 > Include steps to reproduce here.
 
+1. `vim -Nu /path/to/YCM/ycm_vimrc_minimal`
+2. `:edit test.py`
+3. Enter insert mode and type `.....`
+
 > Include description of a minimal test case, including any actual code required
 > to reproduce the issue.
+
+> If you made changes to `vimrc_ycm_minimal`, pase them here:
+
+```
+<contents of ycm_vimrc_minimal>
+```
 
 * What did you expect to happen?
 
@@ -54,17 +65,27 @@ quickly and that neither your nor our time is needlessly wasted.
 
 ## Output of `vim --version`
 
-> Place the output here, or a link to a [gist][].
+```
+Paste output here
+```
 
 ## Output of `YcmDebugInfo`
 
-> Place the output here, or a link to a [gist][].
+```
+Paste output here
+```
+
+## Output of `YcmDiags`
+
+```
+Paste output here
+```
 
 ## Contents of YCM, ycmd and completion engine logfiles
 
-> Add `let g:ycm_log_level = 'debug'` to vimrc, restart Vim, reproduce the
-> issue, and include link here to a [gist][] containing the entire logfiles for
-> ycm, ycmd and any completer logfiles listed by `:YcmToggleLogs`.
+> Reproduce the issue with `vim -Nu /path/to/YCM/vimrc_ycm_minimal`, which
+> enabled debug logging and other useful diagnostics.  Include a link to a
+> [gist][] containing all of the log files listed by `:YcmToggleLogs`.
 
 ## OS version, distribution, etc.
 
@@ -75,9 +96,9 @@ quickly and that neither your nor our time is needlessly wasted.
 > Include link to a [gist][] containing the invocation and entire output of
 > `install.py` if reporting an installation issue.
 
-[cont]: https://github.com/Valloric/YouCompleteMe/blob/master/CONTRIBUTING.md
-[code]: https://github.com/Valloric/YouCompleteMe/blob/master/CODE_OF_CONDUCT.md
-[readme]: https://github.com/Valloric/YouCompleteMe/blob/master/README.md
-[faq]: https://github.com/Valloric/YouCompleteMe/blob/master/README.md#faq
-[search]: https://www.google.com/search?q=site%3Ahttps%3A%2F%2Fgithub.com%2FValloric%2FYouCompleteMe%2Fissues%20python%20mac
+[cont]: https://github.com/ycm-core/YouCompleteMe/blob/master/CONTRIBUTING.md
+[code]: https://github.com/ycm-core/YouCompleteMe/blob/master/CODE_OF_CONDUCT.md
+[readme]: https://github.com/ycm-core/YouCompleteMe/blob/master/README.md
+[faq]: https://github.com/ycm-core/YouCompleteMe/wiki/FAQ
+[search]: https://www.google.com/search?q=site%3Ahttps%3A%2F%2Fgithub.com%2Fycm-core%2FYouCompleteMe%2Fissues%20python%20mac
 [gist]: https://gist.github.com/

@@ -1,5 +1,4 @@
-# Copyright (C) 2017-2018 ycmd contributors
-# encoding: utf-8
+# Copyright (C) 2017-2020 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -16,30 +15,29 @@
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import absolute_import
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
 import functools
 import os
 import psutil
 import requests
 import time
 
-from mock import patch
-from hamcrest import assert_that, contains, equal_to, has_entry
+from unittest.mock import patch
+from hamcrest import ( assert_that,
+                       contains_exactly,
+                       equal_to,
+                       has_entries,
+                       has_entry,
+                       has_item,
+                       starts_with )
 from ycmd.tests.java import ( PathToTestFile,
                               IsolatedYcmd,
                               SharedYcmd,
-                              StartJavaCompleterServerInDirectory )
+                              StartJavaCompleterServerInDirectory,
+                              StartJavaCompleterServerWithFile )
 from ycmd.tests.test_utils import ( BuildRequest,
                                     CompleterProjectDirectoryMatcher,
                                     ErrorMatcher,
                                     MockProcessTerminationTimingOut,
-                                    NoWinPy2,
                                     TemporaryTestDir,
                                     WaitUntilCompleterServerReady )
 from ycmd import utils, handlers
@@ -118,13 +116,12 @@ def ServerManagement_RestartServer_test( app ):
                CompleterProjectDirectoryMatcher( maven_project ) )
 
 
-def ServerManagement_WipeWorkspace_NoConfig_test():
-  with TemporaryTestDir() as test_dir:
-    @IsolatedYcmd( {
+def ServerManagement_WipeWorkspace_NoConfig_test( isolated_app ):
+  with TemporaryTestDir() as tmp_dir:
+    with isolated_app( {
       'java_jdtls_use_clean_workspace': 1,
-      'java_jdtls_workspace_root_path': test_dir
-    } )
-    def ServerManagement_WipeWorkspace_NoConfig( app ):
+      'java_jdtls_workspace_root_path': tmp_dir
+    } ) as app:
       StartJavaCompleterServerInDirectory(
         app, PathToTestFile( 'simple_eclipse_project', 'src' ) )
 
@@ -152,16 +149,29 @@ def ServerManagement_WipeWorkspace_NoConfig_test():
                                      filepath = filepath ) ).json,
         CompleterProjectDirectoryMatcher( project ) )
 
-  yield ServerManagement_WipeWorkspace_NoConfig
+      assert_that(
+        app.post_json( '/debug_info',
+                       BuildRequest( filetype = 'java',
+                                     filepath = filepath ) ).json,
+        has_entry(
+          'completer',
+          has_entry( 'servers', contains_exactly(
+            has_entry( 'extras', has_item(
+              has_entries( {
+                'key': 'Workspace Path',
+                'value': starts_with( tmp_dir ),
+              } )
+            ) )
+          ) )
+        ) )
 
 
-def ServerManagement_WipeWorkspace_WithConfig_test():
-  with TemporaryTestDir() as test_dir:
-    @IsolatedYcmd( {
+def ServerManagement_WipeWorkspace_WithConfig_test( isolated_app ):
+  with TemporaryTestDir() as tmp_dir:
+    with isolated_app( {
       'java_jdtls_use_clean_workspace': 1,
-      'java_jdtls_workspace_root_path': test_dir
-    } )
-    def ServerManagement_WipeWorkspace_WithConfig( app ):
+      'java_jdtls_workspace_root_path': tmp_dir
+    } ) as app:
       StartJavaCompleterServerInDirectory(
         app, PathToTestFile( 'simple_eclipse_project', 'src' ) )
 
@@ -189,7 +199,44 @@ def ServerManagement_WipeWorkspace_WithConfig_test():
                                      filepath = filepath ) ).json,
         CompleterProjectDirectoryMatcher( project ) )
 
-    yield ServerManagement_WipeWorkspace_WithConfig
+      assert_that(
+        app.post_json( '/debug_info',
+                       BuildRequest( filetype = 'java',
+                                     filepath = filepath ) ).json,
+        has_entry(
+          'completer',
+          has_entry( 'servers', contains_exactly(
+            has_entry( 'extras', has_item(
+              has_entries( {
+                'key': 'Workspace Path',
+                'value': starts_with( tmp_dir ),
+              } )
+            ) )
+          ) )
+        ) )
+
+
+@IsolatedYcmd( {
+  'extra_conf_globlist': PathToTestFile( 'multiple_projects', '*' )
+} )
+def ServerManagement_ProjectDetection_MultipleProjects_test( app ):
+  # The ycm_extra_conf.py file should set the project path to
+  # multiple_projects/src
+  project = PathToTestFile( 'multiple_projects', 'src' )
+  StartJavaCompleterServerWithFile( app,
+                                    os.path.join( project,
+                                                  'core',
+                                                  'java',
+                                                  'com',
+                                                  'puremourning',
+                                                  'widget',
+                                                  'core',
+                                                  'Utils.java' ) )
+
+  # Run the debug info to check that we have the correct project dir
+  request_data = BuildRequest( filetype = 'java' )
+  assert_that( app.post_json( '/debug_info', request_data ).json,
+               CompleterProjectDirectoryMatcher( project ) )
 
 
 @IsolatedYcmd()
@@ -246,109 +293,6 @@ def ServerManagement_ProjectDetection_MavenParent_Submodule_test( app ):
                CompleterProjectDirectoryMatcher( project ) )
 
 
-@NoWinPy2
-@TidyJDTProjectFiles( PathToTestFile( 'simple_gradle_project' ) )
-@IsolatedYcmd()
-def ServerManagement_ProjectDetection_GradleParent_test( app ):
-  StartJavaCompleterServerInDirectory( app,
-                                       PathToTestFile( 'simple_gradle_project',
-                                                       'src',
-                                                       'main',
-                                                       'java',
-                                                       'com',
-                                                       'test' ) )
-
-  project = PathToTestFile( 'simple_gradle_project' )
-
-  # Run the debug info to check that we have the correct project dir
-  request_data = BuildRequest( filetype = 'java' )
-  assert_that( app.post_json( '/debug_info', request_data ).json,
-               CompleterProjectDirectoryMatcher( project ) )
-
-
-@NoWinPy2
-@TidyJDTProjectFiles( PathToTestFile( 'simple_gradle_project' ) )
-@TidyJDTProjectFiles( PathToTestFile( 'simple_maven_project' ) )
-@IsolatedYcmd()
-def ServerManagement_OpenProject_AbsolutePath_test( app ):
-  StartJavaCompleterServerInDirectory( app,
-                                       PathToTestFile( 'simple_gradle_project',
-                                                       'src',
-                                                       'main',
-                                                       'java',
-                                                       'com',
-                                                       'test' ) )
-
-  # Initially, we detect the gradle project...
-  gradle_project = PathToTestFile( 'simple_gradle_project' )
-  maven_project = PathToTestFile( 'simple_maven_project' )
-
-  # Run the debug info to check that we have the correct project dir
-  request_data = BuildRequest( filetype = 'java' )
-  assert_that( app.post_json( '/debug_info', request_data ).json,
-               CompleterProjectDirectoryMatcher( gradle_project ) )
-
-
-  # We then force it to reload the maven project
-  app.post_json(
-    '/run_completer_command',
-    BuildRequest(
-      filetype = 'java',
-      command_arguments = [ 'OpenProject', maven_project ],
-    ),
-  )
-
-  # Run the debug info to check that we now have the maven project, without
-  # changing anything else
-  request_data = BuildRequest( filetype = 'java' )
-  assert_that( app.post_json( '/debug_info', request_data ).json,
-               CompleterProjectDirectoryMatcher( maven_project ) )
-
-
-@NoWinPy2
-@TidyJDTProjectFiles( PathToTestFile( 'simple_gradle_project' ) )
-@TidyJDTProjectFiles( PathToTestFile( 'simple_maven_project' ) )
-@IsolatedYcmd()
-def ServerManagement_OpenProject_RelativePath_test( app ):
-  StartJavaCompleterServerInDirectory( app,
-                                       PathToTestFile( 'simple_gradle_project',
-                                                       'src',
-                                                       'main',
-                                                       'java',
-                                                       'com',
-                                                       'test' ) )
-
-  # Initially, we detect the gradle project...
-  gradle_project = PathToTestFile( 'simple_gradle_project' )
-  maven_project = PathToTestFile( 'simple_maven_project' )
-
-  # Run the debug info to check that we have the correct project dir
-  request_data = BuildRequest( filetype = 'java' )
-  assert_that( app.post_json( '/debug_info', request_data ).json,
-               CompleterProjectDirectoryMatcher( gradle_project ) )
-
-
-  # We then force it to reload the maven project
-  app.post_json(
-    '/run_completer_command',
-    BuildRequest(
-      filetype = 'java',
-      command_arguments = [
-        'OpenProject',
-        os.path.join( '..', 'simple_maven_project' ),
-      ],
-      working_dir = gradle_project,
-    ),
-  )
-
-  # Run the debug info to check that we now have the maven project, without
-  # changing anything else
-  request_data = BuildRequest( filetype = 'java' )
-  assert_that( app.post_json( '/debug_info', request_data ).json,
-               CompleterProjectDirectoryMatcher( maven_project ) )
-
-
-
 @SharedYcmd
 def ServerManagement_OpenProject_RelativePathNoWD_test( app ):
   response = app.post_json(
@@ -388,26 +332,21 @@ def ServerManagement_OpenProject_RelativePathNoPath_test( app ):
                              'Usage: OpenProject <project directory>' ) )
 
 
-def ServerManagement_ProjectDetection_NoParent_test():
+@IsolatedYcmd()
+def ServerManagement_ProjectDetection_NoParent_test( app ):
   with TemporaryTestDir() as tmp_dir:
-
-    @IsolatedYcmd()
-    def Test( app ):
-      StartJavaCompleterServerInDirectory( app, tmp_dir )
-
-      # Run the debug info to check that we have the correct project dir (cwd)
-      request_data = BuildRequest( filetype = 'java' )
-      assert_that( app.post_json( '/debug_info', request_data ).json,
-                   CompleterProjectDirectoryMatcher( tmp_dir ) )
-
-    yield Test
+    StartJavaCompleterServerInDirectory( app, tmp_dir )
+    # Run the debug info to check that we have the correct project dir (cwd)
+    request_data = BuildRequest( filetype = 'java' )
+    assert_that( app.post_json( '/debug_info', request_data ).json,
+                 CompleterProjectDirectoryMatcher( tmp_dir ) )
 
 
 @IsolatedYcmd()
 @patch( 'shutil.rmtree', side_effect = OSError )
 @patch( 'ycmd.utils.WaitUntilProcessIsTerminated',
         MockProcessTerminationTimingOut )
-def ServerManagement_CloseServer_Unclean_test( app, *args ):
+def ServerManagement_CloseServer_Unclean_test( rm, app ):
   StartJavaCompleterServerInDirectory(
     app, PathToTestFile( 'simple_eclipse_project' ) )
 
@@ -423,7 +362,7 @@ def ServerManagement_CloseServer_Unclean_test( app, *args ):
   assert_that( app.post_json( '/debug_info', request_data ).json,
                has_entry(
                  'completer',
-                 has_entry( 'servers', contains(
+                 has_entry( 'servers', contains_exactly(
                    has_entry( 'is_running', False )
                  ) )
                ) )
@@ -446,7 +385,7 @@ def ServerManagement_StopServerTwice_test( app ):
   assert_that( app.post_json( '/debug_info', request_data ).json,
                has_entry(
                  'completer',
-                 has_entry( 'servers', contains(
+                 has_entry( 'servers', contains_exactly(
                    has_entry( 'is_running', False )
                  ) )
                ) )
@@ -465,7 +404,7 @@ def ServerManagement_StopServerTwice_test( app ):
   assert_that( app.post_json( '/debug_info', request_data ).json,
                has_entry(
                  'completer',
-                 has_entry( 'servers', contains(
+                 has_entry( 'servers', contains_exactly(
                    has_entry( 'is_running', False )
                  ) )
                ) )
@@ -496,7 +435,7 @@ def ServerManagement_ServerDies_test( app ):
   assert_that( debug_info,
                has_entry(
                  'completer',
-                 has_entry( 'servers', contains(
+                 has_entry( 'servers', contains_exactly(
                    has_entry( 'is_running', False )
                  ) )
                ) )
@@ -542,7 +481,7 @@ def ServerManagement_ServerDiesWhileShuttingDown_test( app ):
   assert_that( debug_info,
                has_entry(
                  'completer',
-                 has_entry( 'servers', contains(
+                 has_entry( 'servers', contains_exactly(
                    has_entry( 'is_running', False )
                  ) )
                ) )
@@ -583,7 +522,7 @@ def ServerManagement_ConnectionRaisesWhileShuttingDown_test( app ):
   assert_that( debug_info,
                has_entry(
                  'completer',
-                 has_entry( 'servers', contains(
+                 has_entry( 'servers', contains_exactly(
                    has_entry( 'is_running', False )
                  ) )
                ) )

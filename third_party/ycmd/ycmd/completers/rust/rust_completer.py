@@ -1,4 +1,4 @@
-# Copyright (C) 2015-2019 ycmd contributors
+# Copyright (C) 2015-2020 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -15,21 +15,12 @@
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
 import logging
 import os
-from future.utils import itervalues
 from subprocess import PIPE
 
 from ycmd import responses, utils
-from ycmd.completers.language_server import ( simple_language_server_completer,
-                                              language_server_completer )
+from ycmd.completers.language_server import simple_language_server_completer
 from ycmd.utils import LOGGER, re
 
 
@@ -68,26 +59,11 @@ def ShouldEnableRustCompleter():
   return True
 
 
-def _ApplySuggestionsToFixIt( request_data, command ):
-  LOGGER.debug( 'command = %s', command )
-  args = command[ 'arguments' ]
-  text_edits = [ { 'range': args[ 0 ][ 'range' ], 'newText': args[ 1 ] } ]
-  uri = args[ 0 ][ 'uri' ]
-  return responses.FixIt(
-    responses.Location( request_data[ 'line_num' ],
-                        request_data[ 'column_num' ],
-                        request_data[ 'filepath' ] ),
-    language_server_completer.TextEditToChunks( request_data,
-                                                uri,
-                                                text_edits ),
-    args[ 1 ] )
-
-
 class RustCompleter( simple_language_server_completer.SimpleLSPCompleter ):
 
   def _Reset( self ):
     with self._server_state_mutex:
-      super( RustCompleter, self )._Reset()
+      super()._Reset()
       self._server_progress = {}
 
 
@@ -103,10 +79,10 @@ class RustCompleter( simple_language_server_completer.SimpleLSPCompleter ):
     env = os.environ.copy()
     # Force RLS to use the rustc from the toolchain in third_party/rls.
     # TODO: allow users to pick a custom toolchain.
-    utils.SetEnviron( env, 'RUSTC', RUSTC_EXECUTABLE )
+    env[ 'RUSTC' ] = RUSTC_EXECUTABLE
     if LOGGER.isEnabledFor( logging.DEBUG ):
-      utils.SetEnviron( env, 'RUST_LOG', 'rls=trace' )
-      utils.SetEnviron( env, 'RUST_BACKTRACE', '1' )
+      env[ 'RUST_LOG' ] = 'rls=trace'
+      env[ 'RUST_BACKTRACE' ] = '1'
     return env
 
 
@@ -124,10 +100,10 @@ class RustCompleter( simple_language_server_completer.SimpleLSPCompleter ):
     # See
     # https://github.com/rust-lang/rls/blob/master/contributing.md#rls-to-lsp-client
     # for detail on the progress steps.
-    return ( super( RustCompleter, self ).ServerIsReady() and
+    return ( super().ServerIsReady() and
              self._server_progress and
-             set( itervalues( self._server_progress ) ) == { 'building done',
-                                                             'indexing done' } )
+             set( self._server_progress.values() ) == { 'building done',
+                                                        'indexing done' } )
 
 
   def SupportedFiletypes( self ):
@@ -140,28 +116,10 @@ class RustCompleter( simple_language_server_completer.SimpleLSPCompleter ):
     return []
 
 
-  def GetCustomSubcommands( self ):
-    return {
-      'GetDoc': (
-        lambda self, request_data, args: self.GetDoc( request_data )
-      ),
-      'GetType': (
-        lambda self, request_data, args: self.GetType( request_data )
-      ),
-      'FixIt': (
-        lambda self, request_data, args: self.GetCodeActions( request_data,
-                                                              args )
-      ),
-      'RestartServer': (
-        lambda self, request_data, args: self._RestartServer( request_data )
-      )
-    }
-
-
-  def CommonDebugItems( self ):
+  def ExtraDebugItems( self, request_data ):
     project_state = ', '.join(
-      set( itervalues( self._server_progress ) ) ).capitalize()
-    return super( RustCompleter, self ).CommonDebugItems() + [
+      set( self._server_progress.values() ) ).capitalize()
+    return [
       responses.DebugInfoItem( 'Project State', project_state ),
       responses.DebugInfoItem( 'Version', _GetRlsVersion() )
     ]
@@ -192,7 +150,7 @@ class RustCompleter( simple_language_server_completer.SimpleLSPCompleter ):
       with self._server_info_mutex:
         self._server_progress[ progress_id ] = message
 
-    super( RustCompleter, self ).HandleNotificationInPollThread( notification )
+    super().HandleNotificationInPollThread( notification )
 
 
   def GetType( self, request_data ):
@@ -220,14 +178,3 @@ class RustCompleter( simple_language_server_completer.SimpleLSPCompleter ):
       raise RuntimeError( 'No documentation available for current context.' )
 
     return responses.BuildDetailedInfoResponse( documentation )
-
-
-  def HandleServerCommand( self, request_data, command ):
-    # NOTE: This assumes there's only a single FixItChunk to be applied,
-    # because I could not get RLS to return more.
-    if command[ 'command' ].startswith( 'rls.deglobImports' ):
-      arg = command[ 'arguments' ][ 0 ]
-      command[ 'arguments' ] = [ arg[ 'location' ], arg[ 'new_text' ] ]
-      return _ApplySuggestionsToFixIt( request_data, command )
-    if command[ 'command' ].startswith( 'rls.applySuggestion' ):
-      return _ApplySuggestionsToFixIt( request_data, command )

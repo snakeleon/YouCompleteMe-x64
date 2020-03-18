@@ -30,7 +30,7 @@ def get_executable_nodes(node, last_added=False):
         if last_added is False and node.parent.type != 'param' and next_leaf != '=':
             result.append(node)
     elif typ == 'expr_stmt':
-        # I think evaluating the statement (and possibly returned arrays),
+        # I think inferring the statement (and possibly returned arrays),
         # should be enough for static analysis.
         result.append(node)
         for child in node.children:
@@ -94,21 +94,6 @@ def get_flow_branch_keyword(flow_node, node):
     return 0
 
 
-def get_statement_of_position(node, pos):
-    for c in node.children:
-        if c.start_pos <= pos <= c.end_pos:
-            if c.type not in ('decorated', 'simple_stmt', 'suite',
-                              'async_stmt', 'async_funcdef') \
-                    and not isinstance(c, (tree.Flow, tree.ClassOrFunc)):
-                return c
-            else:
-                try:
-                    return get_statement_of_position(c, pos)
-                except AttributeError:
-                    pass  # Must be a non-scope
-    return None
-
-
 def clean_scope_docstring(scope_node):
     """ Returns a cleaned version of the docstring token. """
     node = scope_node.get_doc_node()
@@ -121,6 +106,21 @@ def clean_scope_docstring(scope_node):
         # Since we want the docstr output to be always unicode, just
         # force it.
         return force_unicode(cleaned)
+    return ''
+
+
+def find_statement_documentation(tree_node):
+    if tree_node.type == 'expr_stmt':
+        tree_node = tree_node.parent  # simple_stmt
+        maybe_string = tree_node.get_next_sibling()
+        if maybe_string is not None:
+            if maybe_string.type == 'simple_stmt':
+                maybe_string = maybe_string.children[0]
+                if maybe_string.type == 'string':
+                    cleaned = cleandoc(safe_literal_eval(maybe_string.value))
+                    # Since we want the docstr output to be always unicode, just
+                    # force it.
+                    return force_unicode(cleaned)
     return ''
 
 
@@ -142,10 +142,10 @@ def safe_literal_eval(value):
         return ''
 
 
-def get_call_signature(funcdef, width=72, call_string=None,
-                       omit_first_param=False, omit_return_annotation=False):
+def get_signature(funcdef, width=72, call_string=None,
+                  omit_first_param=False, omit_return_annotation=False):
     """
-    Generate call signature of this function.
+    Generate a string signature of a function.
 
     :param width: Fold lines if a line is longer than this value.
     :type width: int
@@ -293,5 +293,21 @@ def cut_value_at_position(leaf, position):
     return ''.join(lines)
 
 
-def get_string_quote(leaf):
-    return re.match('\w*("""|\'{3}|"|\')', leaf.value).group(1)
+def _function_is_x_method(method_name):
+    def wrapper(function_node):
+        """
+        This is a heuristic. It will not hold ALL the times, but it will be
+        correct pretty much for anyone that doesn't try to beat it.
+        staticmethod/classmethod are builtins and unless overwritten, this will
+        be correct.
+        """
+        for decorator in function_node.get_decorators():
+            dotted_name = decorator.children[1]
+            if dotted_name.get_code() == method_name:
+                return True
+        return False
+    return wrapper
+
+
+function_is_staticmethod = _function_is_x_method('staticmethod')
+function_is_classmethod = _function_is_x_method('classmethod')

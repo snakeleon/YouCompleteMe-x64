@@ -1,4 +1,4 @@
-# Copyright (C) 2013 Google Inc.
+# Copyright (C) 2020 ycmd contributors
 #
 # This file is part of ycmd.
 #
@@ -15,25 +15,17 @@
 # You should have received a copy of the GNU General Public License
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import unicode_literals
-from __future__ import print_function
-from __future__ import division
-from __future__ import absolute_import
-# Not installing aliases from python-future; it's unreliable and slow.
-from builtins import *  # noqa
-
 import json
 import os
-from frozendict import frozendict
 
-from ycmd.utils import ReadFile
+from ycmd.utils import HashableDict, ReadFile
 
 _USER_OPTIONS = {}
 
 
 def SetAll( new_options ):
   global _USER_OPTIONS
-  _USER_OPTIONS = frozendict( new_options )
+  _USER_OPTIONS = HashableDict( new_options )
 
 
 def GetAll():
