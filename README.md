@@ -3109,11 +3109,11 @@ This software is licensed under the [GPL v3 license][gpl].
 " 按操作系统选择使用版本:
 
     if has("win64")
-        Bundle 'snakeleon/YouCompleteMe-x64'
+        Plug 'snakeleon/YouCompleteMe-x64'
     elseif has("win32")
-        Bundle 'snakeleon/YouCompleteMe-x86'
+        Plug 'snakeleon/YouCompleteMe-x86'
     else
-        Bundle 'Valloric/YouCompleteMe'
+        Plug 'Valloric/YouCompleteMe'
     endif
 
 - 2.  加载默认全局python脚本 `.ycm_extra_conf.py`(libclang工作方式)，在Vimrc中配置:
@@ -3132,7 +3132,7 @@ This software is licensed under the [GPL v3 license][gpl].
 就将该个项目的 `.ycm_extra_conf.py` 文件放在该项目目录下，注意其中项目语言 如果是C写的项目请将 `'-x'` 项后的 `'c++'` 改为 `'c'` , 补全引擎后台会以.c文件的方式编译检查；
 	其中编译特性使用了c++11 (-std=c++11), 使用时请根据您的项目具体情况进行调整。
 
-- 3.  使用全新 `Clangd` 后端，提供更多的功能和更好的性能, 与 `libclang` 比较它的优势详见：[C-family Semantic Completion][C-family Semantic Completion]
+- 3.  使用全新 `Clangd` 后端，提供更多的功能和更好的性能, 与 `libclang` 比较它的优势详见：[C-family Semantic Completion](#c-family-semantic-completion)
 
 " 查询是否支持 Clangd 语法引擎
 
