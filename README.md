@@ -3137,17 +3137,17 @@ This software is licensed under the [GPL v3 license][gpl].
 " 查询是否支持 Clangd 语法引擎
 
     if g:iswindows
-	    let g:clangd = glob('d:\program files\llvm\bin\clangd*')
+        let g:clangd = glob('d:\program files\llvm\bin\clangd*')
     else
-	    let g:clangd = glob('/usr/bin/clangd*')
-	endif
-	if !empty(g:clangd)
-	    let g:ycm_clangd_binary_path = g:clangd
-		if version >= 802   " VIM 8.2 以上支持 popup 特性
-		" 关闭 echodoc 的帮助说明，使用 clangd 的帮助说明
-		autocmd FileType c,cpp call echodoc#disable()
-		endif
-	endif
+        let g:clangd = glob('/usr/bin/clangd*')
+    endif
+    if !empty(g:clangd)
+        let g:ycm_clangd_binary_path = g:clangd
+        if version >= 802   " VIM 8.2 以上支持 popup 特性
+        " 关闭 echodoc 的帮助说明，使用 clangd 的帮助说明
+        autocmd FileType c,cpp call echodoc#disable()
+        endif
+    endif
 
 - 4.  如果你使用的 VIM for Windows 版本太低或支持的特性不满足自己的需求，自己编译又麻烦；那么特别推荐一个编译好的项目：[Vim builds for Windows][Vim builds for Windows] 此版本更新维护较频繁，官方更新补丁时都会及时跟上。如果大家喜欢或者有任何疑问，可以在页面下方有编译者的 E-Mail 可以联系，或者对其赞助支持。
 
