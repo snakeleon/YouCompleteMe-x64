@@ -3105,50 +3105,47 @@ This software is licensed under the [GPL v3 license][gpl].
 ### 使用技巧
 
 - 1.  自己使用的加载配置项(Vimrc中配置)片段:
-
+```viml
 " 按操作系统选择使用版本:
-
-    if has("win64")
-        Plug 'snakeleon/YouCompleteMe-x64'
-    elseif has("win32")
-        Plug 'snakeleon/YouCompleteMe-x86'
-    else
-        Plug 'Valloric/YouCompleteMe'
-    endif
-
+if has("win64")
+    Plug 'snakeleon/YouCompleteMe-x64'
+elseif has("win32")
+    Plug 'snakeleon/YouCompleteMe-x86'
+else
+    Plug 'Valloric/YouCompleteMe'
+endif
+```
 - 2.  加载默认全局python脚本 `.ycm_extra_conf.py`(libclang工作方式)，在Vimrc中配置:
-
+```viml
 " 加载默认全局脚本配置文件:
-
-    if has("win64")
-        let g:ycm_global_ycm_extra_conf = $VIM.'/vimfiles/bundle/YouCompleteMe-x64/python/.ycm_extra_conf.py'
-    elseif has("win32")
-        let g:ycm_global_ycm_extra_conf = $VIM.'/vimfiles/bundle/YouCompleteMe-x86/python/.ycm_extra_conf.py'
-    else
-        let g:ycm_global_ycm_extra_conf = $HOME.'/.vim/bundle/YouCompleteMe/python/.ycm_extra_conf.py'
-    endif
-
+if has("win64")
+    let g:ycm_global_ycm_extra_conf = $VIM.'/vimfiles/bundle/YouCompleteMe-x64/python/.ycm_extra_conf.py'
+elseif has("win32")
+    let g:ycm_global_ycm_extra_conf = $VIM.'/vimfiles/bundle/YouCompleteMe-x86/python/.ycm_extra_conf.py'
+else
+    let g:ycm_global_ycm_extra_conf = $HOME.'/.vim/bundle/YouCompleteMe/python/.ycm_extra_conf.py'
+endif
+```
 > NOTE: 如果您想针对不同的项目单独设置脚本文件;
 就将该个项目的 `.ycm_extra_conf.py` 文件放在该项目目录下，注意其中项目语言 如果是C写的项目请将 `'-x'` 项后的 `'c++'` 改为 `'c'` , 补全引擎后台会以.c文件的方式编译检查；
 	其中编译特性使用了c++11 (-std=c++11), 使用时请根据您的项目具体情况进行调整。
 
 - 3.  使用全新 `Clangd` 后端，提供更多的功能和更好的性能, 与 `libclang` 比较它的优势详见：[C-family Semantic Completion](#c-family-semantic-completion)
-
+```viml
 " 查询是否支持 Clangd 语法引擎
-
-    if g:iswindows
-        let g:clangd = glob('d:\program files\llvm\bin\clangd*')
-    else
-        let g:clangd = glob('/usr/bin/clangd*')
+if g:iswindows
+    let g:clangd = glob('d:\program files\llvm\bin\clangd*')
+else
+    let g:clangd = glob('/usr/bin/clangd*')
+endif
+if !empty(g:clangd)
+    let g:ycm_clangd_binary_path = g:clangd
+    if version >= 802   " VIM 8.2 以上支持 popup 特性
+    " 关闭 echodoc 的帮助说明，使用 clangd 的帮助说明
+    autocmd FileType c,cpp call echodoc#disable()
     endif
-    if !empty(g:clangd)
-        let g:ycm_clangd_binary_path = g:clangd
-        if version >= 802   " VIM 8.2 以上支持 popup 特性
-        " 关闭 echodoc 的帮助说明，使用 clangd 的帮助说明
-        autocmd FileType c,cpp call echodoc#disable()
-        endif
-    endif
-
+endif
+```
 - 4.  如果你使用的 VIM for Windows 版本太低或支持的特性不满足自己的需求，自己编译又麻烦；那么特别推荐一个编译好的项目：[Vim builds for Windows][Vim builds for Windows] 此版本更新维护较频繁，官方更新补丁时都会及时跟上。如果大家喜欢或者有任何疑问，可以在页面下方有编译者的 E-Mail 可以联系，或者对其赞助支持。
 
 
