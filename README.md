@@ -24,7 +24,7 @@ recently it has been carrying on a simultaneous relationship with Python 3.
 Indeed all of YCM and ycmd code is Python 3 code, with a lot of gubbins
 to make it work also on Python 2. This makes the code more complex,
 requires double testing of everything, and restricts the developers from using
-certain new langauge features, ultimately restricting the features we can
+certain new language features, ultimately restricting the features we can
 deliver to users.
 
 On 1st January 2020, Python 2 will be officially end of life. And therefore, so
@@ -171,7 +171,7 @@ features plus extra:
 
 **And that's not all...**
 
-YCM might be the only vim completion engine with the correct unicode support.
+YCM might be the only vim completion engine with the correct Unicode support.
 Though we do assume UTF-8 everywhere.
 
 ![YouCompleteMe GIF unicode demo](https://user-images.githubusercontent.com/10026824/34471853-af9cf32a-ef53-11e7-8229-de534058ddc4.gif)
@@ -669,6 +669,7 @@ Quick Feature Summary
 * Real-time diagnostic display
 * Go to declaration/definition (`GoTo`, etc.)
 * Go to type definition (`GoToType`)
+* Go to implementation (`GoToImplementation`)
 * Automatically fix certain errors (`FixIt`)
 * View documentation comments for identifiers (`GetDoc`)
 * Type information for identifiers (`GetType`)
@@ -1693,7 +1694,7 @@ Looks up the symbol under the cursor and jumps to its implementation (i.e.
 non-interface). If there are multiple implementations, instead provides a list
 of implementations to choose from.
 
-Supported in filetypes: `cs, java, rust, typescript, javascript`
+Supported in filetypes: `cs, go, java, rust, typescript, javascript`
 
 #### The `GoToImplementationElseDeclaration` subcommand
 
@@ -3018,6 +3019,34 @@ Default: `0`
 let g:ycm_disable_signature_help = 1
 ```
 
+### The `g:ycm_gopls_binary_path` option
+
+In case the system-wide `gopls` binary is newer than the bundled one, setting
+this option to the path of the system-wide `gopls` would make YCM use that one
+instead.
+
+If the path is just `gopls`, YCM will search in `$PATH`.
+
+
+### The `g:ycm_rls_binary_path` and `g:ycm_rustc_binary_path` options
+
+Similar to [the `gopls` path](#the-gycm-gopls-binaty-path), these two options
+tell YCM which `rls` and `rustc` to use.
+
+NOTE: You *need* to either set both or none of these two.
+
+
+### The `g:ycm_tsserver_binary_path` option
+
+Similar to [the `gopls` path](#the-gycm-gopls-binaty-path), this option
+tells YCM where is the TSServer executable located.
+
+### The `g:ycm_roslyn_binary_path` option
+
+Similar to [the `gopls` path](#the-gycm-gopls-binaty-path), this option
+tells YCM where is the Omnisharp-Roslyn executable located.
+
+
 FAQ
 ---
 
@@ -3068,8 +3097,8 @@ This software is licensed under the [GPL v3 license][gpl].
 
 ### 关于版本
 
-- ycm_core  核心版本: 42 (18 March 2020) 静态编译
-- libclang  版本: 9.0.1 (20 December 2019) [Clang][Clang]
+- ycm_core  核心版本: 42 (14 April 2020) 静态编译
+- libclang  版本: 10.0.0 (24 March 2020) [Clang][Clang]
 - Python    支持: 3.8.2 (24 February  2020) [Python][python-win-download]
 
 
