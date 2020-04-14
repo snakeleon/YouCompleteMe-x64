@@ -23,7 +23,6 @@ from ycmd import extra_conf_store, responses
 from ycmd.completers.cpp.flags import ( AddMacIncludePaths,
                                         RemoveUnusedFlags,
                                         ShouldAllowWinStyleFlags )
-from ycmd.completers.language_server import simple_language_server_completer
 from ycmd.completers.language_server import language_server_completer
 from ycmd.completers.language_server import language_server_protocol as lsp
 from ycmd.utils import ( CLANG_RESOURCE_DIR,
@@ -35,7 +34,7 @@ from ycmd.utils import ( CLANG_RESOURCE_DIR,
                          PathsToAllParentFolders,
                          re )
 
-MIN_SUPPORTED_VERSION = ( 9, 0, 0 )
+MIN_SUPPORTED_VERSION = ( 10, 0, 0 )
 INCLUDE_REGEX = re.compile(
   '(\\s*#\\s*(?:include|import)\\s*)(?:"[^"]*|<[^>]*)' )
 NOT_CACHED = 'NOT_CACHED'
@@ -202,7 +201,7 @@ def BuildCompilationCommand( flags, filepath ):
   return flags + [ filepath ]
 
 
-class ClangdCompleter( simple_language_server_completer.SimpleLSPCompleter ):
+class ClangdCompleter( language_server_completer.LanguageServerCompleter ):
   """A LSP-based completer for C-family languages, powered by Clangd.
 
   Supported features:
@@ -224,9 +223,8 @@ class ClangdCompleter( simple_language_server_completer.SimpleLSPCompleter ):
 
 
   def _Reset( self ):
-    with self._server_state_mutex:
-      super()._Reset()
-      self._compilation_commands = {}
+    super()._Reset()
+    self._compilation_commands = {}
 
 
   def GetCompleterName( self ):
@@ -251,15 +249,15 @@ class ClangdCompleter( simple_language_server_completer.SimpleLSPCompleter ):
 
   def GetType( self, request_data ):
     try:
-      # Clangd's hover response looks like this:
-      #     Declared in namespace <namespace name>
-      #
-      #     <declaration line>
-      #
-      #     <docstring>
-      # GetType gets the first two lines.
       hover_value = self.GetHoverResponse( request_data )[ 'value' ]
-      type_info = '\n\n'.join( hover_value.split( '\n\n', 2 )[ : 2 ] )
+      # Last "paragraph" contains the signature/declaration - i.e. type info.
+      type_info = hover_value.split( '\n\n' )[ -1 ]
+      # The first line might contain the info of enclosing scope.
+      if type_info.startswith( '// In' ):
+        comment, signature = type_info.split( '\n', 1 )
+        type_info = signature + '; ' + comment
+      # Condense multi-line function declarations into one line.
+      type_info = re.sub( r'\s+', ' ', type_info )
       return responses.BuildDisplayMessageResponse( type_info )
     except language_server_completer.NoHoverInfoException:
       raise RuntimeError( 'Unknown type.' )

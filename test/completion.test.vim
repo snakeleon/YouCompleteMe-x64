@@ -5,6 +5,9 @@ function! SetUp()
   let g:ycm_keep_logfiles = 1
   let g:ycm_log_level = 'DEBUG'
 
+  " Use the default, which _should_ be the new API
+  unlet! g:ycm_use_completion_api
+
   call youcompleteme#test#setup#SetUp()
 endfunction
 
@@ -12,37 +15,24 @@ function! TearDown()
   call youcompleteme#test#setup#CleanUp()
 endfunction
 
-function! Test_Compl_After_Trigger()
-  call youcompleteme#test#setup#OpenFile(
-        \ '/third_party/ycmd/ycmd/tests/clangd/testdata/basic.cpp', {} )
+exe 'source' expand( "<sfile>:p:h" ) .. '/completion.common.vim'
 
-  call setpos( '.', [ 0, 11, 6 ] )
+function! Test_Using_New_API()
+  let debug_info = split( execute( 'YcmDebugInfo' ), "\n" )
+  enew
+  setf cpp
 
-  " Required to trigger TextChangedI
-  " https://github.com/vim/vim/issues/4665#event-2480928194
-  call test_override( 'char_avail', 1 )
+  call assert_equal( '', &completefunc )
 
-  " Must do the checks in a timer callback because we need to stay in insert
-  " mode until done.
-  function! Check( id ) closure
-    call WaitForAssert( {->
-          \ assert_true( pyxeval( 'ycm_state.GetCurrentCompletionRequest() is not None' ) )
-          \ } )
-    call WaitForAssert( {->
-          \ assert_true( pyxeval( 'ycm_state.CompletionRequestReady()' ) )
-          \ } )
-    redraw
-    call WaitForAssert( {->
-          \ assert_true( pumvisible(), 'pumvisible()' )
-          \ }, 10000 )
-    call feedkeys( "\<ESC>" )
-  endfunction
+  for line in debug_info
+    if line =~# "^-- Completion API: "
+      let ver = substitute( line, "^-- Completion API: ", "", "" )
+      call assert_equal( '1', ver, 'API version' )
+      return
+    endif
+  endfor
 
-  call timer_start( 500, funcref( 'Check' ) )
-  call feedkeys( 'cl.', 'ntx!' )
-  " Checks run in insert mode, then exit insert mode.
-  call assert_false( pumvisible(), 'pumvisible()' )
+  call assert_report( "Didn't find the API version in the YcmDebugInfo" )
 
-  call test_override( 'ALL', 0 )
   %bwipeout!
-endfunctio
+endfunction

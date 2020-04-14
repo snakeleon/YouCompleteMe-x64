@@ -193,11 +193,13 @@ func check(t Testing, gopath string, pass *analysis.Pass, diagnostics []analysis
 			for _, c := range cgroup.List {
 
 				text := strings.TrimPrefix(c.Text, "//")
-				if text == c.Text {
-					continue // not a //-comment
+				if text == c.Text { // not a //-comment.
+					text = strings.TrimPrefix(text, "/*")
+					text = strings.TrimSuffix(text, "*/")
 				}
 
 				// Hack: treat a comment of the form "//...// want..."
+				// or "/*...// want... */
 				// as if it starts at 'want'.
 				// This allows us to add comments on comments,
 				// as required when testing the buildtag analyzer.
@@ -277,6 +279,11 @@ func check(t Testing, gopath string, pass *analysis.Pass, diagnostics []analysis
 		objects = append(objects, obj)
 	}
 	sort.Slice(objects, func(i, j int) bool {
+		// Package facts compare less than object facts.
+		ip, jp := objects[i] == nil, objects[j] == nil // whether i, j is a package fact
+		if ip != jp {
+			return ip && !jp
+		}
 		return objects[i].Pos() < objects[j].Pos()
 	})
 	for _, obj := range objects {

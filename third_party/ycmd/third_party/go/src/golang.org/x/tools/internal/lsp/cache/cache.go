@@ -9,6 +9,7 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"go/token"
+	"reflect"
 	"strconv"
 	"sync/atomic"
 
@@ -18,21 +19,28 @@ import (
 	"golang.org/x/tools/internal/span"
 )
 
-func New() source.Cache {
-	index := atomic.AddInt64(&cacheIndex, 1)
-	c := &cache{
-		fs:   &nativeFileSystem{},
-		id:   strconv.FormatInt(index, 10),
-		fset: token.NewFileSet(),
+func New(options func(*source.Options), debugState *debug.State) *Cache {
+	if debugState == nil {
+		debugState = &debug.State{}
 	}
-	debug.AddCache(debugCache{c})
+	index := atomic.AddInt64(&cacheIndex, 1)
+	c := &Cache{
+		fs:      &nativeFileSystem{},
+		id:      strconv.FormatInt(index, 10),
+		fset:    token.NewFileSet(),
+		options: options,
+		debug:   debugState,
+	}
+	debugState.AddCache(debugCache{c})
 	return c
 }
 
-type cache struct {
-	fs   source.FileSystem
-	id   string
-	fset *token.FileSet
+type Cache struct {
+	fs      source.FileSystem
+	id      string
+	fset    *token.FileSet
+	options func(*source.Options)
+	debug   *debug.State
 
 	store memoize.Store
 }
@@ -42,7 +50,7 @@ type fileKey struct {
 }
 
 type fileHandle struct {
-	cache      *cache
+	cache      *Cache
 	underlying source.FileHandle
 	handle     *memoize.Handle
 }
@@ -54,7 +62,7 @@ type fileData struct {
 	err   error
 }
 
-func (c *cache) GetFile(uri span.URI) source.FileHandle {
+func (c *Cache) GetFile(uri span.URI) source.FileHandle {
 	underlying := c.fs.GetFile(uri)
 	key := fileKey{
 		identity: underlying.Identity(),
@@ -71,20 +79,19 @@ func (c *cache) GetFile(uri span.URI) source.FileHandle {
 	}
 }
 
-func (c *cache) NewSession(ctx context.Context) source.Session {
+func (c *Cache) NewSession() *Session {
 	index := atomic.AddInt64(&sessionIndex, 1)
-	s := &session{
-		cache:         c,
-		id:            strconv.FormatInt(index, 10),
-		options:       source.DefaultOptions,
-		overlays:      make(map[span.URI]*overlay),
-		filesWatchMap: NewWatchMap(),
+	s := &Session{
+		cache:    c,
+		id:       strconv.FormatInt(index, 10),
+		options:  source.DefaultOptions(),
+		overlays: make(map[span.URI]*overlay),
 	}
-	debug.AddSession(debugSession{s})
+	c.debug.AddSession(DebugSession{s})
 	return s
 }
 
-func (c *cache) FileSet() *token.FileSet {
+func (c *Cache) FileSet() *token.FileSet {
 	return c.fset
 }
 
@@ -94,10 +101,6 @@ func (h *fileHandle) FileSystem() source.FileSystem {
 
 func (h *fileHandle) Identity() source.FileIdentity {
 	return h.underlying.Identity()
-}
-
-func (h *fileHandle) Kind() source.FileKind {
-	return h.underlying.Kind()
 }
 
 func (h *fileHandle) Read(ctx context.Context) ([]byte, string, error) {
@@ -117,7 +120,8 @@ func hashContents(contents []byte) string {
 
 var cacheIndex, sessionIndex, viewIndex int64
 
-type debugCache struct{ *cache }
+type debugCache struct{ *Cache }
 
-func (c *cache) ID() string                  { return c.id }
-func (c debugCache) FileSet() *token.FileSet { return c.fset }
+func (c *Cache) ID() string                         { return c.id }
+func (c debugCache) FileSet() *token.FileSet        { return c.fset }
+func (c debugCache) MemStats() map[reflect.Type]int { return c.store.Stats() }

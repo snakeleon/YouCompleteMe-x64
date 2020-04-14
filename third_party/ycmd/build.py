@@ -81,15 +81,15 @@ DYNAMIC_PYTHON_LIBRARY_REGEX = """
   )$
 """
 
-JDTLS_MILESTONE = '0.45.0'
-JDTLS_BUILD_STAMP = '201910031256'
+JDTLS_MILESTONE = '0.52.0'
+JDTLS_BUILD_STAMP = '202003042214'
 JDTLS_SHA256 = (
-  '06c499bf151d78027c2480bcbcca313f70ae0e8e07fc07cea6319359aea848f4'
+  '8ce11802c4524a1813f112d7a5d8d9544f00b1c3b5ee67c8d276b16c4decc995'
 )
 
 TSSERVER_VERSION = '3.7.2'
 
-RUST_TOOLCHAIN = 'nightly-2019-09-05'
+RUST_TOOLCHAIN = 'nightly-2020-03-12'
 RLS_DIR = p.join( DIR_OF_THIRD_PARTY, 'rls' )
 
 BUILD_ERROR_MESSAGE = (
@@ -101,7 +101,7 @@ BUILD_ERROR_MESSAGE = (
   'issue tracker, including the entire output of this script\n'
   'and the invocation line used to run it.' )
 
-CLANGD_VERSION = '9.0.0'
+CLANGD_VERSION = '10.0.0'
 CLANGD_BINARIES_ERROR_MESSAGE = (
   'No prebuilt Clang {version} binaries for {platform}. '
   'You\'ll have to compile Clangd {version} from source '
@@ -123,9 +123,14 @@ def RemoveDirectory( directory ):
                                                          max_tries ) )
 
 
-def MakeCleanDirectory( directory_path ):
+
+def RemoveDirectoryIfExists( directory_path ):
   if p.exists( directory_path ):
     RemoveDirectory( directory_path )
+
+
+def MakeCleanDirectory( directory_path ):
+  RemoveDirectoryIfExists( directory_path )
   os.makedirs( directory_path )
 
 
@@ -427,9 +432,10 @@ def ParseArguments():
   parser.add_argument( '--skip-build',
                        action = 'store_true',
                        help = "Don't build ycm_core lib, just install deps" )
-  parser.add_argument( '--no-regex',
+  parser.add_argument( '--valgrind',
                        action = 'store_true',
-                       help = "Don't build the regex module" )
+                       help = 'For developers: '
+                              'Run core tests inside valgrind.' )
   parser.add_argument( '--clang-tidy',
                        action = 'store_true',
                        help = 'For developers: Run clang-tidy static analysis '
@@ -543,13 +549,26 @@ def RunYcmdTests( args, build_dir ):
   tests_cmd = [ p.join( tests_dir, 'ycm_core_tests' ) ]
   if args.core_tests != '*':
     tests_cmd.append( '--gtest_filter={}'.format( args.core_tests ) )
-  CheckCall( tests_cmd,
-             env = new_env,
-             quiet = args.quiet,
-             status_message = 'Running ycmd tests' )
+  if not args.valgrind:
+    CheckCall( tests_cmd,
+               env = new_env,
+               quiet = args.quiet,
+               status_message = 'Running ycmd tests' )
+  else:
+    new_env[ 'PYTHONMALLOC' ] = 'malloc'
+    cmd = [ 'valgrind',
+            '--gen-suppressions=all',
+            '--error-exitcode=1',
+            '--leak-check=full',
+            '--show-leak-kinds=all',
+            '--show-reachable=no',
+            '--suppressions=' + p.join( DIR_OF_THIS_SCRIPT,
+                                        'valgrind.suppressions' ),
+            p.join( tests_dir, 'ycm_core_tests' ) ]
+    CheckCall( cmd, env = new_env )
 
 
-def RunYcmdBenchmarks( build_dir ):
+def RunYcmdBenchmarks( args, build_dir ):
   benchmarks_dir = p.join( build_dir, 'ycm', 'benchmarks' )
   new_env = os.environ.copy()
 
@@ -636,7 +655,7 @@ def BuildYcmdLib( cmake, cmake_common_args, script_args ):
     if script_args.core_tests:
       RunYcmdTests( script_args, build_dir )
     if 'YCM_BENCHMARK' in os.environ:
-      RunYcmdBenchmarks( build_dir )
+      RunYcmdBenchmarks( script_args, build_dir )
   finally:
     os.chdir( DIR_OF_THIS_SCRIPT )
 
@@ -825,7 +844,7 @@ def EnableGoCompleter( args ):
 
   go_dir = p.join( DIR_OF_THIS_SCRIPT, 'third_party', 'go' )
   os.chdir( p.join(
-    go_dir, 'src', 'golang.org', 'x', 'tools', 'cmd', 'gopls' ) )
+    go_dir, 'src', 'golang.org', 'x', 'tools', 'gopls' ) )
   CheckCall( [ go, 'build' ],
              quiet = args.quiet,
              status_message = 'Building gopls for go completion' )
@@ -1004,31 +1023,32 @@ def GetClangdTarget():
   if OnWindows():
     return [
       ( 'clangd-{version}-win64',
-        'e9dce7ae8984cdb719747780323c2cdd2152f41b3aa773510b37ad8de6788edf' ),
+        '193ebaa9bddb750d3678342de16cd59724e10b919d5da1f78e0202db0c67c339' ),
       ( 'clangd-{version}-win32',
-        '48b33eeab7e20c5388bd29503be6486260449cc0fbf631999e14c4d98b97b7c6' ) ]
+        '83d9cb3f18e23558997f6248559095d468dab3e3132b9e12b62401707a085d11' ) ]
   if OnMac():
     return [
       ( 'clangd-{version}-x86_64-apple-darwin',
-        'c89609cd7dcdf60df62e0d28841266ebe7514b2b68739bd6f0399bf74928a165' ) ]
+        '641e07ba19a38a9570260125df6464cd75a3d209c661177bfc8221ceb090bd6a' ) ]
   if OnFreeBSD():
     return [
       ( 'clangd-{version}-amd64-unknown-freebsd11',
-        'e1169eb2b432af0c31d812fa5d0f68e670c1a5efa3e51d00400d847800e6b257' ),
+        'eef613abbc5946f489cd5ef369eb29ad78881b08514be780c0a4dc1cec9cdbec' ),
       ( 'clangd-{version}-i386-unknown-freebsd11',
-        '34ded7733cd2bd23b6587d29d78dbf8192ef3134cf692f09263dd1b5e5a58f6f' ) ]
+        'aba343ba9bc080b19fa8162018f8e1bf4cc55907a892d50ce8ff7515cf666fd7' ) ]
   if OnAArch64():
     return [
       ( 'clangd-{version}-aarch64-linux-gnu',
-        'e593f7d036434db023c1c323756d6630bb4a2f868c45d682ba967846061f5fa9' ) ]
+        '1ee49413e2216d59f7df994a3b528d9deed2f0d999716ab2d5c584fbb0c1a337' ) ]
   if OnArm():
     return [
+      None, # First list index is for 64bit archives. ARMv7 is 32bit only.
       ( 'clangd-{version}-armv7a-linux-gnueabihf',
-        'ff1d8f20eddd7c9d659fb1e692fe961526ff1b858c0798781fad62f2f9e0522b' ) ]
+        'db2e81ae6d70bc53d6558181aebc8dcd6d0ec6ae30fee7d533c1fa4a66d6ed4c' ) ]
   if OnX86_64():
     return [
       ( 'clangd-{version}-x86_64-unknown-linux-gnu',
-        '742ee805373b89e6b30711847af1fc391fe7f8ecb89cf8f8b9515f412571c0cb' ) ]
+        '36b99e35b00ce7aa20738e33ede95a775ff62e10711130917711a3cab38fd85d' ) ]
   sys.exit( CLANGD_BINARIES_ERROR_MESSAGE.format( version = CLANGD_VERSION,
                                                   platform = 'this system' ) )
 
@@ -1095,23 +1115,45 @@ def WritePythonUsedDuringBuild():
     f.write( sys.executable )
 
 
+def CompileWatchdog( script_args ):
+  try:
+    DIR_OF_WATCHDOG_DEPS = p.join( DIR_OF_THIRD_PARTY, 'watchdog_deps' )
+    os.chdir( p.join( DIR_OF_WATCHDOG_DEPS, 'watchdog' ) )
+    build_dir = os.path.join( DIR_OF_WATCHDOG_DEPS, 'watchdog', 'build', '3' )
+    lib_dir = os.path.join( DIR_OF_WATCHDOG_DEPS, 'watchdog', 'build', 'lib3' )
+
+    RemoveDirectoryIfExists( build_dir )
+    RemoveDirectoryIfExists( lib_dir )
+
+    CheckCall( [ sys.executable,
+                 'setup.py',
+                 'build',
+                 '--build-base=' + build_dir,
+                 '--build-lib=' + lib_dir ],
+               exit_message = 'Failed to build watchdog module.',
+               quiet = script_args.quiet,
+               status_message = 'Building watchdog module' )
+  finally:
+    os.chdir( DIR_OF_THIS_SCRIPT )
+
+
 def DoCmakeBuilds( args ):
   cmake = FindCmake( args )
   cmake_common_args = GetCmakeCommonArgs( args )
 
-  if not args.skip_build:
-    ExitIfYcmdLibInUseOnWindows()
-    BuildYcmdLib( cmake, cmake_common_args, args )
-    WritePythonUsedDuringBuild()
+  ExitIfYcmdLibInUseOnWindows()
+  BuildYcmdLib( cmake, cmake_common_args, args )
+  WritePythonUsedDuringBuild()
 
-  if not args.no_regex:
-    BuildRegexModule( cmake, cmake_common_args, args )
+  BuildRegexModule( cmake, cmake_common_args, args )
+
+  CompileWatchdog( args )
 
 
 def Main():
   args = ParseArguments()
 
-  if not args.skip_build or not args.no_regex:
+  if not args.skip_build:
     DoCmakeBuilds( args )
   if args.cs_completer or args.omnisharp_completer or args.all_completers:
     EnableCsCompleter( args )

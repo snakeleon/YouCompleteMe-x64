@@ -1,0 +1,18 @@
+include README.rst
+include changelog.rst
+include LICENSE
+include COPYING
+include AUTHORS
+recursive-include src *.py *.h *.c
+include docs/*.txt
+include docs/*.xml
+include docs/Makefile
+include docs/make.bat
+recursive-include docs/source *
+recursive-include tests *.py
+#global-exclude .DS_Store
+#global-exclude Thumbs.db
+#global-exclude Desktop.ini
+#global-exclude *.swp
+#global-exclude *~
+#global-exclude *.bak

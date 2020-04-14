@@ -13,6 +13,7 @@ import (
 	"golang.org/x/tools/internal/lsp/telemetry"
 	"golang.org/x/tools/internal/span"
 	"golang.org/x/tools/internal/telemetry/trace"
+	errors "golang.org/x/xerrors"
 )
 
 // ioLimit limits the number of parallel file reads per process.
@@ -28,15 +29,12 @@ type nativeFileHandle struct {
 }
 
 func (fs *nativeFileSystem) GetFile(uri span.URI) source.FileHandle {
-	version := "DOES NOT EXIST"
-	if fi, err := os.Stat(uri.Filename()); err == nil {
-		version = fi.ModTime().String()
-	}
 	return &nativeFileHandle{
 		fs: fs,
 		identity: source.FileIdentity{
-			URI:     uri,
-			Version: version,
+			URI:        uri,
+			Identifier: identifier(uri.Filename()),
+			Kind:       source.DetectLanguage("", uri.Filename()),
 		},
 	}
 }
@@ -49,20 +47,27 @@ func (h *nativeFileHandle) Identity() source.FileIdentity {
 	return h.identity
 }
 
-func (h *nativeFileHandle) Kind() source.FileKind {
-	// TODO: How should we determine the file kind?
-	return source.Go
-}
-
 func (h *nativeFileHandle) Read(ctx context.Context) ([]byte, string, error) {
 	ctx, done := trace.StartSpan(ctx, "cache.nativeFileHandle.Read", telemetry.File.Of(h.identity.URI.Filename()))
+	_ = ctx
 	defer done()
+
 	ioLimit <- struct{}{}
 	defer func() { <-ioLimit }()
-	//TODO: this should fail if the version is not the same as the handle
+
+	if id := identifier(h.identity.URI.Filename()); id != h.identity.Identifier {
+		return nil, "", errors.Errorf("%s: file has been modified", h.identity.URI.Filename())
+	}
 	data, err := ioutil.ReadFile(h.identity.URI.Filename())
 	if err != nil {
 		return nil, "", err
 	}
 	return data, hashContents(data), nil
+}
+
+func identifier(filename string) string {
+	if fi, err := os.Stat(filename); err == nil {
+		return fi.ModTime().String()
+	}
+	return "DOES NOT EXIST"
 }

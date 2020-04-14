@@ -63,6 +63,7 @@ class MockCompleter( lsc.LanguageServerCompleter, DummyCompleter ):
 
   def StartServer( self, request_data, **kwargs ):
     self._started = True
+    self._project_directory = self.GetProjectDirectory( request_data )
     return True
 
 
@@ -78,8 +79,12 @@ class MockCompleter( lsc.LanguageServerCompleter, DummyCompleter ):
     return self._started
 
 
-  def _RestartServer( self, request_data ):
-    pass
+  def GetCommandLine( self ):
+    return [ 'server' ]
+
+
+  def GetServerName( self ):
+    return 'mock_completer'
 
 
 @IsolatedYcmd( { 'global_ycm_extra_conf':

@@ -1,5 +1,10 @@
 package protocol
 
+// Package protocol contains data types and code for LSP jsonrpcs
+// generated automatically from vscode-languageserver-node
+// commit: 7b90c29d0cb5cd7b9c41084f6cb3781a955adeba
+// last fetched Wed Feb 12 2020 17:16:47 GMT-0500 (Eastern Standard Time)
+
 // Code generated (see typescript/README.md) DO NOT EDIT.
 
 import (
@@ -8,6 +13,7 @@ import (
 
 	"golang.org/x/tools/internal/jsonrpc2"
 	"golang.org/x/tools/internal/telemetry/log"
+	"golang.org/x/tools/internal/xcontext"
 )
 
 type Client interface {
@@ -15,11 +21,11 @@ type Client interface {
 	LogMessage(context.Context, *LogMessageParams) error
 	Event(context.Context, *interface{}) error
 	PublishDiagnostics(context.Context, *PublishDiagnosticsParams) error
-	WorkspaceFolders(context.Context) ([]WorkspaceFolder, error)
-	Configuration(context.Context, *ParamConfig) ([]interface{}, error)
+	WorkspaceFolders(context.Context) ([]WorkspaceFolder /*WorkspaceFolder[] | null*/, error)
+	Configuration(context.Context, *ParamConfiguration) ([]interface{}, error)
 	RegisterCapability(context.Context, *RegistrationParams) error
 	UnregisterCapability(context.Context, *UnregistrationParams) error
-	ShowMessageRequest(context.Context, *ShowMessageRequestParams) (*MessageActionItem, error)
+	ShowMessageRequest(context.Context, *ShowMessageRequestParams) (*MessageActionItem /*MessageActionItem | null*/, error)
 	ApplyEdit(context.Context, *ApplyWorkspaceEditParams) (*ApplyWorkspaceEditResponse, error)
 }
 
@@ -27,15 +33,12 @@ func (h clientHandler) Deliver(ctx context.Context, r *jsonrpc2.Request, deliver
 	if delivered {
 		return false
 	}
-	switch r.Method {
-	case "$/cancelRequest":
-		var params CancelParams
-		if err := json.Unmarshal(*r.Params, &params); err != nil {
-			sendParseError(ctx, r, err)
-			return true
-		}
-		r.Conn().Cancel(params.ID)
+	if ctx.Err() != nil {
+		ctx := xcontext.Detach(ctx)
+		r.Reply(ctx, nil, jsonrpc2.NewErrorf(RequestCancelledError, ""))
 		return true
+	}
+	switch r.Method {
 	case "window/showMessage": // notif
 		var params ShowMessageParams
 		if err := json.Unmarshal(*r.Params, &params); err != nil {
@@ -87,7 +90,7 @@ func (h clientHandler) Deliver(ctx context.Context, r *jsonrpc2.Request, deliver
 		}
 		return true
 	case "workspace/configuration": // req
-		var params ParamConfig
+		var params ParamConfiguration
 		if err := json.Unmarshal(*r.Params, &params); err != nil {
 			sendParseError(ctx, r, err)
 			return true
@@ -141,9 +144,9 @@ func (h clientHandler) Deliver(ctx context.Context, r *jsonrpc2.Request, deliver
 			log.Error(ctx, "", err)
 		}
 		return true
-
 	default:
 		return false
+
 	}
 }
 
@@ -166,15 +169,15 @@ func (s *clientDispatcher) Event(ctx context.Context, params *interface{}) error
 func (s *clientDispatcher) PublishDiagnostics(ctx context.Context, params *PublishDiagnosticsParams) error {
 	return s.Conn.Notify(ctx, "textDocument/publishDiagnostics", params)
 }
-func (s *clientDispatcher) WorkspaceFolders(ctx context.Context) ([]WorkspaceFolder, error) {
-	var result []WorkspaceFolder
+func (s *clientDispatcher) WorkspaceFolders(ctx context.Context) ([]WorkspaceFolder /*WorkspaceFolder[] | null*/, error) {
+	var result []WorkspaceFolder /*WorkspaceFolder[] | null*/
 	if err := s.Conn.Call(ctx, "workspace/workspaceFolders", nil, &result); err != nil {
 		return nil, err
 	}
 	return result, nil
 }
 
-func (s *clientDispatcher) Configuration(ctx context.Context, params *ParamConfig) ([]interface{}, error) {
+func (s *clientDispatcher) Configuration(ctx context.Context, params *ParamConfiguration) ([]interface{}, error) {
 	var result []interface{}
 	if err := s.Conn.Call(ctx, "workspace/configuration", params, &result); err != nil {
 		return nil, err
@@ -190,8 +193,8 @@ func (s *clientDispatcher) UnregisterCapability(ctx context.Context, params *Unr
 	return s.Conn.Call(ctx, "client/unregisterCapability", params, nil) // Call, not Notify
 }
 
-func (s *clientDispatcher) ShowMessageRequest(ctx context.Context, params *ShowMessageRequestParams) (*MessageActionItem, error) {
-	var result MessageActionItem
+func (s *clientDispatcher) ShowMessageRequest(ctx context.Context, params *ShowMessageRequestParams) (*MessageActionItem /*MessageActionItem | null*/, error) {
+	var result MessageActionItem /*MessageActionItem | null*/
 	if err := s.Conn.Call(ctx, "window/showMessageRequest", params, &result); err != nil {
 		return nil, err
 	}
@@ -204,10 +207,4 @@ func (s *clientDispatcher) ApplyEdit(ctx context.Context, params *ApplyWorkspace
 		return nil, err
 	}
 	return &result, nil
-}
-
-// Types constructed to avoid structs as formal argument types
-type ParamConfig struct {
-	ConfigurationParams
-	PartialResultParams
 }

@@ -31,7 +31,7 @@ See Rebecca's excellent GopherCon keynote [talk] and [slides] for some more cont
 * Command line speed
 
   Although gopls will have a command line mode, it will be optimized for long running and not command responsiveness, as such it may not be the right tool for things like CI systems.
-  In such cases there will have to be an alternate tool using the same underlying libraries for consistency that can be used instead.
+  For such cases there will have to be an alternate tool using the same underlying libraries for consistency.
 
 * Low memory environments
 
@@ -41,7 +41,7 @@ See Rebecca's excellent GopherCon keynote [talk] and [slides] for some more cont
 
 * Syntax highlighting
 
-  At the moment there is no editor that hands this across to a separate binary to do, and no standard way of doing it.
+  At the moment there is no editor that delegates this functionality to a separate binary, and no standard way of doing it.
 
 ## Existing solutions
 
@@ -177,7 +177,7 @@ There are some fundamental architecture decisions that affect much of the rest o
 
 ### Process lifetime: *managed by the editor*
 
-Processing a large code base to fully type check and then analyze it within the latency requirements is not feasible, and is one of the primary problems with the existing solutions. This remains true even if the computed information was cached  on disk, as running analyzers and type checkers ends up requiring the full AST of all files in the dependency graph.
+Processing a large code base to fully type check and then analyze it within the latency requirements is not feasible, and is one of the primary problems with the existing solutions. This remains true even if the computed information was cached on disk, as running analyzers and type checkers ends up requiring the full AST of all files in the dependency graph.
 It is theoretically possible to do better, but only with a major re-write of the existing parsing and type checking libraries, something that is not feasible at this time.
 
 This implies that gopls should be a long running process, that is able to cache and pre-calculate results in memory so that when a request arrives it can produce the answer much faster.
@@ -301,7 +301,7 @@ Previous  | [guru]
 These features suggest or apply edits to the code for the user, including refactoring features, for which there are many potential use cases.
 Refactoring is one of the places where Go tools could potentially be very strong, but have not been so far, and thus there is huge potential for improvements in the developer experience.
 There is not yet a clear understanding of the kinds of refactoring people need or how they should express them however, and there are weaknesses in the LSP protocol around this.
-This means it may be  much more of a research project.
+This means it may be much more of a research project.
 
 
 ---
@@ -351,7 +351,7 @@ Previous        | N/A
 |               | This is a brand new feature powered by the new go/analysis engine, and it should allow a huge amount of automated refactoring.
 
 
-[LSP specification]: https://microsoft.github.io/language-server-protocol/specification
+[LSP specification]: https://microsoft.github.io/language-server-protocol/specifications/specification-3-14/
 [talk]: TODO
 [slides]: https://github.com/gophercon/2019-talks/blob/master/RebeccaStambler-GoPleaseStopBreakingMyEditor/slides.pdf "Go, please stop breaking my editor!"
 [JSON rpc 2]: https://www.jsonrpc.org/specification
@@ -376,25 +376,25 @@ Previous        | N/A
 [go/token]: https://golang.org/pkg/go/token/
 
 
-[`completionItem/resolve`]:https://github.com/Microsoft/language-server-protocol/blob/gh-pages/specification.md#completionItem_resolve
-[`textDocument/codeAction`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/specification.md#textDocument_codeAction
-[`textDocument/completion`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/specification.md#textDocument_completion
-[`textDocument/declaration`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/specification.md#textDocument_declaration
-[`textDocument/definition`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/specification.md#textDocument_definition
-[`textDocument/documentLink`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/specification.md#textDocument_documentLink
-[`textDocument/documentSymbol`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/specification.md#textDocument_documentSymbol
-[`textDocument/foldingRange`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/specification.md#textDocument_foldingRange
-[`textDocument/formatting`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/specification.md#textDocument_formatting
-[`textDocument/highlight`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/specification.md#textDocument_highlight
-[`textDocument/hover`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/specification.md#textDocument_hover
-[`textDocument/implementation`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/specification.md#textDocument_implementation
-[`textDocument/onTypeFormatting`]:https://github.com/Microsoft/language-server-protocol/blob/gh-pages/specification.md#textDocument_onTypeFormatting
-[`textDocument/prepareRename`]:https://github.com/Microsoft/language-server-protocol/blob/gh-pages/specification.md#textDocument_prepareRename
-[`textDocument/publishDiagnostics`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/specification.md#textDocument_publishDiagnostics
-[`textDocument/rangeFormatting`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/specification.md#textDocument_rangeFormatting
-[`textDocument/references`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/specification.md#textDocument_references
-[`textDocument/rename`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/specification.md#textDocument_rename
-[`textDocument/selectionRange`]:https://github.com/Microsoft/language-server-protocol/blob/gh-pages/specification.md#textDocument_selectionRange
-[`textDocument/signatureHelp`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/specification.md#textDocument_signatureHelp
-[`textDocument/typeDefinition`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/specification.md#textDocument_typeDefinition
-[`workspace/didChangeWatchedFiles`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/specification.md#workspace_didChangeWatchedFiles
+[`completionItem/resolve`]:https://github.com/Microsoft/language-server-protocol/blob/gh-pages/_specifications/specification-3-14.md#completionItem_resolve
+[`textDocument/codeAction`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/_specifications/specification-3-14.md#textDocument_codeAction
+[`textDocument/completion`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/_specifications/specification-3-14.md#textDocument_completion
+[`textDocument/declaration`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/_specifications/specification-3-14.md#textDocument_declaration
+[`textDocument/definition`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/_specifications/specification-3-14.md#textDocument_definition
+[`textDocument/documentLink`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/_specifications/specification-3-14.md#textDocument_documentLink
+[`textDocument/documentSymbol`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/_specifications/specification-3-14.md#textDocument_documentSymbol
+[`textDocument/foldingRange`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/_specifications/specification-3-14.md#textDocument_foldingRange
+[`textDocument/formatting`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/_specifications/specification-3-14.md#textDocument_formatting
+[`textDocument/highlight`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/_specifications/specification-3-14.md#textDocument_highlight
+[`textDocument/hover`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/_specifications/specification-3-14.md#textDocument_hover
+[`textDocument/implementation`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/_specifications/specification-3-14.md#textDocument_implementation
+[`textDocument/onTypeFormatting`]:https://github.com/Microsoft/language-server-protocol/blob/gh-pages/_specifications/specification-3-14.md#textDocument_onTypeFormatting
+[`textDocument/prepareRename`]:https://github.com/Microsoft/language-server-protocol/blob/gh-pages/_specifications/specification-3-14.md#textDocument_prepareRename
+[`textDocument/publishDiagnostics`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/_specifications/specification-3-14.md#textDocument_publishDiagnostics
+[`textDocument/rangeFormatting`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/_specifications/specification-3-14.md#textDocument_rangeFormatting
+[`textDocument/references`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/_specifications/specification-3-14.md#textDocument_references
+[`textDocument/rename`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/_specifications/specification-3-14.md#textDocument_rename
+[`textDocument/selectionRange`]:https://github.com/Microsoft/language-server-protocol/blob/gh-pages/_specifications/specification-3-14.md#textDocument_selectionRange
+[`textDocument/signatureHelp`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/_specifications/specification-3-14.md#textDocument_signatureHelp
+[`textDocument/typeDefinition`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/_specifications/specification-3-14.md#textDocument_typeDefinition
+[`workspace/didChangeWatchedFiles`]: https://github.com/Microsoft/language-server-protocol/blob/gh-pages/_specifications/specification-3-14.md#workspace_didChangeWatchedFiles

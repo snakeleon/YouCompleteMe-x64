@@ -29,14 +29,17 @@
 # For more information, please refer to <http://unlicense.org/>
 
 from distutils.sysconfig import get_python_inc
+import os
 import platform
 import os.path as p
 import subprocess
-import ycm_core
 
 DIR_OF_THIS_SCRIPT = p.abspath( p.dirname( __file__ ) )
 DIR_OF_THIRD_PARTY = p.join( DIR_OF_THIS_SCRIPT, 'third_party' )
+DIR_OF_WATCHDOG_DEPS = p.join( DIR_OF_THIRD_PARTY, 'watchdog_deps' )
 SOURCE_EXTENSIONS = [ '.cpp', '.cxx', '.cc', '.c', '.m', '.mm' ]
+
+database = None
 
 # These are the compilation flags that will be used in case there's no
 # compilation database set (by default, one is not set).
@@ -106,11 +109,6 @@ if platform.system() != 'Windows':
 # 'flags' list of compilation flags. Notice that YCM itself uses that approach.
 compilation_database_folder = ''
 
-if p.exists( compilation_database_folder ):
-  database = ycm_core.CompilationDatabase( compilation_database_folder )
-else:
-  database = None
-
 
 def IsHeaderFile( filename ):
   extension = p.splitext( filename )[ 1 ]
@@ -132,12 +130,18 @@ def PathToPythonUsedDuringBuild():
     filepath = p.join( DIR_OF_THIS_SCRIPT, 'PYTHON_USED_DURING_BUILDING' )
     with open( filepath ) as f:
       return f.read().strip()
-  # We need to check for IOError for Python 2 and OSError for Python 3.
-  except ( IOError, OSError ):
+  except OSError:
     return None
 
 
 def Settings( **kwargs ):
+  # Do NOT import ycm_core at module scope.
+  import ycm_core
+
+  global database
+  if database is None and p.exists( compilation_database_folder ):
+    database = ycm_core.CompilationDatabase( compilation_database_folder )
+
   language = kwargs[ 'language' ]
 
   if language == 'cfamily':
@@ -186,13 +190,6 @@ def Settings( **kwargs ):
   return {}
 
 
-def GetStandardLibraryIndexInSysPath( sys_path ):
-  for index, path in enumerate( sys_path ):
-    if p.isfile( p.join( path, 'os.py' ) ):
-      return index
-  raise RuntimeError( 'Could not find standard library path in Python path.' )
-
-
 def PythonSysPath( **kwargs ):
   sys_path = kwargs[ 'sys_path' ]
 
@@ -201,15 +198,12 @@ def PythonSysPath( **kwargs ):
     interpreter_path, '-c', 'import sys; print( sys.version_info[ 0 ] )' ]
   ).rstrip().decode( 'utf8' )
 
-  sys_path.insert( GetStandardLibraryIndexInSysPath( sys_path ) + 1,
-                   p.join( DIR_OF_THIRD_PARTY, 'python-future', 'src' ) )
   sys_path[ 0:0 ] = [ p.join( DIR_OF_THIS_SCRIPT ),
                       p.join( DIR_OF_THIRD_PARTY, 'bottle' ),
                       p.join( DIR_OF_THIRD_PARTY, 'cregex',
                               'regex_{}'.format( major_version ) ),
                       p.join( DIR_OF_THIRD_PARTY, 'frozendict' ),
                       p.join( DIR_OF_THIRD_PARTY, 'jedi_deps', 'jedi' ),
-                      p.join( DIR_OF_THIRD_PARTY, 'jedi_deps', 'numpydoc' ),
                       p.join( DIR_OF_THIRD_PARTY, 'jedi_deps', 'parso' ),
                       p.join( DIR_OF_THIRD_PARTY, 'requests_deps', 'requests' ),
                       p.join( DIR_OF_THIRD_PARTY, 'requests_deps',
@@ -221,6 +215,9 @@ def PythonSysPath( **kwargs ):
                                                   'certifi' ),
                       p.join( DIR_OF_THIRD_PARTY, 'requests_deps',
                                                   'idna' ),
+                      p.join( DIR_OF_WATCHDOG_DEPS, 'watchdog', 'build', 'lib3' ),
+                      p.join( DIR_OF_WATCHDOG_DEPS, 'pathtools' ),
                       p.join( DIR_OF_THIRD_PARTY, 'waitress' ) ]
 
+  sys_path.append( p.join( DIR_OF_THIRD_PARTY, 'jedi_deps', 'numpydoc' ) )
   return sys_path
