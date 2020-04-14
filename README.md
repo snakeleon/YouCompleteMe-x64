@@ -3175,7 +3175,7 @@ if !empty(g:clangd)
     endif
 endif
 ```
-- 4.  如果你使用的 VIM for Windows 版本太低或支持的特性不满足自己的需求，自己编译又麻烦；那么特别推荐一个编译好的项目：[Vim builds for Windows][Vim builds for Windows] 此版本更新维护较频繁，官方更新补丁时都会及时跟上。如果大家喜欢或者有任何疑问，可以在页面下方有编译者的 E-Mail 可以联系，或者对其赞助支持。
+- 4.  Windows 下出现服务器错误，日志提示 `ModuleNotFoundError: No module named 'watchdog'` ，这是默认的 Python3.8 安装包不包含此模块，请在命令行模式下安装 `watchdog` 模块: `pip install watchdog` 。如果你使用的 VIM for Windows 版本太低或支持的特性不满足自己的需求，自己编译又麻烦；那么特别推荐一个编译好的项目：[Vim builds for Windows][Vim builds for Windows] 此版本更新维护较频繁，官方更新补丁时都会及时跟上。如果大家喜欢或者有任何疑问，可以在页面下方有编译者的 E-Mail 可以联系，或者对其赞助支持。
 
 
 [ycmd]: https://github.com/ycm-core/ycmd
