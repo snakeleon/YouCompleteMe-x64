@@ -17,21 +17,27 @@
 # limitations under the License.
 
 import sys
-import imp
 import os.path
+from codecs import open
 from setuptools import setup, find_packages
 from setuptools.extension import Extension
 from setuptools.command.build_ext import build_ext
-from setuptools.command.test import test as TestCommand
-from distutils.util import get_platform
 
 SRC_DIR = 'src'
 WATCHDOG_PKG_DIR = os.path.join(SRC_DIR, 'watchdog')
 
-version = imp.load_source('version', os.path.join(WATCHDOG_PKG_DIR, 'version.py'))
+if sys.version_info >= (3, 5):
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        'version', os.path.join(WATCHDOG_PKG_DIR, 'version.py'))
+    version = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(version)
+else:
+    import imp
+    version = imp.load_source('version', os.path.join(WATCHDOG_PKG_DIR, 'version.py'))
 
 ext_modules = []
-if get_platform().startswith('macosx'):
+if sys.platform == 'darwin':
     ext_modules = [
         Extension(
             name='_watchdog_fsevents',
@@ -57,49 +63,29 @@ if get_platform().startswith('macosx'):
                 '-Wextra',
                 '-fPIC',
 
+                # Issue #620
+                '-Wno-nullability-completeness',
+                # Issue #628
+                '-Wno-nullability-extension',
+                '-Wno-newline-eof',
+
                 # required w/Xcode 5.1+ and above because of '-mno-fused-madd'
-                '-Wno-error=unused-command-line-argument-hard-error-in-future'
+                '-Wno-error=unused-command-line-argument'
             ]
         ),
     ]
 
-
-class PyTest(TestCommand):
-    def finalize_options(self):
-        TestCommand.finalize_options(self)
-        self.test_args = [
-            '--cov=' + SRC_DIR,
-            '--cov-report=term-missing',
-            'tests']
-        self.test_suite = True
-    def run_tests(self):
-        import pytest
-        errno = pytest.main(self.test_args)
-        sys.exit(errno)
-
-tests_require=['pytest', 'pytest-cov', 'pytest-timeout >=0.3']
-if sys.version_info < (2, 7, 0):
-    tests_require.append('unittest2')
-
 install_requires = [
-    "PyYAML<3.13" if sys.version_info[:2] == (3, 2) else "PyYAML>=3.10",
-    "argh>=0.24.1",
     "pathtools>=0.1.1",
 ]
-if sys.version_info < (2, 7, 0):
-    # argparse is merged into Python 2.7 in the Python 2x series
-    # and Python 3.2 in the Python 3x series.
-    install_requires.append('argparse >=1.1')
-    if any([key in sys.platform for key in ['bsd', 'darwin']]):
-        # Python 2.6 and below have the broken/non-existent kqueue implementations
-        # in the select module. This backported patch adds one from Python 2.7,
-        # which works.
-        install_requires.append('select_backport >=0.2')
+extras_require = {
+    'watchmedo': ['PyYAML>=3.10', 'argh>=0.24.1'],
+}
 
-with open('README.rst') as f:
+with open('README.rst', encoding='utf-8') as f:
     readme = f.read()
 
-with open('changelog.rst') as f:
+with open('changelog.rst', encoding='utf-8') as f:
     changelog = f.read()
 
 setup(name="watchdog",
@@ -135,15 +121,13 @@ setup(name="watchdog",
           'Operating System :: Microsoft :: Windows :: Windows NT/2000',
           'Operating System :: OS Independent',
           'Programming Language :: Python',
-          'Programming Language :: Python :: 2.6',
           'Programming Language :: Python :: 2.7',
           'Programming Language :: Python :: 3',
-          'Programming Language :: Python :: 3.2',
-          'Programming Language :: Python :: 3.3',
           'Programming Language :: Python :: 3.4',
           'Programming Language :: Python :: 3.5',
           'Programming Language :: Python :: 3.6',
           'Programming Language :: Python :: 3.7',
+          'Programming Language :: Python :: 3.8',
           'Programming Language :: Python :: Implementation :: PyPy',
           'Programming Language :: C',
           'Topic :: Software Development :: Libraries',
@@ -155,14 +139,13 @@ setup(name="watchdog",
       packages=find_packages(SRC_DIR),
       include_package_data=True,
       install_requires=install_requires,
-      tests_require=tests_require,
+      extras_require=extras_require,
       cmdclass={
           'build_ext': build_ext,
-          'test': PyTest,
       },
       ext_modules=ext_modules,
       entry_points={'console_scripts': [
-          'watchmedo = watchdog.watchmedo:main',
+          'watchmedo = watchdog.watchmedo:main [watchmedo]',
       ]},
       zip_safe=False
 )

@@ -73,13 +73,15 @@ class FSEventsEmitter(EventEmitter):
         self.snapshot = DirectorySnapshot(watch.path, watch.is_recursive)
 
     def on_thread_stop(self):
-        _fsevents.remove_watch(self.watch)
-        _fsevents.stop(self)
+        if self.watch:
+            _fsevents.remove_watch(self.watch)
+            _fsevents.stop(self)
+            self._watch = None
 
     def queue_events(self, timeout):
         with self._lock:
-            if not self.watch.is_recursive\
-                and self.watch.path not in self.pathnames:
+            if (not self.watch.is_recursive
+                    and self.watch.path not in self.pathnames):
                 return
             new_snapshot = DirectorySnapshot(self.watch.path,
                                              self.watch.is_recursive)
@@ -124,7 +126,7 @@ class FSEventsEmitter(EventEmitter):
 
             # INFO: FSEvents reports directory notifications recursively
             # by default, so we do not need to add subdirectory paths.
-            #pathnames = set([self.watch.path])
+            # pathnames = set([self.watch.path])
             # if self.watch.is_recursive:
             #    for root, directory_names, _ in os.walk(self.watch.path):
             #        for directory_name in directory_names:
@@ -137,7 +139,7 @@ class FSEventsEmitter(EventEmitter):
                                 callback,
                                 self.pathnames)
             _fsevents.read_events(self)
-        except:
+        except Exception:
             pass
 
 
@@ -157,7 +159,7 @@ class FSEventsObserver(BaseObserver):
         # Fix for issue #26: Trace/BPT error when given a unicode path
         # string. https://github.com/gorakhargosh/watchdog/issues#issue/26
         if isinstance(path, str_class):
-            #path = unicode(path, 'utf-8')
+            # path = unicode(path, 'utf-8')
             path = unicodedata.normalize('NFC', path)
             # We only encode the path in Python 2 for backwards compatibility.
             # On Python 3 we want the path to stay as unicode if possible for

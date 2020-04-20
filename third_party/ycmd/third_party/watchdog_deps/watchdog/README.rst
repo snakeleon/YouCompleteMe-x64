@@ -1,13 +1,18 @@
 Watchdog
 ========
+
+.. image:: https://travis-ci.org/gorakhargosh/watchdog.svg?branch=master
+    :target: https://travis-ci.org/gorakhargosh/watchdog
+
 Python API and shell utilities to monitor file system events.
 
+Works on Python 2.7 and 3.4+. If you want to use an old version of Python, you should stick with watchdog < 0.10.0.
 
 Example API Usage
 -----------------
 A simple program that uses watchdog to monitor directories specified
 as command-line arguments and logs events generated:
-    
+
 .. code-block:: python
 
     import sys
@@ -35,14 +40,14 @@ as command-line arguments and logs events generated:
 
 Shell Utilities
 ---------------
-Watchdog comes with a utility script called ``watchmedo``.
+Watchdog comes with an *optional* utility script called ``watchmedo``.
 Please type ``watchmedo --help`` at the shell prompt to
 know more about this tool.
 
 Here is how you can log the current directory recursively
 for events related only to ``*.py`` and ``*.txt`` files while
 ignoring all directory events:
-    
+
 .. code-block:: bash
 
     watchmedo log \
@@ -53,7 +58,7 @@ ignoring all directory events:
 
 You can use the ``shell-command`` subcommand to execute shell commands in
 response to events:
-    
+
 .. code-block:: bash
 
     watchmedo shell-command \
@@ -78,7 +83,7 @@ classes are augmented with a few additional features that regular event handlers
 don't need.
 
 An example ``tricks.yaml`` file:
-    
+
 .. code-block:: yaml
 
     tricks:
@@ -113,23 +118,23 @@ Please file enhancement requests at the `issue tracker`_.
 
 Installation
 ------------
-Installing from PyPI using ``pip``:
-    
+Install from PyPI using ``pip``:
+
 .. code-block:: bash
 
-    $ pip install watchdog
+    $ python -m pip install watchdog
 
-Installing from PyPI using ``easy_install``:
-    
+    # or to install the watchmedo utility:
+    $ python -m pip install watchdog[watchmedo]
+
+Install from source:
+
 .. code-block:: bash
 
-    $ easy_install watchdog
+    $ python -m pip install -e .
 
-Installing from source:
-    
-.. code-block:: bash
-
-    $ python setup.py install
+    # or to install the watchmedo utility:
+    $ python -m pip install -e ".[watchmedo]"
 
 
 Installation Caveats
@@ -145,7 +150,7 @@ to install LibYAML:
 
 On Linux, use your favorite package manager to install LibYAML. Here's how you
 do it on Ubuntu:
-    
+
 .. code-block:: bash
 
     $ sudo aptitude install libyaml-dev
@@ -164,10 +169,12 @@ ticket at the `issue tracker`_. For general help and questions use the official
 
 Create and activate your virtual environment, then::
 
-    pip install pytest
-    pip install -e .
-    py.test tests
+    python -m pip install pytest pytest-cov
+    python -m pip install -e .[watchmedo]
+    python -m pytest tests
 
+If you are making a substantial change, add an entry to the "Unreleased" section
+of the `changelog`_.
 
 Supported Platforms
 -------------------
@@ -204,18 +211,26 @@ It creates backup files and then swaps them in to replace
 the files you are editing on the disk. This means that
 if you use Vim to edit your files, the on-modified events
 for those files will not be triggered by watchdog.
-You may need to configure Vim to appropriately to disable
+You may need to configure Vim appropriately to disable
 this feature.
+
+
+About using watchdog with CIFS
+------------------------------
+When you want to watch changes in CIFS, you need to explicitly tell watchdog to
+use ``PollingObserver``, that is, instead of letting watchdog decide an
+appropriate observer like in the example above, do::
+
+    from watchdog.observers.polling import PollingObserver as Observer
 
 
 Dependencies
 ------------
-1. Python 2.6 or above.
+1. Python 2.7, 3.4 or above.
 2. pathtools_
-3. select_backport_ (select.kqueue replacement for 2.6 on BSD/Mac OS X)
-4. XCode_ (only on Mac OS X)
-5. PyYAML_ (only for ``watchmedo`` script)
-6. argh_ (only for ``watchmedo`` script)
+3. XCode_ (only on Mac OS X)
+4. PyYAML_ (only for ``watchmedo`` script)
+5. argh_ (only for ``watchmedo`` script)
 
 
 Licensing
@@ -250,14 +265,14 @@ to do:
 .. _source code: http://github.com/gorakhargosh/watchdog
 .. _issue tracker: http://github.com/gorakhargosh/watchdog/issues
 .. _Apache License, version 2.0: http://www.apache.org/licenses/LICENSE-2.0
-.. _documentation: http://packages.python.org/watchdog/
+.. _documentation: https://python-watchdog.readthedocs.io/
 .. _stackoverflow: http://stackoverflow.com/questions/tagged/python-watchdog
 .. _mailing list: http://groups.google.com/group/watchdog-python
 .. _repository: http://github.com/gorakhargosh/watchdog
 .. _issue tracker: http://github.com/gorakhargosh/watchdog/issues
+.. _changelog: https://github.com/gorakhargosh/watchdog/blob/master/changelog.rst
 
 .. _homebrew: http://mxcl.github.com/homebrew/
-.. _select_backport: http://pypi.python.org/pypi/select_backport
 .. _argh: http://pypi.python.org/pypi/argh
 .. _PyYAML: http://www.pyyaml.org/
 .. _XCode: http://developer.apple.com/technologies/tools/xcode.html

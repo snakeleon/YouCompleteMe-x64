@@ -130,6 +130,9 @@ class AbstractInstanceValue(Value):
             for name in names
         )
 
+    def get_type_hint(self, add_class_info=True):
+        return self.py__name__()
+
     def __repr__(self):
         return "<%s of %s>" % (self.__class__.__name__, self.class_value)
 
@@ -238,7 +241,7 @@ class _BaseTreeInstance(AbstractInstanceValue):
     def py__getitem__(self, index_value_set, contextualized_node):
         names = self.get_function_slot_names(u'__getitem__')
         if not names:
-            return super(AbstractInstanceValue, self).py__getitem__(
+            return super(_BaseTreeInstance, self).py__getitem__(
                 index_value_set,
                 contextualized_node,
             )
@@ -249,7 +252,7 @@ class _BaseTreeInstance(AbstractInstanceValue):
     def py__iter__(self, contextualized_node=None):
         iter_slot_names = self.get_function_slot_names(u'__iter__')
         if not iter_slot_names:
-            return super(AbstractInstanceValue, self).py__iter__(contextualized_node)
+            return super(_BaseTreeInstance, self).py__iter__(contextualized_node)
 
         def iterate():
             for generator in self.execute_function_slots(iter_slot_names):
@@ -275,7 +278,7 @@ class _BaseTreeInstance(AbstractInstanceValue):
         names = self.get_function_slot_names(u'__call__')
         if not names:
             # Means the Instance is not callable.
-            return super(AbstractInstanceValue, self).py__call__(arguments)
+            return super(_BaseTreeInstance, self).py__call__(arguments)
 
         return ValueSet.from_sets(name.infer().execute(arguments) for name in names)
 
@@ -314,8 +317,7 @@ class TreeInstance(_BaseTreeInstance):
             if settings.dynamic_array_additions:
                 arguments = get_dynamic_array_instance(self, arguments)
 
-        super(_BaseTreeInstance, self).__init__(inference_state, parent_context,
-                                                class_value)
+        super(TreeInstance, self).__init__(inference_state, parent_context, class_value)
         self._arguments = arguments
         self.tree_node = class_value.tree_node
 
@@ -544,10 +546,10 @@ class InstanceClassFilter(AbstractFilter):
         self._class_filter = class_filter
 
     def get(self, name):
-        return self._convert(self._class_filter.get(name, from_instance=True))
+        return self._convert(self._class_filter.get(name))
 
     def values(self):
-        return self._convert(self._class_filter.values(from_instance=True))
+        return self._convert(self._class_filter.values())
 
     def _convert(self, names):
         return [
@@ -583,7 +585,7 @@ class SelfAttributeFilter(ClassFilter):
             if trailer.type == 'trailer' \
                     and len(trailer.parent.children) == 2 \
                     and trailer.children[0] == '.':
-                if name.is_definition() and self._access_possible(name, from_instance=True):
+                if name.is_definition() and self._access_possible(name):
                     # TODO filter non-self assignments instead of this bad
                     #      filter.
                     if self._is_in_right_scope(trailer.parent.children[0], name):

@@ -27,8 +27,8 @@ def _start_linter():
             paths = [path]
 
         try:
-            for path in paths:
-                for error in jedi.Script(path=path)._analysis():
+            for p in paths:
+                for error in jedi.Script(path=p)._analysis():
                     print(error)
         except Exception:
             if '--pdb' in sys.argv:
@@ -48,7 +48,8 @@ def _complete():
         for c in jedi.Script(sys.argv[2]).complete():
             c.docstring()
             c.type
-    except Exception:
+    except Exception as e:
+        print(e)
         pdb.post_mortem()
 
 

@@ -59,7 +59,9 @@ class BY_HANDLE_FILE_INFORMATION(ctypes.Structure):
                 ('nFileIndexLow', ctypes.wintypes.DWORD)]
 
 
-CreateFile = ctypes.windll.kernel32.CreateFileW
+kernel32 = ctypes.WinDLL("kernel32")
+
+CreateFile = kernel32.CreateFileW
 CreateFile.restype = ctypes.wintypes.HANDLE
 CreateFile.argtypes = (
     ctypes.c_wchar_p,
@@ -71,19 +73,20 @@ CreateFile.argtypes = (
     ctypes.wintypes.HANDLE,
 )
 
-GetFileInformationByHandle = ctypes.windll.kernel32.GetFileInformationByHandle
+GetFileInformationByHandle = kernel32.GetFileInformationByHandle
 GetFileInformationByHandle.restype = ctypes.wintypes.BOOL
 GetFileInformationByHandle.argtypes = (
     ctypes.wintypes.HANDLE,
     ctypes.wintypes.POINTER(BY_HANDLE_FILE_INFORMATION),
 )
 
-CloseHandle = ctypes.windll.kernel32.CloseHandle
+CloseHandle = kernel32.CloseHandle
 CloseHandle.restype = ctypes.wintypes.BOOL
 CloseHandle.argtypes = (ctypes.wintypes.HANDLE,)
 
 
-StatResult = namedtuple('StatResult', 'st_dev st_ino st_mode st_mtime')
+StatResult = namedtuple('StatResult', 'st_dev st_ino st_mode st_mtime st_size')
+
 
 def _to_mode(attr):
     m = 0
@@ -97,18 +100,22 @@ def _to_mode(attr):
         m |= 0o666
     return m
 
+
 def _to_unix_time(ft):
     t = (ft.dwHighDateTime) << 32 | ft.dwLowDateTime
     return (t / 10000000) - 11644473600
 
+
 def stat(path):
     hfile = CreateFile(path,
-            FILE_READ_ATTRIBUTES,
-            0,
-            None,
-            OPEN_EXISTING,
-            FILE_ATTRIBUTE_NORMAL | FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OPEN_REPARSE_POINT,
-            None)
+                       FILE_READ_ATTRIBUTES,
+                       0,
+                       None,
+                       OPEN_EXISTING,
+                       FILE_ATTRIBUTE_NORMAL
+                       | FILE_FLAG_BACKUP_SEMANTICS
+                       | FILE_FLAG_OPEN_REPARSE_POINT,
+                       None)
     if hfile == INVALID_HANDLE_VALUE:
         raise ctypes.WinError()
     info = BY_HANDLE_FILE_INFORMATION()
@@ -119,5 +126,6 @@ def stat(path):
     return StatResult(st_dev=info.dwVolumeSerialNumber,
                       st_ino=(info.nFileIndexHigh << 32) + info.nFileIndexLow,
                       st_mode=_to_mode(info.dwFileAttributes),
-                      st_mtime=_to_unix_time(info.ftLastWriteTime)
+                      st_mtime=_to_unix_time(info.ftLastWriteTime),
+                      st_size=(info.nFileSizeHigh << 32) + info.nFileSizeLow
                       )

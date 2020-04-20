@@ -14,16 +14,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from sys import version_info
-
-if version_info < (2, 7):
-    import unittest2 as unittest
-else:
-    import unittest
-
 try:
-    from Queue import Queue  # Python 2
+    from queue import Queue, Empty  # Python 3
 except ImportError:
-    from queue import Queue  # Python 3
+    from Queue import Queue, Empty  # Python 2
 
-__all__ = ["unittest", "Queue"]
+__all__ = ["Queue", "Empty"]

@@ -22,16 +22,26 @@ from watchdog.utils.compat import Event
 from watchdog.observers.api import EventEmitter, BaseObserver
 
 
-@pytest.fixture()
-def observer(request):
-    observer = BaseObserver(EventEmitter)
-    def finalizer():
-        try:
-            observer.stop()
-        except:
-            pass
-    request.addfinalizer(finalizer)
-    return observer
+@pytest.fixture
+def observer():
+    obs = BaseObserver(EventEmitter)
+    yield obs
+    obs.stop()
+    try:
+        obs.join()
+    except RuntimeError:
+        pass
+
+
+@pytest.fixture
+def observer2():
+    obs = BaseObserver(EventEmitter)
+    yield obs
+    obs.stop()
+    try:
+        obs.join()
+    except RuntimeError:
+        pass
 
 
 def test_schedule_should_start_emitter_if_running(observer):
@@ -84,3 +94,52 @@ def test_unschedule_self(observer):
 
     assert unschedule_finished.wait()
     assert len(observer.emitters) == 0
+
+
+def test_schedule_after_unschedule_all(observer):
+    observer.start()
+    observer.schedule(None, '')
+    assert len(observer.emitters) == 1
+
+    observer.unschedule_all()
+    assert len(observer.emitters) == 0
+
+    observer.schedule(None, '')
+    assert len(observer.emitters) == 1
+
+
+def test_2_observers_on_the_same_path(observer, observer2):
+    assert observer is not observer2
+
+    observer.schedule(None, '')
+    assert len(observer.emitters) == 1
+
+    observer2.schedule(None, '')
+    assert len(observer2.emitters) == 1
+
+
+def test_start_failure_should_not_prevent_further_try(monkeypatch, observer):
+    observer.schedule(None, '')
+    emitters = observer.emitters
+    assert len(emitters) == 1
+
+    # Make the emitter to fail on start()
+
+    def mocked_start():
+        raise OSError()
+
+    emitter = next(iter(emitters))
+    monkeypatch.setattr(emitter, "start", mocked_start)
+    with pytest.raises(OSError):
+        observer.start()
+    # The emitter should be removed from the list
+    assert len(observer.emitters) == 0
+
+    # Restoring the original behavior should work like there never be emitters
+    monkeypatch.undo()
+    observer.start()
+    assert len(observer.emitters) == 0
+
+    # Re-schduling the watch should work
+    observer.schedule(None, '')
+    assert len(observer.emitters) == 1

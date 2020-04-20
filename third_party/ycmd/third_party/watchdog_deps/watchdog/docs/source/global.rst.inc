@@ -19,7 +19,6 @@
 .. _CreateIoCompletionPort: http://msdn.microsoft.com/en-us/library/aa363862(v=VS.85).aspx
 
 .. _argh: http://pypi.python.org/pypi/argh
-.. _argparse: http://pypi.python.org/pypi/argparse
 .. _coverage: http://nedbatchelder.com/code/coverage/
 .. _file.monitor: http://github.com/pke/file.monitor
 .. _fsmonitor: http://github.com/shaurz/fsmonitor
@@ -38,7 +37,6 @@
 .. _Python: http://python.org
 .. _pywin32: http://sourceforge.net/projects/pywin32/
 .. _PyYAML: http://www.pyyaml.org/
-.. _select_backport: http://pypi.python.org/pypi/select_backport/
 .. _sphinx: http://sphinx.pocoo.org/
 .. _treewalker: http://github.com/jbd/treewatcher
 .. _unison fsmonitor: https://webdav.seas.upenn.edu/viewvc/unison/trunk/src/fsmonitor.py?view=markup&pathrev=471

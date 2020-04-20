@@ -73,8 +73,8 @@ class ObservedWatch(object):
         return hash(self.key)
 
     def __repr__(self):
-        return "<ObservedWatch: path=%s, is_recursive=%s>" % (
-            self.path, self.is_recursive)
+        return "<%s: path=%s, is_recursive=%s>" % (
+            type(self).__name__, self.path, self.is_recursive)
 
 
 # Observer classes
@@ -141,11 +141,8 @@ class EventEmitter(BaseThread):
         """
 
     def run(self):
-        try:
-            while self.should_keep_running():
-                self.queue_events(self.timeout)
-        finally:
-            pass
+        while self.should_keep_running():
+            self.queue_events(self.timeout)
 
 
 class EventDispatcher(BaseThread):
@@ -251,8 +248,12 @@ class BaseObserver(EventDispatcher):
         return self._emitters
 
     def start(self):
-        for emitter in self._emitters:
-            emitter.start()
+        for emitter in self._emitters.copy():
+            try:
+                emitter.start()
+            except Exception:
+                self._remove_emitter(emitter)
+                raise
         super(BaseObserver, self).start()
 
     def schedule(self, event_handler, path, recursive=False):

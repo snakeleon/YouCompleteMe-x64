@@ -24,10 +24,12 @@
 
 from __future__ import with_statement
 
+import os
 import os.path
 import tempfile
 import shutil
 import errno
+import time
 
 
 # def tree(path='.', show_files=False):
@@ -71,7 +73,7 @@ def rm(path, recursive=False):
         # else:
         #    os.rmdir(path)
         else:
-            raise OSError("rm: %s: is a directory." % path)
+            raise OSError(errno.EISDIR, os.strerror(errno.EISDIR), path)
     else:
         os.remove(path)
 
@@ -107,3 +109,14 @@ def mkdtemp():
 
 def ls(path='.'):
     return os.listdir(path)
+
+
+def msize(path):
+    """Modify the file size without updating the modified time."""
+    with open(path, 'w') as w:
+        w.write('')
+    os.utime(path, (0, 0))
+    time.sleep(0.4)
+    with open(path, 'w') as w:
+        w.write('0')
+    os.utime(path, (0, 0))
