@@ -643,6 +643,7 @@ Quick Feature Summary
 * Signature help
 * Real-time diagnostic display
 * Go to include/declaration/definition (`GoTo`, etc.)
+* Find Symbol (`GoToSymbol`)
 * View documentation comments for identifiers (`GetDoc`)
 * Type information for identifiers (`GetType`)
 * Automatically fix certain errors (`FixIt`)
@@ -657,6 +658,7 @@ Quick Feature Summary
 * Real-time diagnostic display
 * Go to declaration/definition (`GoTo`, etc.)
 * Go to implementation (`GoToImplementation`)
+* Find Symbol (`GoToSymbol`)
 * View documentation comments for identifiers (`GetDoc`)
 * Type information for identifiers (`GetType`)
 * Automatically fix certain errors (`FixIt`)
@@ -669,6 +671,7 @@ Quick Feature Summary
 * Semantic auto-completion
 * Signature help
 * Go to definition (`GoTo`)
+* Find Symbol (`GoToSymbol`)
 * Reference finding (`GoToReferences`)
 * View documentation comments for identifiers (`GetDoc`)
 * Type information for identifiers (`GetType`)
@@ -696,6 +699,7 @@ Quick Feature Summary
   identical)
 * Go to type definition (`GoToType`)
 * Go to implementation (`GoToImplementation`)
+* Find Symbol (`GoToSymbol`)
 * Reference finding (`GoToReferences`)
 * View documentation comments for identifiers (`GetDoc`)
 * Type information for identifiers (`GetType`)
@@ -729,6 +733,7 @@ Quick Feature Summary
   identical)
 * Go to type definition (`GoToType`)
 * Go to implementation (`GoToImplementation`)
+* Find Symbol (`GoToSymbol`)
 * Reference finding (`GoToReferences`)
 * View documentation comments for identifiers (`GetDoc`)
 * Type information for identifiers (`GetType`)
@@ -1690,6 +1695,13 @@ just browsing around your codebase, this command can spare you quite a bit of
 latency.
 
 Supported in filetypes: `c, cpp, objc, objcpp, cuda`
+
+#### The `GoToSymbol <symbol query>` subcommand
+
+Finds the definition of all symbols matching a specified string. Note that this
+does not use any sort of smart/fuzzy matching.
+
+Supported in filetypes: `c, cpp, objc, objcpp, cuda, cs, java, javascript, python, typescript`
 
 #### The `GoToReferences` subcommand
 
@@ -3220,9 +3232,9 @@ This software is licensed under the [GPL v3 license][gpl].
 
 ### 关于版本
 
-- ycm_core  核心版本: 42 (14 April 2020) 静态编译
+- ycm_core  核心版本: 44 (7 July 2020) 静态编译
 - libclang  版本: 10.0.0 (24 March 2020) [Clang][Clang]
-- Python    支持: 3.8.2 (24 February  2020) [Python][python-win-download]
+- Python    支持: 3.8.3 (13 May 2020) [Python][python-win-download]
 
 
 支持操作系统:
@@ -3317,7 +3329,7 @@ endif
 [ycmd_flags_example]: https://raw.githubusercontent.com/ycm-core/ycmd/66030cd94299114ae316796f3cad181cac8a007c/.ycm_extra_conf.py
 [compdb]: https://clang.llvm.org/docs/JSONCompilationDatabase.html
 [subsequence]: https://en.wikipedia.org/wiki/Subsequence
-[listtoggle]: https://github.com/ycm-core/ListToggle
+[listtoggle]: https://github.com/Valloric/ListToggle
 [vim-build]: https://github.com/ycm-core/YouCompleteMe/wiki/Building-Vim-from-source
 [tracker]: https://github.com/ycm-core/YouCompleteMe/issues?state=open
 [completer-api]: https://github.com/ycm-core/ycmd/blob/master/ycmd/completers/completer.py
