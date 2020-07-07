@@ -120,6 +120,7 @@ def Subcommands_DefinedSubcommands_test( app ):
                                     'GoToReferences',
                                     'GoToImplementation',
                                     'GoToType',
+                                    'GoToSymbol',
                                     'FixIt',
                                     'RestartServer',
                                     'ExecuteCommand' ) )
@@ -428,6 +429,7 @@ def Subcommands_FixIt_FixItWorksAtEndOfFile_test( app ):
                         LocationMatcher( filepath, 3, 1 ),
                         LocationMatcher( filepath, 3, 1 ) ),
         ),
+        'kind': 'source.organizeImports',
       } ),
     )
   } )
@@ -469,12 +471,13 @@ def Subcommands_FixIt_Simple_test( app ):
         'text': "Organize Imports",
         'chunks': contains_exactly(
           ChunkMatcher( '',
-                        LocationMatcher( filepath, 1, 1 ),
+                        LocationMatcher( filepath, 2, 1 ),
                         LocationMatcher( filepath, 3, 1 ) ),
-          ChunkMatcher( 'package main',
+          ChunkMatcher( '\n',
                         LocationMatcher( filepath, 3, 1 ),
                         LocationMatcher( filepath, 3, 1 ) ),
         ),
+        'kind': 'source.organizeImports',
       } ),
     )
   } )

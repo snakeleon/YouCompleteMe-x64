@@ -30,20 +30,19 @@ from ycmd.tests.test_utils import ( BuildRequest,
                                     SetUpApp )
 
 shared_app = None
-shared_filepaths = []
+# map of 'app' to filepaths
+shared_filepaths = {}
 shared_log_indexes = {}
 
 
-def setup_module():
+@pytest.fixture( scope='package', autouse=True )
+def set_up_shared_app():
   global shared_app, shared_filepaths
   shared_app = SetUpApp()
-
-
-def teardown_module():
-  global shared_app, shared_filepaths
-
-  for filepath in shared_filepaths:
+  yield
+  for filepath in shared_filepaths.get( shared_app, [] ):
     StopCompleterServer( shared_app, 'cs', filepath )
+
 
 
 @pytest.fixture
@@ -54,6 +53,10 @@ def app( request ):
     custom_options = request.param[ 1 ]
     with IsolatedApp( custom_options ) as app:
       yield app
+      # Shutdown the isolated app
+      for filepath in shared_filepaths.get( app, [] ):
+        StopCompleterServer( app, 'cs', filepath )
+
   else:
     global shared_app
     ClearCompletionsCache()
@@ -132,10 +135,10 @@ def WrapOmniSharpServer( app, filepath ):
   global shared_filepaths
   global shared_log_indexes
 
-  if filepath not in shared_filepaths:
+  if filepath not in shared_filepaths.setdefault( app, [] ):
     # StartCompleterServer( app, 'cs', filepath )
     GetDiagnostics( app, filepath )
-    shared_filepaths.append( filepath )
+    shared_filepaths[ app ].append( filepath )
     WaitUntilCsCompleterIsReady( app, filepath )
 
   logfiles = []

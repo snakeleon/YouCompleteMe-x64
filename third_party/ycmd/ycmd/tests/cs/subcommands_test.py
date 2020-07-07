@@ -19,9 +19,11 @@ from hamcrest import ( assert_that,
                        empty,
                        has_entries,
                        has_entry,
+                       has_items,
                        contains_exactly )
 from unittest.mock import patch
 import os.path
+import pytest
 
 from ycmd import user_options_store
 from ycmd.tests.cs import ( IsolatedYcmd, PathToTestFile, SharedYcmd,
@@ -34,7 +36,7 @@ from ycmd.tests.test_utils import ( BuildRequest,
                                     RangeMatcher,
                                     WaitUntilCompleterServerReady,
                                     WithRetry )
-from ycmd.utils import ReadFile, LOGGER
+from ycmd.utils import ReadFile
 
 
 @SharedYcmd
@@ -62,7 +64,7 @@ def Subcommands_FixIt_Multi_test( app ):
 
     request = BuildRequest( completer_target = 'filetype_default',
                             command_arguments = [ 'FixIt' ],
-                            line_num = 4,
+                            line_num = 5,
                             column_num = 27,
                             contents = contents,
                             filetype = 'cs',
@@ -86,10 +88,9 @@ def Subcommands_FixIt_Multi_test( app ):
     request.pop( 'command_arguments' )
     request.update( { 'fixit': response[ 'fixits' ][ 1 ] } )
     response = app.post_json( '/resolve_fixit', request ).json
-    LOGGER.debug( 'r = %s', response )
     assert_that( response, has_entries( {
       'fixits': contains_exactly( has_entries( {
-        'location': LocationMatcher( fixit_test, 4, 27 ),
+        'location': LocationMatcher( fixit_test, 5, 27 ),
         'chunks': contains_exactly(
           has_entries( { 'replacement_text': '0b101', } ) )
       } ) ) } ) )
@@ -103,26 +104,28 @@ def Subcommands_FixIt_Range_test( app ):
 
     request = BuildRequest( completer_target = 'filetype_default',
                             command_arguments = [ 'FixIt' ],
-                            line_num = 4,
+                            line_num = 5,
                             column_num = 23,
                             contents = contents,
                             filetype = 'cs',
                             filepath = fixit_test )
     request.update( { 'range': {
-      'start': { 'line_num': 4, 'column_num': 23 },
-      'end': { 'line_num': 4, 'column_num': 27 }
+      'start': { 'line_num': 5, 'column_num': 23 },
+      'end': { 'line_num': 5, 'column_num': 27 }
     } } )
     response = app.post_json( '/run_completer_command', request ).json
     assert_that( response, has_entries( {
-      'fixits': contains_exactly( has_entries( {
-        'location': LocationMatcher( fixit_test, 4, 23 ),
-        'chunks': contains_exactly(
-          has_entries( {
-            'replacement_text':
-              '\n        {\n            NewMethod();\n        }\n\n'
-              '        private static void NewMethod()\n        {\r\n',
-            'range': RangeMatcher( fixit_test, ( 3, 31 ), ( 4, 1 ) ) } )
-        ) } ) ) } ) )
+      'fixits': contains_exactly(
+        has_entries( {
+          'text': 'Extract method',
+          'command': has_entries( { 'index': 0 } ),
+          'resolve': True } ),
+        has_entries( {
+          'text': 'Extract local function',
+          'command': has_entries( { 'index': 1 } ),
+          'resolve': True } ),
+      )
+    } ) )
 
 
 @SharedYcmd
@@ -134,21 +137,18 @@ def Subcommands_FixIt_Single_test( app ):
     request = BuildRequest( completer_target = 'filetype_default',
                             command_arguments = [ 'FixIt' ],
                             line_num = 4,
-                            column_num = 23,
+                            column_num = 17,
                             contents = contents,
                             filetype = 'cs',
                             filepath = fixit_test )
     response = app.post_json( '/run_completer_command', request ).json
-    LOGGER.debug( 'r = %s', response )
     assert_that( response, has_entries( {
       'fixits': contains_exactly( has_entries( {
-        'location': LocationMatcher( fixit_test, 4, 23 ),
+        'location': LocationMatcher( fixit_test, 4, 17 ),
         'chunks': contains_exactly(
           has_entries( {
-            'replacement_text':
-              '\n        {\n            NewMethod();\n        }\n\n'
-              '        private static void NewMethod()\n        {\r\n',
-            'range': RangeMatcher( fixit_test, ( 3, 31 ), ( 4, 1 ) ) } )
+            'replacement_text': 'var',
+            'range': RangeMatcher( fixit_test, ( 4, 13 ), ( 4, 16 ) ) } )
         ) } ) ) } ) )
 
 
@@ -222,7 +222,7 @@ def Subcommands_RefactorRename_Basic_test( app ):
 
 
 @WithRetry
-@IsolatedYcmd()
+@SharedYcmd
 def Subcommands_GoTo_Basic_test( app ):
   filepath = PathToTestFile( 'testy', 'GotoTestCase.cs' )
   contents = ReadFile( filepath )
@@ -245,6 +245,38 @@ def Subcommands_GoTo_Basic_test( app ):
 
   response = app.post_json( '/run_completer_command', goto_data ).json
   assert_that( response, LocationMatcher( destination, 7, 22 ) )
+
+
+@SharedYcmd
+@pytest.mark.parametrize( 'identifier,expected', [
+  ( 'IGotoTestMultiple',
+    LocationMatcher( PathToTestFile( 'testy', 'GotoTestCase.cs' ), 39, 12 ) ),
+  ( 'DoSomething',
+    has_items(
+      LocationMatcher( PathToTestFile( 'testy', 'GotoTestCase.cs' ), 27, 8 ),
+      LocationMatcher( PathToTestFile( 'testy', 'GotoTestCase.cs' ), 31, 15 ),
+      LocationMatcher( PathToTestFile( 'testy', 'GotoTestCase.cs' ), 36, 8 ),
+      LocationMatcher( PathToTestFile( 'testy', 'GotoTestCase.cs' ), 40, 8 ),
+      LocationMatcher( PathToTestFile( 'testy', 'GotoTestCase.cs' ), 44, 15 ),
+      LocationMatcher( PathToTestFile( 'testy',
+                                       'GotoTestCase.cs' ), 49, 15 ) ) ),
+  ( 'asd', ErrorMatcher( RuntimeError, 'No symbols found' ) )
+] )
+def Subcommands_GoToSymbol_test( app, identifier, expected ):
+  filepath = PathToTestFile( 'testy', 'GotoTestCase.cs' )
+  with WrapOmniSharpServer( app, filepath ):
+    contents = ReadFile( filepath )
+    goto_data = BuildRequest( completer_target = 'filetype_default',
+                              command_arguments = [ 'GoToSymbol', identifier ],
+                              line_num = 1,
+                              column_num = 1,
+                              contents = contents,
+                              filetype = 'cs',
+                              filepath = filepath )
+    response =  app.post_json( '/run_completer_command',
+                               goto_data,
+                               expect_errors = True ).json
+    assert_that( response, expected )
 
 
 @SharedYcmd
@@ -623,6 +655,7 @@ def Subcommands_GetDoc_Function_test( app ):
 @IsolatedYcmd()
 def Subcommands_StopServer_NoErrorIfNotStarted_test( app ):
   filepath = PathToTestFile( 'testy', 'GotoTestCase.cs' )
+  # Don't wrap the server - we don't want to start it!
   app.post_json(
     '/run_completer_command',
     BuildRequest(
@@ -644,45 +677,37 @@ def Subcommands_StopServer_NoErrorIfNotStarted_test( app ):
 
 def StopServer_KeepLogFiles( app ):
   filepath = PathToTestFile( 'testy', 'GotoTestCase.cs' )
-  contents = ReadFile( filepath )
-  event_data = BuildRequest( filepath = filepath,
-                             filetype = 'cs',
-                             contents = contents,
-                             event_name = 'FileReadyToParse' )
+  with WrapOmniSharpServer( app, filepath ):
+    event_data = BuildRequest( filetype = 'cs', filepath = filepath )
 
-  app.post_json( '/event_notification', event_data )
-  WaitUntilCompleterServerReady( app, 'cs' )
+    response = app.post_json( '/debug_info', event_data ).json
 
-  event_data = BuildRequest( filetype = 'cs', filepath = filepath )
+    logfiles = []
+    for server in response[ 'completer' ][ 'servers' ]:
+      logfiles.extend( server[ 'logfiles' ] )
 
-  response = app.post_json( '/debug_info', event_data ).json
-
-  logfiles = []
-  for server in response[ 'completer' ][ 'servers' ]:
-    logfiles.extend( server[ 'logfiles' ] )
-
-  try:
-    for logfile in logfiles:
-      assert_that( os.path.exists( logfile ),
-           'Logfile should exist at {0}'.format( logfile ) )
-  finally:
-    app.post_json(
-      '/run_completer_command',
-      BuildRequest(
-        filetype = 'cs',
-        filepath = filepath,
-        command_arguments = [ 'StopServer' ]
+    try:
+      for logfile in logfiles:
+        assert_that( os.path.exists( logfile ),
+             'Logfile should exist at {0}'.format( logfile ) )
+    finally:
+      app.post_json(
+        '/run_completer_command',
+        BuildRequest(
+          filetype = 'cs',
+          filepath = filepath,
+          command_arguments = [ 'StopServer' ]
+        )
       )
-    )
 
-  if user_options_store.Value( 'server_keep_logfiles' ):
-    for logfile in logfiles:
-      assert_that( os.path.exists( logfile ),
-           'Logfile should still exist at {0}'.format( logfile ) )
-  else:
-    for logfile in logfiles:
-      assert_that( not os.path.exists( logfile ),
-           'Logfile should no longer exist at {0}'.format( logfile ) )
+    if user_options_store.Value( 'server_keep_logfiles' ):
+      for logfile in logfiles:
+        assert_that( os.path.exists( logfile ),
+             'Logfile should still exist at {0}'.format( logfile ) )
+    else:
+      for logfile in logfiles:
+        assert_that( not os.path.exists( logfile ),
+             'Logfile should no longer exist at {0}'.format( logfile ) )
 
 
 @IsolatedYcmd( { 'server_keep_logfiles': 1 } )
@@ -698,16 +723,7 @@ def Subcommands_StopServer_DoNotKeepLogFiles_test( app ):
 @IsolatedYcmd()
 def Subcommands_RestartServer_PidChanges_test( app ):
   filepath = PathToTestFile( 'testy', 'GotoTestCase.cs' )
-  contents = ReadFile( filepath )
-  event_data = BuildRequest( filepath = filepath,
-                             filetype = 'cs',
-                             contents = contents,
-                             event_name = 'FileReadyToParse' )
-
-  app.post_json( '/event_notification', event_data )
-
-  try:
-    WaitUntilCompleterServerReady( app, 'cs' )
+  with WrapOmniSharpServer( app, filepath ):
 
     def GetPid():
       request_data = BuildRequest( filetype = 'cs', filepath = filepath )
@@ -729,15 +745,6 @@ def Subcommands_RestartServer_PidChanges_test( app ):
     new_pid = GetPid()
 
     assert old_pid != new_pid, '%r == %r' % ( old_pid, new_pid )
-  finally:
-    app.post_json(
-      '/run_completer_command',
-      BuildRequest(
-        filetype = 'cs',
-        filepath = filepath,
-        command_arguments = [ 'StopServer' ]
-      )
-    )
 
 
 @IsolatedYcmd()
@@ -857,66 +864,4 @@ def Subcommands_RangeFormat_Works_test( app ):
             LocationMatcher( filepath, 8, 1 ),
             LocationMatcher( filepath, 9, 4 )
           ),
-        ) } ) ) } ) )
-
-
-@SharedYcmd
-def Subcommands_RefactorRename_MultiFile_test( app ):
-  continuous_test = PathToTestFile( 'testy', 'ContinuousTest.cs' )
-  fixit_test = PathToTestFile( 'testy', 'FixItTestCase.cs' )
-  get_type_test = PathToTestFile( 'testy', 'GetTypeTestCase.cs' )
-  goto_test = PathToTestFile( 'testy', 'GotoTestCase.cs' )
-  import_test = PathToTestFile( 'testy', 'ImportTest.cs' )
-  program = PathToTestFile( 'testy', 'Program.cs' )
-  get_doc_test = PathToTestFile( 'testy', 'GetDocTestCase.cs' )
-  unicode_test = PathToTestFile( 'testy', 'Unicode.cs' )
-  with WrapOmniSharpServer( app, continuous_test ):
-    contents = ReadFile( continuous_test )
-
-    request = BuildRequest( completer_target = 'filetype_default',
-                            command_arguments = [ 'RefactorRename', 'x' ],
-                            line_num = 3,
-                            column_num = 11,
-                            contents = contents,
-                            filetype = 'cs',
-                            filepath = continuous_test )
-
-    response = app.post_json( '/run_completer_command', request ).json
-    print( 'response = ', response )
-    assert_that( response, has_entries( {
-      'fixits': contains_exactly( has_entries( {
-        'location': LocationMatcher( continuous_test, 3, 11 ),
-        'chunks': contains_exactly(
-          has_entries( {
-            'replacement_text': 'x',
-            'range': RangeMatcher( continuous_test, ( 3, 11 ), ( 3, 16 ) )
-          } ),
-          has_entries( {
-            'replacement_text': 'x',
-            'range': RangeMatcher( fixit_test, ( 1, 11 ), ( 1, 16 ) )
-          } ),
-          has_entries( {
-            'replacement_text': 'x',
-            'range': RangeMatcher( get_doc_test, ( 4, 11 ), ( 4, 16 ) )
-          } ),
-          has_entries( {
-            'replacement_text': 'x',
-            'range': RangeMatcher( get_type_test, ( 2, 11 ), ( 2, 16 ) )
-          } ),
-          has_entries( {
-            'replacement_text': 'x',
-            'range': RangeMatcher( goto_test, ( 4, 11 ), ( 4, 16 ) )
-          } ),
-          has_entries( {
-            'replacement_text': 'x',
-            'range': RangeMatcher( import_test, ( 3, 11 ), ( 3, 16 ) )
-          } ),
-          has_entries( {
-            'replacement_text': 'x',
-            'range': RangeMatcher( program, ( 3, 11 ), ( 3, 16 ) )
-          } ),
-          has_entries( {
-            'replacement_text': 'x',
-            'range': RangeMatcher( unicode_test, ( 4, 11 ), ( 4, 16 ) )
-          } ),
         ) } ) ) } ) )

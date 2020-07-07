@@ -17,12 +17,14 @@
 
 from hamcrest import ( assert_that,
                        contains_exactly,
+                       contains_inanyorder,
                        equal_to,
                        has_item,
                        has_entries,
                        has_entry,
                        matches_regexp )
 from pprint import pformat
+from unittest.mock import patch
 import os
 import pytest
 import requests
@@ -37,6 +39,14 @@ from ycmd.tests.test_utils import ( BuildRequest,
 TYPESHED_PATH = os.path.normpath(
   PathToTestFile( '..', '..', '..', '..', 'third_party', 'jedi_deps', 'jedi',
     'jedi', 'third_party', 'typeshed', 'stdlib', '2and3', 'builtins.pyi' ) )
+
+
+class JediDef:
+  def __init__( self, col = None, line = None, path = None ):
+    self.column = col
+    self.line = line
+    self.module_path = path
+    self.description = ''
 
 
 def RunTest( app, test ):
@@ -64,7 +74,15 @@ def RunTest( app, test ):
 
 
 def Subcommands_GoTo( app, test, command ):
-  if isinstance( test[ 'response' ], tuple ):
+  if isinstance( test[ 'response' ], list ):
+    expect = {
+      'response': requests.codes.ok,
+      'data': contains_inanyorder( *[
+        LocationMatcher( PathToTestFile( 'goto', r[ 0 ] ), r[ 1 ], r[ 2 ] )
+          for r in test[ 'response' ]
+      ] )
+    }
+  elif isinstance( test[ 'response' ], tuple ):
     expect = {
       'response': requests.codes.ok,
       'data': LocationMatcher( PathToTestFile( 'goto',
@@ -78,14 +96,16 @@ def Subcommands_GoTo( app, test, command ):
       'data': ErrorMatcher( RuntimeError, test[ 'response' ] )
     }
 
+  req = test[ 'request' ]
   RunTest( app, {
     'description': command + ' jumps to the right location',
     'request': {
       'command'   : command,
+      'arguments': [] if len( req ) < 4 else req[ 3 ],
       'filetype'  : 'python',
-      'filepath'  : PathToTestFile( 'goto', test[ 'request' ][ 0 ] ),
-      'line_num'  : test[ 'request' ][ 1 ],
-      'column_num': test[ 'request' ][ 2 ]
+      'filepath'  : PathToTestFile( 'goto', req[ 0 ] ),
+      'line_num'  : req[ 1 ],
+      'column_num': req[ 2 ]
     },
     'expect': expect,
   } )
@@ -135,10 +155,56 @@ def Subcommands_GoTo( app, test, command ):
       'response': ( 'multifile2.py', 1, 51 ) },
     { 'request':  ( 'multifile1.py', 6, 14 ),
       'response': ( 'multifile1.py', 2, 36 ) },
+    # Absolute import from nested module
+    { 'request':  ( os.path.join( 'nested_import', 'importer.py' ), 1, 19 ),
+      'response': ( 'basic.py', 4, 7 ) },
+    { 'request':  ( os.path.join( 'nested_import', 'importer.py' ), 2, 40 ),
+      'response': ( os.path.join( 'nested_import', 'to_import.py' ), 1, 5 ) },
+    # Relative within nested module
+    { 'request':  ( os.path.join( 'nested_import', 'importer.py' ), 3, 28 ),
+      'response': ( os.path.join( 'nested_import', 'to_import.py' ), 4, 5 ) },
   ] )
 @SharedYcmd
 def Subcommands_GoTo_test( app, cmd, test ):
   Subcommands_GoTo( app, test, cmd )
+
+
+@pytest.mark.parametrize( 'test', [
+  { 'request': ( 'basic.py', 1, 1, [ 'MyClass' ] ),
+    'response': ( 'basic.py', 4, 7 ) },
+
+  { 'request': ( 'basic.py', 1, 1, [ 'class C' ] ),
+    'response': ( 'child.py', 2, 7 ) },
+
+  { 'request': ( 'basic.py', 1, 1, [ 'C.c' ] ),
+    'response': [ ( 'child.py', 3, 7 ), ( 'parent.py', 3, 7 ) ] },
+
+  { 'request': ( 'basic.py', 1, 1, [ 'nothing_here_mate' ] ),
+    'response': 'Symbol not found' }
+] )
+@SharedYcmd
+def Subcommands_GoToSymbol_test( app, test ):
+  Subcommands_GoTo( app, test, 'GoToSymbol' )
+
+
+@pytest.mark.parametrize( 'test', [
+  { 'request': ( 'basic.py', 1, 4 ),
+    'response': 'Can\'t jump to definition.', 'cmd': 'GoTo' },
+  { 'request': ( 'basic.py', 1, 4 ),
+    'response': 'Can\'t find references.', 'cmd': 'GoToReferences' },
+  { 'request': ( 'basic.py', 1, 4 ),
+    'response': 'Can\'t jump to type definition.', 'cmd': 'GoToType' }
+] )
+@SharedYcmd
+def Subcommands_GoTo_SingleInvalidJediDefinition_test( app, test ):
+  with patch( 'ycmd.completers.python.python_completer.jedi.Script.infer',
+              return_value = [ JediDef() ] ):
+    with patch( 'ycmd.completers.python.python_completer.jedi.Script.goto',
+                return_value = [ JediDef() ] ):
+      with patch( 'ycmd.completers.python.python_completer.'
+                  'jedi.Script.get_references',
+                  return_value = [ JediDef() ] ):
+        Subcommands_GoTo( app, test, test.pop( 'cmd' ) )
 
 
 def Subcommands_GetType( app, position, expected_message ):
@@ -230,6 +296,27 @@ def Subcommands_GetDoc_Class_test( app ):
   assert_that( response, has_entry(
     'detailed_info', 'TestClass()\n\nClass Documentation',
   ) )
+
+
+@SharedYcmd
+def Subcommands_GetDoc_WhitespaceOnly_test( app ):
+  filepath = PathToTestFile( 'GetDoc.py' )
+  contents = ReadFile( filepath )
+
+  command_data = BuildRequest( filepath = filepath,
+                               filetype = 'python',
+                               line_num = 27,
+                               column_num = 10,
+                               contents = contents,
+                               command_arguments = [ 'GetDoc' ] )
+
+  response = app.post_json( '/run_completer_command',
+                            command_data,
+                            expect_errors = True ).json
+
+  assert_that( response,
+               ErrorMatcher( RuntimeError, 'No documentation available.' ) )
+
 
 
 @SharedYcmd
@@ -349,3 +436,30 @@ def Subcommands_GoToReferences_NoReferences_test( app ):
 
   assert_that( response,
                ErrorMatcher( RuntimeError, 'Can\'t find references.' ) )
+
+
+@SharedYcmd
+def Subcommands_GoToReferences_InvalidJediReferences_test( app ):
+  with patch( 'ycmd.completers.python.python_completer.'
+              'jedi.Script.get_references',
+              return_value = [ JediDef(),
+                               JediDef( 1, 1, PathToTestFile( 'foo.py' ) ) ] ):
+
+    filepath = PathToTestFile( 'goto', 'references.py' )
+    contents = ReadFile( filepath )
+
+    command_data = BuildRequest( filepath = filepath,
+                                 filetype = 'python',
+                                 line_num = 2,
+                                 column_num = 5,
+                                 contents = contents,
+                                 command_arguments = [ 'GoToReferences' ] )
+
+    response = app.post_json( '/run_completer_command',
+                              command_data,
+                              expect_errors = True ).json
+
+    assert_that( response, contains_exactly( has_entries( {
+      'line_num': 1,
+      'column_num': 2, # Jedi columns are 0 based
+      'filepath': PathToTestFile( 'foo.py' ) } ) ) )

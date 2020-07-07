@@ -26,6 +26,7 @@ from functools import partial
 
 from tempfile import NamedTemporaryFile
 
+from ycmd import extra_conf_store
 from ycmd import responses
 from ycmd import utils
 from ycmd.completers.completer import Completer
@@ -129,7 +130,7 @@ class TypeScriptCompleter( Completer ):
   It uses TSServer which is bundled with TypeScript 1.5
 
   See the protocol here:
-  https://github.com/Microsoft/TypeScript/blob/2cb0dfd99dc2896958b75e44303d8a7a32e5dc33/src/server/protocol.d.ts
+  https://github.com/microsoft/TypeScript/blob/master/src/server/protocol.ts
   """
 
 
@@ -147,7 +148,7 @@ class TypeScriptCompleter( Completer ):
     self._tsserver_is_running = threading.Event()
 
     # Used to prevent threads from concurrently writing to
-    # the tsserver process' stdin
+    # the tsserver process's stdin
     self._write_lock = threading.Lock()
 
     # Each request sent to tsserver must have a sequence id.
@@ -173,13 +174,12 @@ class TypeScriptCompleter( Completer ):
     self._latest_diagnostics_for_file_lock = threading.Lock()
     self._latest_diagnostics_for_file = defaultdict( list )
 
-    # There's someting in the API that lists the trigger characters, but
+    # There's something in the API that lists the trigger characters, but
     # there is no way to request that from the server, so we just hard-code
     # the signature triggers.
     self.SetSignatureHelpTriggers( [ '(', ',', '<' ] )
 
     LOGGER.info( 'Enabling TypeScript completion' )
-
 
   def _SetServerVersion( self ):
     version = self._SendRequest( 'status' )[ 'version' ]
@@ -215,6 +215,7 @@ class TypeScriptCompleter( Completer ):
                                              stderr = subprocess.STDOUT,
                                              env = environ )
 
+    LOGGER.info( "TSServer started with PID %s", self._tsserver_handle.pid )
     self._tsserver_is_running.set()
 
     utils.StartThread( self._SetServerVersion )
@@ -341,7 +342,7 @@ class TypeScriptCompleter( Completer ):
 
   def _Reload( self, request_data ):
     """
-    Syncronize TSServer's view of the file to
+    Synchronize TSServer's view of the file to
     the contents of the unsaved buffer.
     """
 
@@ -359,6 +360,10 @@ class TypeScriptCompleter( Completer ):
 
   def _ServerIsRunning( self ):
     return utils.ProcessIsRunning( self._tsserver_handle )
+
+
+  def Language( self ):
+    return 'typescript'
 
 
   def ServerIsHealthy( self ):
@@ -469,6 +474,8 @@ class TypeScriptCompleter( Completer ):
 
 
   def OnFileReadyToParse( self, request_data ):
+    # Only load the extra conf. We don't need it for anything but Format.
+    extra_conf_store.ModuleFileForSourceFile( request_data[ 'filepath' ] )
     self._Reload( request_data )
 
     diagnostics = self.GetDiagnosticsForCurrentFile( request_data )
@@ -869,14 +876,15 @@ class TypeScriptCompleter( Completer ):
     # for the list of options. While not standard, a way to support these
     # options, which is already adopted by a number of clients, would be to read
     # the "formatOptions" field in the tsconfig.json file.
-    options = request_data[ 'options' ]
+    options = dict( request_data[ 'options' ] )
+    options[ 'tabSize' ] = options.pop( 'tab_size' )
+    options[ 'indentSize' ] = options[ 'tabSize' ]
+    options[ 'convertTabsToSpaces' ] = options.pop( 'insert_spaces' )
+    options.update(
+      self.AdditionalFormattingOptions( request_data ) )
     self._SendRequest( 'configure', {
       'file': filepath,
-      'formatOptions': {
-        'tabSize': options[ 'tab_size' ],
-        'indentSize': options[ 'tab_size' ],
-        'convertTabsToSpaces': options[ 'insert_spaces' ],
-      }
+      'formatOptions': options
     } )
 
     response = self._SendRequest( 'format',

@@ -22,8 +22,9 @@ from ycmd.utils import ( CodepointOffsetToByteOffset,
                          FindExecutable,
                          LOGGER )
 
-import os
+import itertools
 import jedi
+import os
 import parso
 from threading import Lock
 
@@ -137,13 +138,13 @@ class PythonCompleter( Completer ):
       if hasattr( module, 'PythonSysPath' ):
         settings[ 'sys_path' ] = module.PythonSysPath( **settings )
       LOGGER.debug( 'No PythonSysPath function defined in %s', module.__file__ )
-    if not settings.get( 'project_directory' ):
-      module = extra_conf_store.ModuleForSourceFile( filepath )
-      if module:
-        settings[ 'project_directory' ] = os.path.dirname( module.__file__ )
-      else:
-        settings[ 'project_directory' ] = os.path.dirname( filepath )
-    return jedi.Project( settings[ 'project_directory' ],
+
+    project_directory = settings.get( 'project_directory' )
+    if not project_directory:
+      default_project = jedi.get_default_project(
+        os.path.dirname( request_data[ 'filepath' ] ) )
+      project_directory = default_project._path
+    return jedi.Project( project_directory,
                          sys_path = settings[ 'sys_path' ],
                          environment_path = settings[ 'interpreter_path' ] )
 
@@ -281,6 +282,8 @@ class PythonCompleter( Completer ):
                            self._GoToDefinition( request_data ) ),
       'GoToReferences' : ( lambda self, request_data, args:
                            self._GoToReferences( request_data ) ),
+      'GoToSymbol' : ( lambda self, request_data, args:
+                       self._GoToSymbol( request_data, args ) ),
       'GoToType'       : ( lambda self, request_data, args:
                            self._GoToType( request_data ) ),
       'GetType'        : ( lambda self, request_data, args:
@@ -294,6 +297,10 @@ class PythonCompleter( Completer ):
     if len( definitions ) == 1:
       definition = definitions[ 0 ]
       column = 1
+      if all( x is None for x in [ definition.column,
+                                   definition.line,
+                                   definition.module_path ] ):
+        return None
       if definition.column is not None:
         column += definition.column
       filepath = definition.module_path or request_data[ 'filepath' ]
@@ -304,6 +311,10 @@ class PythonCompleter( Completer ):
     gotos = []
     for definition in definitions:
       column = 1
+      if all( x is None for x in [ definition.column,
+                                   definition.line,
+                                   definition.module_path ] ):
+        continue
       if definition.column is not None:
         column += definition.column
       filepath = definition.module_path or request_data[ 'filepath' ]
@@ -323,7 +334,9 @@ class PythonCompleter( Completer ):
       script = self._GetJediScript( request_data )
       definitions = script.infer( line, column )
       if definitions:
-        return self._BuildGoToResponse( definitions, request_data )
+        type_def = self._BuildGoToResponse( definitions, request_data )
+        if type_def is not None:
+          return type_def
 
     raise RuntimeError( 'Can\'t jump to type definition.' )
 
@@ -337,7 +350,9 @@ class PythonCompleter( Completer ):
       script = self._GetJediScript( request_data )
       definitions = script.goto( line, column )
       if definitions:
-        return self._BuildGoToResponse( definitions, request_data )
+        definitions = self._BuildGoToResponse( definitions, request_data )
+        if definitions is not None:
+          return definitions
 
     raise RuntimeError( 'Can\'t jump to definition.' )
 
@@ -351,8 +366,37 @@ class PythonCompleter( Completer ):
       definitions = self._GetJediScript( request_data ).get_references( line,
                                                                         column )
       if definitions:
-        return self._BuildGoToResponse( definitions, request_data )
+        references = self._BuildGoToResponse( definitions, request_data )
+        if references is not None:
+          return references
     raise RuntimeError( 'Can\'t find references.' )
+
+
+  def _GoToSymbol( self, request_data, args ):
+    if len( args ) < 1:
+      raise RuntimeError( 'Must specify something to search for' )
+
+    query = args[ 0 ]
+
+    # Jedi docs say:
+    #   Searches a name in the whole project. If the project is very big, at
+    #   some point Jedi will stop searching. However it’s also very much
+    #   recommended to not exhaust the generator. Just display the first ten
+    #   results to the user.
+    MAX_RESULTS = 10
+
+    with self._jedi_lock:
+      environent = self._EnvironmentForRequest( request_data )
+      project = self._JediProjectForFile( request_data, environent )
+
+      definitions = list( itertools.islice( project.complete_search( query ),
+                                            MAX_RESULTS ) )
+      if definitions:
+        definitions = self._BuildGoToResponse( definitions, request_data )
+        if definitions is not None:
+          return definitions
+
+    raise RuntimeError( 'Symbol not found' )
 
 
   # This method must be called under Jedi's lock.
@@ -392,8 +436,9 @@ class PythonCompleter( Completer ):
       # codepoint offsets.
       column = request_data[ 'start_codepoint' ] - 1
       definitions = self._GetJediScript( request_data ).goto( line, column )
-      documentation = [ definition.docstring() for definition in definitions ]
-    documentation = '\n---\n'.join( documentation )
+      documentation = [
+        definition.docstring().strip() for definition in definitions ]
+    documentation = '\n---\n'.join( [ d for d in documentation if d ] )
     if documentation:
       return responses.BuildDetailedInfoResponse( documentation )
     raise RuntimeError( 'No documentation available.' )

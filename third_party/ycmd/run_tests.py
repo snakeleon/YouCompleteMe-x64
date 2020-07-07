@@ -8,6 +8,8 @@ import subprocess
 import os.path as p
 import sys
 
+BASE_PYTEST_ARGS = [ '-v', '--color=yes' ]
+
 DIR_OF_THIS_SCRIPT = p.dirname( p.abspath( __file__ ) )
 DIR_OF_THIRD_PARTY = p.join( DIR_OF_THIS_SCRIPT, 'third_party' )
 DIR_OF_WATCHDOG_DEPS = p.join( DIR_OF_THIRD_PARTY, 'watchdog_deps' )
@@ -129,12 +131,12 @@ def ParseArguments():
                        help = argparse.SUPPRESS ) # deprecated
   group.add_argument( '--no-completers', nargs ='*', type = CompleterType,
                        help = 'Do not build or test with listed semantic '
-                       'completion engine(s). Valid values: {0}'.format(
-                        COMPLETERS.keys() ) )
+                       'completion engine(s).',
+                       choices = COMPLETERS.keys() )
   group.add_argument( '--completers', nargs ='*', type = CompleterType,
                        help = 'Only build and test with listed semantic '
-                       'completion engine(s). Valid values: {0}'.format(
-                        COMPLETERS.keys() ) )
+                       'completion engine(s).',
+                       choices = COMPLETERS.keys() )
   parser.add_argument( '--skip-build', action = 'store_true',
                        help = 'Do not build ycmd before testing.' )
   parser.add_argument( '--msvc', type = int, choices = [ 14, 15, 16 ],
@@ -220,7 +222,7 @@ def BuildYcmdLibs( args ):
 
 
 def PytestValgrind( parsed_args, extra_pytests_args ):
-  pytests_args = [ '-v' ]
+  pytests_args = BASE_PYTEST_ARGS
   if extra_pytests_args:
     pytests_args.extend( extra_pytests_args )
   else:
@@ -251,7 +253,7 @@ def PytestValgrind( parsed_args, extra_pytests_args ):
 
 
 def PytestTests( parsed_args, extra_pytests_args ):
-  pytests_args = [ '-v' ]
+  pytests_args = BASE_PYTEST_ARGS
 
   for key in COMPLETERS:
     if key not in parsed_args.completers:
