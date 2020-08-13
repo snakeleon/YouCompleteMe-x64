@@ -5,31 +5,17 @@ YouCompleteMe: a code-completion engine for Vim
 [![Build status](https://dev.azure.com/YouCompleteMe/YCM/_apis/build/status/ycm-core.YouCompleteMe?branchName=master)](https://dev.azure.com/YouCompleteMe/YCM/_build?definitionId=3&branchName=master)
 [![Coverage status](https://img.shields.io/codecov/c/github/ycm-core/YouCompleteMe/master.svg)](https://codecov.io/gh/ycm-core/YouCompleteMe)
 
-Warning: Support for Python 2 has been dropped
+Warning: Support for Python 3.5 has ended
 ----
 
-In early 2020, YCM dropped support for Python 2. But we will maintain
-critical fixes on a branch named [legacy-py2][] for a period of 1 year.
-
-How?
-
-In order to use the legacy Python 2 support, see
-[this post](https://github.com/ycm-core/YouCompleteMe/issues/3595#issuecomment-584230366)
+In mid 2020, YCM dropped support for Python 3.5 runtime.
 
 Why?
 
-Over the past decade, YouCompleteMe has had an at times fractious,
-but ultimately very successful relationship with Python 2. However, more
-recently it has been carrying on a simultaneous relationship with Python 3.
-Indeed all of YCM and ycmd code is Python 3 code, with a lot of gubbins
-to make it work also on Python 2. This makes the code more complex,
-requires double testing of everything, and restricts the developers from using
-certain new language features, ultimately restricting the features we can
-deliver to users.
-
-On 1st January 2020, Python 2 will be officially end of life. And therefore, so
+On 13th September 2020, Python 3.5 will be officially end of life. And therefore, so
 will its relationship with YouCompleteMe and ycmd.
 
+Looking for Python 2 support? Check the [Wiki](https://github.com/ycm-core/YouCompleteMe/wiki/Python-2).
 
 Help, Advice, Support
 ---------------------
@@ -230,6 +216,7 @@ Installation
 
 #### Quick start, installing all completers
 
+- Install YCM plugin via [Vundle][]
 - Install cmake, macvim and python; Note that the *system* vim is not supported.
 
 &nbsp;
@@ -321,6 +308,7 @@ that are conservatively turned off by default that you may want to turn on.
 
 #### Quick start, installing all completers
 
+- Install YCM plugin via [Vundle][]
 - Install cmake, vim and python
 
 &nbsp;
@@ -422,6 +410,7 @@ that are conservatively turned off by default that you may want to turn on.
 
 #### Quick start, installing all completers
 
+- Install YCM plugin via [Vundle][]
 - Install [Visual Studio Build Tools 2017][visual-studio-download]
 - Install cmake, vim and python
 - Install go, node and npm
@@ -478,8 +467,8 @@ Download and install the following software:
   Additionally, the version of Python you install must match up exactly with
   the version of Python that Vim is looking for. Type `:version` and look at the
   bottom of the page at the list of compiler flags. Look for flags that look
-  similar to `-DDYNAMIC_PYTHON3_DLL=\"python35.dll\"`. This indicates
-  that Vim is looking for Python 3.5. You'll need one or the other installed,
+  similar to `-DDYNAMIC_PYTHON3_DLL=\"python36.dll\"`. This indicates
+  that Vim is looking for Python 3.6. You'll need one or the other installed,
   matching the version number exactly.
 - [CMake][cmake-download]. Add CMake executable to the PATH environment
   variable.
@@ -534,6 +523,7 @@ that are conservatively turned off by default that you may want to turn on.
 
 #### Quick start, installing all completers
 
+- Install YCM plugin via [Vundle][]
 - Install cmake
 
 &nbsp;
@@ -1411,7 +1401,7 @@ def Settings( **kwargs ):
     return { 'ls': { 'java.format.onType.enabled': True } }
 ```
 
-The `ls` key tells YCM that the dictionary should be passed to thet LSP server.
+The `ls` key tells YCM that the dictionary should be passed to the LSP server.
 For each of the LSP server's configuration you should look up the respective
 server's documentation.
 
