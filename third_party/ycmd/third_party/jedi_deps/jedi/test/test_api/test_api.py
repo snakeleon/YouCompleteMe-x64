@@ -134,8 +134,11 @@ def test_infer_on_non_name(Script):
     assert Script('import x').infer(column=0) == []
 
 
-def test_infer_on_generator(Script):
-    def_, = Script('def x(): yield 1\ny=x()\ny').infer()
+def test_infer_on_generator(Script, environment):
+    script = Script('def x(): yield 1\ny=x()\ny')
+    def_, = script.infer()
+    assert def_.name == 'Generator'
+    def_, = script.infer(only_stubs=True)
     assert def_.name == 'Generator'
 
 

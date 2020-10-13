@@ -82,7 +82,7 @@ def RunTest( app, test, contents = None ):
     expect_errors = True
   )
 
-  print( 'completer response: {}'.format( pformat( response.json ) ) )
+  print( f'completer response: { pformat( response.json ) }' )
 
   assert_that( response.status_code,
                equal_to( test[ 'expect' ][ 'response' ] ) )
@@ -188,16 +188,16 @@ def Subcommands_Format_WholeFile_test( app ):
           'chunks': contains_exactly(
             ChunkMatcher( '',
                           LocationMatcher( filepath, 8, 1 ),
-                          LocationMatcher( filepath, 9, 1 ) ),
-            ChunkMatcher( '\tdummy() //GoTo\n',
-                          LocationMatcher( filepath, 9, 1 ),
-                          LocationMatcher( filepath, 9, 1 ) ),
+                          LocationMatcher( filepath, 8, 5 ) ),
+            ChunkMatcher( '\t',
+                          LocationMatcher( filepath, 8, 5 ),
+                          LocationMatcher( filepath, 8, 5 ) ),
             ChunkMatcher( '',
                           LocationMatcher( filepath, 12, 1 ),
-                          LocationMatcher( filepath, 13, 1 ) ),
-            ChunkMatcher( '\tdiagnostics_test\n',
-                          LocationMatcher( filepath, 13, 1 ),
-                          LocationMatcher( filepath, 13, 1 ) ),
+                          LocationMatcher( filepath, 12, 5 ) ),
+            ChunkMatcher( '\t',
+                          LocationMatcher( filepath, 12, 5 ),
+                          LocationMatcher( filepath, 12, 5 ) ),
           )
         } ) )
       } )
@@ -412,54 +412,12 @@ def Subcommands_GoToImplementation_test( app, test ):
   RunGoToTest( app, 'GoToImplementation', test )
 
 
-@ExpectedFailure( 'Gopls bug - golang/go#37702',
-                  matches_regexp( '.*No item matched.*' ) )
-@SharedYcmd
-def Subcommands_FixIt_FixItWorksAtEndOfFile_test( app ):
-  filepath = PathToTestFile( 'fixit_goplsbug.go' )
-  fixit = has_entries( {
-    'fixits': contains_exactly(
-      has_entries( {
-        'text': "Organize Imports",
-        'chunks': contains_exactly(
-          ChunkMatcher( '',
-                        LocationMatcher( filepath, 1, 1 ),
-                        LocationMatcher( filepath, 3, 1 ) ),
-          ChunkMatcher( 'package main',
-                        LocationMatcher( filepath, 3, 1 ),
-                        LocationMatcher( filepath, 3, 1 ) ),
-        ),
-        'kind': 'source.organizeImports',
-      } ),
-    )
-  } )
-  RunFixItTest( app, 'Only one fixit returned', filepath, 1, 1, fixit )
-
-
 @SharedYcmd
 def Subcommands_FixIt_NullResponse_test( app ):
   filepath = PathToTestFile( 'td', 'test.go' )
   RunFixItTest( app,
                 'Gopls returned NULL for response[ \'result\' ]',
                 filepath, 1, 1, has_entry( 'fixits', empty() ) )
-
-
-@SharedYcmd
-def Subcommands_FixIt_ParseError_test( app ):
-  RunTest( app, {
-    'description': 'Parse error leads to ResponseFailedException',
-    'request': {
-      'command': 'FixIt',
-      'line_num': 1,
-      'column_num': 1,
-      'filepath': PathToTestFile( 'unicode', 'unicode.go' ),
-    },
-    'expect': {
-      'response': requests.codes.internal_server_error,
-      'data': ErrorMatcher( ResponseFailedException,
-                            matches_regexp( '^Request failed: \\d' ) )
-    }
-  } )
 
 
 @SharedYcmd
@@ -472,9 +430,6 @@ def Subcommands_FixIt_Simple_test( app ):
         'chunks': contains_exactly(
           ChunkMatcher( '',
                         LocationMatcher( filepath, 2, 1 ),
-                        LocationMatcher( filepath, 3, 1 ) ),
-          ChunkMatcher( '\n',
-                        LocationMatcher( filepath, 3, 1 ),
                         LocationMatcher( filepath, 3, 1 ) ),
         ),
         'kind': 'source.organizeImports',

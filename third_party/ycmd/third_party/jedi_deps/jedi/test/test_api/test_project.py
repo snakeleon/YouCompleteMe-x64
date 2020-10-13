@@ -20,6 +20,12 @@ def test_django_default_project(Script):
     assert script._inference_state.project._django is True
 
 
+def test_django_default_project_of_file(Script):
+    project = get_default_project(__file__)
+    d = os.path.dirname
+    assert project._path == d(d(d(__file__)))
+
+
 def test_interpreter_project_path():
     # Run from anywhere it should be the cwd.
     dir = os.path.join(root_dir, 'test')
@@ -135,7 +141,7 @@ def test_search(string, full_names, kwargs, skip_pre_python36):
         defs = project.complete_search(string, **kwargs)
     else:
         defs = project.search(string, **kwargs)
-    assert [('stub:' if d.is_stub() else '') + d.full_name for d in defs] == full_names
+    assert sorted([('stub:' if d.is_stub() else '') + d.full_name for d in defs]) == full_names
 
 
 @pytest.mark.parametrize(

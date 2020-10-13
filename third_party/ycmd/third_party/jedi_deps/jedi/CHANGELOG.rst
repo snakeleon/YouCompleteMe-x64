@@ -3,6 +3,31 @@
 Changelog
 ---------
 
+Unreleased
+++++++++++
+
+0.17.2 (2020-07-17)
++++++++++++++++++++
+
+- Added an option to pass environment variables to ``Environment``
+- ``Project(...).path`` exists now
+- Support for Python 3.9
+- A few bugfixes
+
+This will be the last release that supports Python 2 and Python 3.5.
+``0.18.0`` will be Python 3.6+.
+
+0.17.1 (2020-06-20)
++++++++++++++++++++
+
+- Django ``Model`` meta class support
+- Django Manager support (completion on Managers/QuerySets)
+- Added Django Stubs to Jedi, thanks to all contributors of the
+  `Django Stubs <https://github.com/typeddjango/django-stubs>`_ project
+- Added ``SyntaxError.get_message``
+- Python 3.9 support
+- Bugfixes (mostly towards Generics)
+
 0.17.0 (2020-04-14)
 +++++++++++++++++++
 

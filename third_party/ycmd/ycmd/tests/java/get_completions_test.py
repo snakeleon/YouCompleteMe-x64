@@ -23,23 +23,31 @@ from hamcrest import ( assert_that,
                        matches_regexp,
                        has_entries,
                        has_item,
-                       has_items )
+                       has_items,
+                       has_key,
+                       instance_of,
+                       is_not )
 
 from pprint import pformat
 import requests
+import os
 
 from ycmd import handlers
 from ycmd.tests.java import ( DEFAULT_PROJECT_DIR,
                               IsolatedYcmd,
                               PathToTestFile,
                               SharedYcmd )
-from ycmd.tests.test_utils import ( CombineRequest,
+from ycmd.tests.test_utils import ( ClearCompletionsCache,
+                                    CombineRequest,
                                     ChunkMatcher,
                                     CompletionEntryMatcher,
+                                    ErrorMatcher,
                                     LocationMatcher,
-                                    WithRetry )
+                                    WithRetry,
+                                    UnixOnly )
 from ycmd.utils import ReadFile
 from unittest.mock import patch
+from ycmd.completers.completer import CompletionsChanged
 
 
 def ProjectPath( *args ):
@@ -50,7 +58,6 @@ def ProjectPath( *args ):
                          *args )
 
 
-@WithRetry
 def RunTest( app, test ):
   """
   Method to run a simple completion test and verify the result
@@ -63,6 +70,8 @@ def RunTest( app, test ):
     }
   """
 
+  ClearCompletionsCache()
+
   contents = ReadFile( test[ 'request' ][ 'filepath' ] )
 
   app.post_json( '/event_notification',
@@ -74,18 +83,17 @@ def RunTest( app, test ):
 
   # We ignore errors here and we check the response code ourself.
   # This is to allow testing of requests returning errors.
-  response = app.post_json( '/completions',
-                            CombineRequest( test[ 'request' ], {
-                              'contents': contents
-                            } ),
-                            expect_errors = True )
+  request = CombineRequest( test[ 'request' ], { 'contents': contents } )
+  response = app.post_json( '/completions', request, expect_errors = True )
 
-  print( 'completer response: {0}'.format( pformat( response.json ) ) )
+  print( f'completer response: { pformat( response.json ) }' )
 
   assert_that( response.status_code,
                equal_to( test[ 'expect' ][ 'response' ] ) )
 
   assert_that( response.json, test[ 'expect' ][ 'data' ] )
+
+  return request, response.json
 
 
 PUBLIC_OBJECT_METHODS = [
@@ -134,6 +142,7 @@ def WithObjectMethods( *args ):
   return list( PUBLIC_OBJECT_METHODS ) + list( args )
 
 
+@WithRetry
 @SharedYcmd
 def GetCompletions_NoQuery_test( app ):
   RunTest( app, {
@@ -163,6 +172,7 @@ def GetCompletions_NoQuery_test( app ):
   } )
 
 
+@WithRetry
 @SharedYcmd
 def GetCompletions_WithQuery_test( app ):
   RunTest( app, {
@@ -192,6 +202,7 @@ def GetCompletions_WithQuery_test( app ):
   } )
 
 
+@WithRetry
 @SharedYcmd
 def GetCompletions_DetailFromCache_test( app ):
   for i in range( 0, 2 ):
@@ -222,6 +233,7 @@ def GetCompletions_DetailFromCache_test( app ):
     } )
 
 
+@WithRetry
 @SharedYcmd
 def GetCompletions_Package_test( app ):
   RunTest( app, {
@@ -247,6 +259,7 @@ def GetCompletions_Package_test( app ):
   } )
 
 
+@WithRetry
 @SharedYcmd
 def GetCompletions_Import_Class_test( app ):
   RunTest( app, {
@@ -273,6 +286,7 @@ def GetCompletions_Import_Class_test( app ):
   } )
 
 
+@WithRetry
 @SharedYcmd
 def GetCompletions_Import_Classes_test( app ):
   filepath = ProjectPath( 'TestLauncher.java' )
@@ -312,6 +326,7 @@ def GetCompletions_Import_Classes_test( app ):
   } )
 
 
+@WithRetry
 @SharedYcmd
 def GetCompletions_Import_ModuleAndClass_test( app ):
   filepath = ProjectPath( 'TestLauncher.java' )
@@ -343,6 +358,7 @@ def GetCompletions_Import_ModuleAndClass_test( app ):
   } )
 
 
+@WithRetry
 @SharedYcmd
 def GetCompletions_WithFixIt_test( app ):
   filepath = ProjectPath( 'TestFactory.java' )
@@ -384,6 +400,7 @@ def GetCompletions_WithFixIt_test( app ):
   } )
 
 
+@WithRetry
 @SharedYcmd
 def GetCompletions_RejectMultiLineInsertion_test( app ):
   filepath = ProjectPath( 'TestLauncher.java' )
@@ -417,6 +434,7 @@ def GetCompletions_RejectMultiLineInsertion_test( app ):
   } )
 
 
+@WithRetry
 @SharedYcmd
 def GetCompletions_UnicodeIdentifier_test( app ):
   filepath = PathToTestFile( DEFAULT_PROJECT_DIR,
@@ -458,6 +476,7 @@ def GetCompletions_UnicodeIdentifier_test( app ):
   } )
 
 
+@WithRetry
 @SharedYcmd
 def GetCompletions_ResolveFailed_test( app ):
   filepath = PathToTestFile( DEFAULT_PROJECT_DIR,
@@ -508,6 +527,7 @@ def GetCompletions_ResolveFailed_test( app ):
     } )
 
 
+@WithRetry
 @IsolatedYcmd()
 def GetCompletions_ServerNotInitialized_test( app ):
   filepath = PathToTestFile( 'simple_eclipse_project',
@@ -546,35 +566,192 @@ def GetCompletions_ServerNotInitialized_test( app ):
     } )
 
 
+@WithRetry
 @SharedYcmd
-def GetCompletions_MoreThan100FilteredResolve_test( app ):
-  RunTest( app, {
-    'description': 'More that 100 match, but filtered set is fewer as this '
-                   'depends on max_num_candidates',
+def GetCompletions_MoreThan10_NoResolve_ThenResolve_test( app ):
+  ClearCompletionsCache()
+  request, response = RunTest( app, {
+    'description': "More than 10 candiates after filtering, don't resolve",
     'request': {
       'filetype'  : 'java',
-      'filepath'  : ProjectPath( 'TestLauncher.java' ),
-      'line_num'  : 4,
-      'column_num': 15,
+      'filepath'  : ProjectPath( 'TestWithDocumentation.java' ),
+      'line_num'  : 6,
+      'column_num': 7,
     },
     'expect': {
       'response': requests.codes.ok,
       'data': has_entries( {
         'completions': has_item(
-          CompletionEntryMatcher( 'com.youcompleteme.*;', None, {
-            'kind': 'Module',
-            'detailed_info': 'com.youcompleteme\n\n',
-          } ),
+          CompletionEntryMatcher(
+            'useAString',
+            'MethodsWithDocumentation.useAString(String s) : void',
+            {
+              'kind': 'Method',
+              # This is the un-resolved info (no documentation)
+              'detailed_info': 'useAString(String s) : void\n\n',
+              'extra_data': has_entries( {
+                'resolve': instance_of( int )
+              } )
+            }
+          ),
         ),
-        'completion_start_column': 8,
+        'completion_start_column': 7,
         'errors': empty(),
       } )
     },
   } )
 
+  # We know the item we want is there, pull out the resolve ID
+  resolve = None
+  for item in response[ 'completions' ]:
+    if item[ 'insertion_text' ] == 'useAString':
+      resolve = item[ 'extra_data' ][ 'resolve' ]
+      break
 
+  assert resolve is not None
+
+  request[ 'resolve' ] = resolve
+  # Do this twice to prove that the request is idempotent
+  for i in range( 2 ):
+    response = app.post_json( '/resolve_completion', request ).json
+
+    print( f"Resolve response: { pformat( response ) }" )
+
+    nl = os.linesep
+    assert_that( response, has_entries( {
+      'completion': CompletionEntryMatcher(
+          'useAString',
+          'MethodsWithDocumentation.useAString(String s) : void',
+          {
+            'kind': 'Method',
+            # This is the resolved info (no documentation)
+            'detailed_info': 'useAString(String s) : void\n'
+                             '\n'
+                             f'Multiple lines of description here.{ nl }'
+                             f'{ nl }'
+                             f' *  **Parameters:**{ nl }'
+                             f'    { nl }'
+                             f'     *  **s** a string'
+          }
+        ),
+      'errors': empty(),
+    } ) )
+
+    # The item is resoled
+    assert_that( response[ 'completion' ], is_not( has_key( 'resolve' ) ) )
+    assert_that( response[ 'completion' ], is_not( has_key( 'item' ) ) )
+
+
+
+@WithRetry
 @SharedYcmd
-def GetCompletions_MoreThan100ForceSemantic_test( app ):
+def GetCompletions_FewerThan10_Resolved_test( app ):
+  ClearCompletionsCache()
+  nl = os.linesep
+  request, response = RunTest( app, {
+    'description': "More than 10 candiates after filtering, don't resolve",
+    'request': {
+      'filetype'  : 'java',
+      'filepath'  : ProjectPath( 'TestWithDocumentation.java' ),
+      'line_num'  : 6,
+      'column_num': 10,
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': has_entries( {
+        'completions': has_item(
+          CompletionEntryMatcher(
+            'useAString',
+            'MethodsWithDocumentation.useAString(String s) : void',
+            {
+              'kind': 'Method',
+              # This is the resolved info (no documentation)
+              'detailed_info': 'useAString(String s) : void\n'
+                               '\n'
+                               f'Multiple lines of description here.{ nl }'
+                               f'{ nl }'
+                               f' *  **Parameters:**{ nl }'
+                               f'    { nl }'
+                               f'     *  **s** a string'
+            }
+          ),
+        ),
+        'completion_start_column': 7,
+        'errors': empty(),
+      } )
+    },
+  } )
+  # All items are resolved
+  assert_that( response[ 'completions' ][ 0 ], is_not( has_key( 'resolve' ) ) )
+  assert_that( response[ 'completions' ][ 0 ], is_not( has_key( 'item' ) ) )
+  assert_that( response[ 'completions' ][ -1 ], is_not( has_key( 'resolve' ) ) )
+  assert_that( response[ 'completions' ][ -1 ], is_not( has_key( 'item' ) ) )
+
+
+
+@WithRetry
+@SharedYcmd
+def GetCompletions_MoreThan10_NoResolve_ThenResolveCacheBad_test( app ):
+  ClearCompletionsCache()
+  request, response = RunTest( app, {
+    'description': "More than 10 candiates after filtering, don't resolve",
+    'request': {
+      'filetype'  : 'java',
+      'filepath'  : ProjectPath( 'TestWithDocumentation.java' ),
+      'line_num'  : 6,
+      'column_num': 7,
+    },
+    'expect': {
+      'response': requests.codes.ok,
+      'data': has_entries( {
+        'completions': has_item(
+          CompletionEntryMatcher(
+            'useAString',
+            'MethodsWithDocumentation.useAString(String s) : void',
+            {
+              'kind': 'Method',
+              # This is the un-resolved info (no documentation)
+              'detailed_info': 'useAString(String s) : void\n\n',
+              'extra_data': has_entries( {
+                'resolve': instance_of( int )
+              } )
+            }
+          ),
+        ),
+        'completion_start_column': 7,
+        'errors': empty(),
+      } )
+    },
+  } )
+
+  # We know the item we want is there, pull out the resolve ID
+  resolve = None
+  for item in response[ 'completions' ]:
+    if item[ 'insertion_text' ] == 'useAString':
+      resolve = item[ 'extra_data' ][ 'resolve' ]
+      break
+
+  assert resolve is not None
+
+  request[ 'resolve' ] = resolve
+  # Use a different position - should mean the cache is not valid for request
+  request[ 'column_num' ] = 20
+  response = app.post_json( '/resolve_completion', request ).json
+
+  print( f"Resolve response: { pformat( response ) }" )
+
+  assert_that( response, has_entries( {
+    'completion': None,
+    'errors': contains_exactly( ErrorMatcher( CompletionsChanged ) )
+  } ) )
+
+
+
+@WithRetry
+@UnixOnly
+@SharedYcmd
+def GetCompletions_MoreThan10ForceSemantic_test( app ):
+  ClearCompletionsCache()
   RunTest( app, {
     'description': 'When forcing we pass the query, which reduces candidates',
     'request': {
@@ -604,6 +781,7 @@ def GetCompletions_MoreThan100ForceSemantic_test( app ):
   } )
 
 
+@WithRetry
 @SharedYcmd
 def GetCompletions_ForceAtTopLevel_NoImport_test( app ):
   RunTest( app, {
@@ -631,6 +809,7 @@ def GetCompletions_ForceAtTopLevel_NoImport_test( app ):
   } )
 
 
+@WithRetry
 @SharedYcmd
 def GetCompletions_NoForceAtTopLevel_NoImport_test( app ):
   RunTest( app, {
@@ -655,6 +834,7 @@ def GetCompletions_NoForceAtTopLevel_NoImport_test( app ):
   } )
 
 
+@WithRetry
 @SharedYcmd
 def GetCompletions_ForceAtTopLevel_WithImport_test( app ):
   filepath = ProjectPath( 'TestWidgetImpl.java' )
@@ -692,6 +872,7 @@ def GetCompletions_ForceAtTopLevel_WithImport_test( app ):
   } )
 
 
+@WithRetry
 @SharedYcmd
 def GetCompletions_UseServerTriggers_test( app ):
   filepath = ProjectPath( 'TestWidgetImpl.java' )

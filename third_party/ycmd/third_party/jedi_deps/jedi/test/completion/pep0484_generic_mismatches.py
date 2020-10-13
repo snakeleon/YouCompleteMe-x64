@@ -33,6 +33,7 @@ tpl_typed = ("2", 3)  # type: Tuple[str, int]
 collection = {"a": 1}
 collection_typed = {"a": 1}  # type: Dict[str, int]
 
+list_of_ints = [42]  # type: List[int]
 list_of_funcs = [foo]  # type: List[Callable[[T], T]]
 
 custom_generic = CustomGeneric(123.45)
@@ -206,40 +207,36 @@ for a in list_func_t_to_list_t(12):
     a
 
 
-# The following are all actually wrong, however we're mainly testing here that
-# we don't error when processing invalid values, rather than that we get the
-# right output.
-
 x0 = list_func_t_to_list_t(["abc"])[0]
-#? str()
+#?
 x0
 
 x2 = list_func_t_to_list_t([tpl])[0]
-#? tuple()
+#?
 x2
 
 x3 = list_func_t_to_list_t([tpl_typed])[0]
-#? tuple()
+#?
 x3
 
 x4 = list_func_t_to_list_t([collection])[0]
-#? dict()
+#?
 x4
 
 x5 = list_func_t_to_list_t([collection_typed])[0]
-#? dict()
+#?
 x5
 
 x6 = list_func_t_to_list_t([custom_generic])[0]
-#? CustomGeneric()
+#?
 x6
 
 x7 = list_func_t_to_list_t([plain_instance])[0]
-#? PlainClass()
+#?
 x7
 
 for a in list_func_t_to_list_t([12]):
-    #? int()
+    #?
     a
 
 
@@ -323,3 +320,21 @@ x7
 for a in list_t_to_list_t(12):
     #?
     a
+
+
+def list_tuple_t_to_tuple_list_t(the_list: List[Tuple[T]]) -> Tuple[List[T], ...]:
+    return tuple(list(x) for x in the_list)
+
+
+for b in list_tuple_t_to_tuple_list_t(list_of_ints):
+    #?
+    b[0]
+
+
+def list_tuple_t_elipsis_to_tuple_list_t(the_list: List[Tuple[T, ...]]) -> Tuple[List[T], ...]:
+    return tuple(list(x) for x in the_list)
+
+
+for b in list_tuple_t_to_tuple_list_t(list_of_ints):
+    #?
+    b[0]

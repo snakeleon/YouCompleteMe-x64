@@ -6,9 +6,12 @@ from typing import (
     Iterable,
     List,
     Mapping,
+    Optional,
+    Tuple,
     Type,
     TypeVar,
     Union,
+    Sequence,
 )
 
 K = TypeVar('K')
@@ -17,7 +20,11 @@ T_co = TypeVar('T_co', covariant=True)
 V = TypeVar('V')
 
 
+just_float = 42.  # type: float
+optional_float = 42.  # type: Optional[float]
 list_of_ints = [42]  # type: List[int]
+list_of_floats = [42.]  # type: List[float]
+list_of_optional_floats = [x or None for x in list_of_floats]  # type: List[Optional[float]]
 list_of_ints_and_strs = [42, 'abc']  # type: List[Union[int, str]]
 
 # Test that simple parameters are handled
@@ -45,6 +52,50 @@ for z in list_t_to_list_t(list_of_ints_and_strs):
 list_of_int_type = [int]  # type: List[Type[int]]
 
 # Test that nested parameters are handled
+def list_optional_t_to_list_t(the_list: List[Optional[T]]) -> List[T]:
+    return [x for x in the_list if x is not None]
+
+
+for xa in list_optional_t_to_list_t(list_of_optional_floats):
+    #? float()
+    xa
+
+# Under covariance rules this is strictly incorrect (because List is mutable,
+# the function would be allowed to put `None`s into our List[float], which would
+# be bad), however we don't expect jedi to enforce that.
+for xa1 in list_optional_t_to_list_t(list_of_floats):
+    #? float()
+    xa1
+
+
+def optional_t_to_list_t(x: Optional[T]) -> List[T]:
+    return [x] if x is not None else []
+
+
+for xb in optional_t_to_list_t(optional_float):
+    #? float()
+    xb
+
+
+for xb2 in optional_t_to_list_t(just_float):
+    #? float()
+    xb2
+
+
+def optional_list_t_to_list_t(x: Optional[List[T]]) -> List[T]:
+    return x if x is not None else []
+
+
+optional_list_float = None  # type: Optional[List[float]]
+for xc in optional_list_t_to_list_t(optional_list_float):
+    #? float()
+    xc
+
+for xc2 in optional_list_t_to_list_t(list_of_floats):
+    #? float()
+    xc2
+
+
 def list_type_t_to_list_t(the_list: List[Type[T]]) -> List[T]:
     return [x() for x in the_list]
 
@@ -59,11 +110,55 @@ for b in list_type_t_to_list_t(list_of_int_type):
     b
 
 
-def foo(x: T) -> T:
+# Test construction of nested generic tuple return parameters
+def list_t_to_list_tuple_t(the_list: List[T]) -> List[Tuple[T]]:
+    return [(x,) for x in the_list]
+
+
+x1t = list_t_to_list_tuple_t(list_of_ints)[0][0]
+#? int()
+x1t
+
+
+for c1 in list_t_to_list_tuple_t(list_of_ints):
+    #? int()
+    c1[0]
+
+
+for c2, in list_t_to_list_tuple_t(list_of_ints):
+    #? int()
+    c2
+
+
+# Test handling of nested tuple input parameters
+def list_tuple_t_to_tuple_list_t(the_list: List[Tuple[T]]) -> Tuple[List[T], ...]:
+    return tuple(list(x) for x in the_list)
+
+
+list_of_int_tuples = [(x,) for x in list_of_ints]  # type: List[Tuple[int]]
+
+for b in list_tuple_t_to_tuple_list_t(list_of_int_tuples):
+    #? int()
+    b[0]
+
+
+def list_tuple_t_elipsis_to_tuple_list_t(the_list: List[Tuple[T, ...]]) -> Tuple[List[T], ...]:
+    return tuple(list(x) for x in the_list)
+
+
+list_of_int_tuple_elipsis = [tuple(list_of_ints)]  # type: List[Tuple[int, ...]]
+
+for b in list_tuple_t_elipsis_to_tuple_list_t(list_of_int_tuple_elipsis):
+    #? int()
+    b[0]
+
+
+# Test handling of nested callables
+def foo(x: int) -> int:
     return x
 
 
-list_of_funcs = [foo]  # type: List[Callable[[T], T]]
+list_of_funcs = [foo]  # type: List[Callable[[int], int]]
 
 def list_func_t_to_list_func_type_t(the_list: List[Callable[[T], T]]) -> List[Callable[[Type[T]], T]]:
     def adapt(func: Callable[[T], T]) -> Callable[[Type[T]], T]:
@@ -76,6 +171,21 @@ def list_func_t_to_list_func_type_t(the_list: List[Callable[[T], T]]) -> List[Ca
 for b in list_func_t_to_list_func_type_t(list_of_funcs):
     #? int()
     b(int)
+
+
+def bar(*a, **k) -> int:
+    return len(a) + len(k)
+
+
+list_of_funcs_2 = [bar]  # type: List[Callable[..., int]]
+
+def list_func_t_passthrough(the_list: List[Callable[..., T]]) -> List[Callable[..., T]]:
+    return the_list
+
+
+for b in list_func_t_passthrough(list_of_funcs_2):
+    #? int()
+    b(None, x="x")
 
 
 mapping_int_str = {42: 'a'}  # type: Dict[int, str]
@@ -105,6 +215,9 @@ some_str = NotImplemented  # type: str
 #? str()
 first(some_str)
 
+annotated = [len]  # type: List[ Callable[[Sequence[float]], int] ]
+#? int()
+first(annotated)()
 
 # Test that the right type is chosen when a partially realised mapping is expected
 def values(mapping: Mapping[int, T]) -> List[T]:

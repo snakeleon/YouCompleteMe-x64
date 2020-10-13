@@ -160,8 +160,8 @@ def ByteOffsetToCodepointOffset( line_value, byte_offset ):
   for semantic triggers and similar, we must use codepoint offsets, rather than
   byte offsets.
 
-  This method converts the |byte_offset|, which is a utf-8 byte offset, into
-  a codepoint offset in the unicode string |line_value|."""
+  This method converts the |byte_offset|, which is a 1-based utf-8 byte offset,
+  into a 1-based codepoint offset in the unicode string |line_value|."""
 
   byte_line_value = ToBytes( line_value )
   return len( ToUnicode( byte_line_value[ : byte_offset - 1 ] ) ) + 1
@@ -174,9 +174,9 @@ def CodepointOffsetToByteOffset( unicode_line_value, codepoint_offset ):
   for semantic triggers and similar, we must use codepoint offsets, rather than
   byte offsets.
 
-  This method converts the |codepoint_offset| which is a unicode codepoint
-  offset into an byte offset into the utf-8 encoded bytes version of
-  |unicode_line_value|."""
+  This method converts the |codepoint_offset| which is a 1-based unicode
+  codepoint offset into a 1-based byte offset into the utf-8 encoded bytes
+  version of |unicode_line_value|."""
 
   # Should be a no-op, but in case someone passes a bytes instance.
   unicode_line_value = ToUnicode( unicode_line_value )
@@ -244,7 +244,7 @@ def GetExecutable( filename ):
   return None
 
 
-# Adapted from https://github.com/python/cpython/blob/v3.5.0/Lib/shutil.py#L1072
+# Adapted from https://github.com/python/cpython/blob/v3.6.0/Lib/shutil.py#L1087
 # to be backward compatible with Python2 and more consistent to our codebase.
 def FindExecutable( executable ):
   # If we're given a path with a directory part, look it up directly rather
@@ -306,8 +306,8 @@ def WaitUntilProcessIsTerminated( handle, timeout = 5 ):
   expiration = time.time() + timeout
   while True:
     if time.time() > expiration:
-      raise RuntimeError( 'Waited process to terminate for {0} seconds, '
-                          'aborting.'.format( timeout ) )
+      raise RuntimeError( f'Waited process to terminate for { timeout } '
+                          'seconds, aborting.' )
     if not ProcessIsRunning( handle ):
       return
     time.sleep( 0.1 )
@@ -535,3 +535,41 @@ def AbsolutePath( path, relative_to ):
     path = os.path.join( relative_to, path )
 
   return os.path.normpath( path )
+
+
+def UpdateDict( target, override ):
+  """Apply the updates in |override| to the dict |target|. This is like
+  dict.update, but recursive. i.e. if the existing element is a dict, then
+  override elements of the sub-dict rather than wholesale replacing.
+  e.g.
+  UpdateDict(
+    {
+      'outer': { 'inner': { 'key': 'oldValue', 'existingKey': True } }
+    },
+    {
+      'outer': { 'inner': { 'key': 'newValue' } },
+      'newKey': { 'newDict': True },
+    }
+  )
+  yields:
+    {
+      'outer': {
+        'inner': {
+           'key': 'newValue',
+           'existingKey': True
+        }
+      },
+      'newKey': { newDict: True }
+    }
+  """
+
+  for key, value in override.items():
+    current_value = target.get( key )
+    if not isinstance( current_value, Mapping ):
+      target[ key ] = value
+    elif isinstance( value, Mapping ):
+      target[ key ] = UpdateDict( current_value, value )
+    else:
+      target[ key ] = value
+
+  return target

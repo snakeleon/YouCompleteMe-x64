@@ -175,7 +175,7 @@ def RunTest( app, test, contents = None ):
         expect_errors = True
       )
 
-      print( 'completer response: {0}'.format( pformat( response.json ) ) )
+      print( f'completer response: { pformat( response.json ) }' )
 
       assert_that( response.status_code,
                    equal_to( test[ 'expect' ][ 'response' ] ) )
@@ -720,6 +720,16 @@ def Subcommands_GoToSymbol_Multiple_test( app ):
       'description': "Test",
       'line_num': 3,
       'column_num': 14,
+    } ),
+    has_entries( {
+      'filepath': PathToTestFile( 'simple_eclipse_project',
+                                  'src',
+                                  'com',
+                                  'test',
+                                  'TestWithDocumentation.java' ) ,
+      'description': "TestWithDocumentation",
+      'line_num': 3,
+      'column_num': 14,
     } )
   ) )
 
@@ -903,7 +913,6 @@ def Subcommands_RefactorRename_Unicode_test( app ):
 
 
 
-@WithRetry
 def RunFixItTest( app, description, filepath, line, col, fixits_for_line ):
   RunTest( app, {
     'description': description,
@@ -920,6 +929,7 @@ def RunFixItTest( app, description, filepath, line, col, fixits_for_line ):
   } )
 
 
+@WithRetry
 @pytest.mark.parametrize( 'description,column', [
   ( 'FixIt works at the firtst char of the line', 1 ),
   ( 'FixIt works at the begin of the range of the diag.', 15 ),
@@ -1058,6 +1068,7 @@ def Subcommands_FixIt_SingleDiag_MultipleOption_Insertion_test( app,
   RunFixItTest( app, description, filepath, 19, column, fixits_for_line )
 
 
+@WithRetry
 @SharedYcmd
 def Subcommands_FixIt_SingleDiag_SingleOption_Modify_test( app ):
   filepath = PathToTestFile( 'simple_eclipse_project',
@@ -1119,6 +1130,7 @@ def Subcommands_FixIt_SingleDiag_SingleOption_Modify_test( app ):
                 filepath, 27, 12, fixits )
 
 
+@WithRetry
 @SharedYcmd
 def Subcommands_FixIt_SingleDiag_MultiOption_Delete_test( app ):
   filepath = PathToTestFile( 'simple_eclipse_project',
@@ -1165,65 +1177,82 @@ def Subcommands_FixIt_SingleDiag_MultiOption_Delete_test( app ):
                 filepath, 15, 29, fixits )
 
 
-@pytest.mark.parametrize( 'description,column', [
-  ( 'diags are merged in FixIt options - start of line', 1 ),
-  ( 'diags are merged in FixIt options - start of diag 1', 10 ),
-  ( 'diags are merged in FixIt options - end of diag 1', 15 ),
-  ( 'diags are merged in FixIt options - start of diag 2', 23 ),
-  ( 'diags are merged in FixIt options - end of diag 2', 46 ),
-  ( 'diags are merged in FixIt options - end of line', 55 ),
+@WithRetry
+@pytest.mark.parametrize( 'description,column,expect_fixits', [
+  ( 'diags are merged in FixIt options - start of line', 1, 'MERGE' ),
+  ( 'diags are not merged in FixIt options - start of diag 1', 10, 'FIRST' ),
+  ( 'diags are not merged in FixIt options - end of diag 1', 15, 'FIRST' ),
+  ( 'diags are not merged in FixIt options - start of diag 2', 23, 'SECOND' ),
+  ( 'diags are not merged in FixIt options - end of diag 2', 46, 'SECOND' ),
+  ( 'diags are merged in FixIt options - end of line', 55, 'MERGE' ),
 ] )
 @SharedYcmd
-def Subcommands_FixIt_MultipleDiags_test( app, description, column ):
+def Subcommands_FixIt_MultipleDiags_test( app,
+                                          description,
+                                          column,
+                                          expect_fixits ):
   filepath = PathToTestFile( 'simple_eclipse_project',
                              'src',
                              'com',
                              'test',
                              'TestFactory.java' )
 
+  FIRST = [
+    has_entries( {
+      'text': "Change type of 'test' to 'boolean'",
+      'kind': 'quickfix',
+      'chunks': contains_exactly(
+        ChunkMatcher( 'boolean',
+                      LocationMatcher( filepath, 14, 12 ),
+                      LocationMatcher( filepath, 14, 15 ) ),
+      ),
+    } ),
+  ]
+  SECOND = [
+    has_entries( {
+      'text': "Remove argument to match 'doSomethingVaguelyUseful()'",
+      'kind': 'quickfix',
+      'chunks': contains_exactly(
+        ChunkMatcher( '',
+                      LocationMatcher( filepath, 30, 48 ),
+                      LocationMatcher( filepath, 30, 50 ) ),
+      ),
+    } ),
+    has_entries( {
+      'text': "Change method 'doSomethingVaguelyUseful()': Add parameter "
+      "'Bar'",
+      'chunks': instance_of( list ),
+    } ),
+    has_entries( {
+      'text': "Create method 'doSomethingVaguelyUseful(Bar)' in type "
+      "'AbstractTestWidget'",
+      'chunks': instance_of( list ),
+    } ),
+  ]
+
+  ACTIONS = [
+    has_entries( {
+      'text': "Generate toString()...",
+      'chunks': instance_of( list ),
+    } ),
+    has_entries( {
+      'text': "Organize imports",
+      'chunks': instance_of( list ),
+    } ),
+    has_entries( {
+      'text': 'Change modifiers to final where possible',
+      'chunks': instance_of( list ),
+    } ),
+  ]
+
+  FIXITS = {
+    'FIRST': FIRST + ACTIONS,
+    'SECOND': SECOND + ACTIONS,
+    'MERGE': FIRST + SECOND + ACTIONS,
+  }
+
   fixits = has_entries( {
-    'fixits': contains_inanyorder(
-      has_entries( {
-        'text': "Change type of 'test' to 'boolean'",
-        'kind': 'quickfix',
-        'chunks': contains_exactly(
-          ChunkMatcher( 'boolean',
-                        LocationMatcher( filepath, 14, 12 ),
-                        LocationMatcher( filepath, 14, 15 ) ),
-        ),
-      } ),
-      has_entries( {
-        'text': "Remove argument to match 'doSomethingVaguelyUseful()'",
-        'kind': 'quickfix',
-        'chunks': contains_exactly(
-          ChunkMatcher( '',
-                        LocationMatcher( filepath, 30, 48 ),
-                        LocationMatcher( filepath, 30, 50 ) ),
-        ),
-      } ),
-      has_entries( {
-        'text': "Change method 'doSomethingVaguelyUseful()': Add parameter "
-                "'Bar'",
-        'chunks': instance_of( list ),
-      } ),
-      has_entries( {
-        'text': "Create method 'doSomethingVaguelyUseful(Bar)' in type "
-                "'AbstractTestWidget'",
-        'chunks': instance_of( list ),
-      } ),
-      has_entries( {
-        'text': "Generate toString()...",
-        'chunks': instance_of( list ),
-      } ),
-      has_entries( {
-        'text': "Organize imports",
-        'chunks': instance_of( list ),
-      } ),
-      has_entries( {
-        'text': 'Change modifiers to final where possible',
-        'chunks': instance_of( list ),
-      } ),
-    )
+    'fixits': contains_inanyorder( *FIXITS[ expect_fixits ] )
   } )
 
   RunFixItTest( app, description, filepath, 30, column, fixits )
@@ -1316,6 +1345,20 @@ def Subcommands_FixIt_Range_test( app ):
             ),
           } ),
           has_entries( {
+            'text': 'Introduce Parameter...',
+            'kind': 'refactor.introduce.parameter',
+            'chunks': contains_exactly(
+              ChunkMatcher(
+                'String string) {\n'
+                '        AbstractTestWidget w = factory.getWidget( "Test" );\n'
+                '        w.doSomethingVaguelyUseful();\n'
+                '\n'
+                '        System.out.println( string',
+                LocationMatcher( filepath, 30, 26 ),
+                LocationMatcher( filepath, 34, 73 ) ),
+            ),
+          } ),
+          has_entries( {
             'text': 'Organize imports',
             'chunks': instance_of( list ),
           } ),
@@ -1330,6 +1373,7 @@ def Subcommands_FixIt_Range_test( app ):
 
 
 
+@WithRetry
 @SharedYcmd
 def Subcommands_FixIt_NoDiagnostics_test( app ):
   filepath = PathToTestFile( 'simple_eclipse_project',
@@ -1350,6 +1394,7 @@ def Subcommands_FixIt_NoDiagnostics_test( app ):
                                    'chunks': instance_of( list ) } ) ) } ) )
 
 
+@WithRetry
 @SharedYcmd
 def Subcommands_FixIt_Unicode_test( app ):
   fixits = has_entries( {
@@ -1973,7 +2018,7 @@ def Subcommands_RequestFailed_test( app ):
 @SharedYcmd
 def Subcommands_IndexOutOfRange_test( app ):
   RunTest( app, {
-    'description': 'Request error handles the error',
+    'description': 'Request with invalid position does not crash',
     'request': {
       'command': 'FixIt',
       'line_num': 99,
@@ -1985,6 +2030,34 @@ def Subcommands_IndexOutOfRange_test( app ):
       'data': has_entries( { 'fixits': contains_exactly( has_entries(
         { 'text': 'Generate Getters and Setters',
           'chunks': instance_of( list ) } ) ) } ),
+    }
+  } )
+
+
+@WithRetry
+@SharedYcmd
+def Subcommands_InvalidRange_test( app ):
+  RunTest( app, {
+    'description': 'Request with invalid visual range is rejected',
+    'request': {
+      'command': 'FixIt',
+      'line_num': 99,
+      'column_num': 99,
+      'filepath': TEST_JAVA,
+      'range': {
+        'start': {
+          'line_num': 99,
+          'column_num': 99
+        },
+        'end': {
+          'line_num': 100,
+          'column_num': 100
+        }
+      }
+    },
+    'expect': {
+      'response': requests.codes.internal_server_error,
+      'data': ErrorMatcher( RuntimeError, 'Invalid range' ),
     }
   } )
 
@@ -2155,8 +2228,8 @@ def Subcommands_ExtraConf_SettingsValid_UnknownExtraConf_test( app ):
                             } ),
                             expect_errors = True )
 
-  print( 'FileReadyToParse result: {}'.format( json.dumps( response.json,
-                                                           indent = 2 ) ) )
+  print( 'FileReadyToParse result: '
+         f'{ json.dumps( response.json, indent = 2 ) }' )
 
   assert_that( response.status_code,
                equal_to( requests.codes.internal_server_error ) )

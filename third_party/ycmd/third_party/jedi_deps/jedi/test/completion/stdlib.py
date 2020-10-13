@@ -171,6 +171,9 @@ def example(a):
 #? str()
 example('')
 
+# From GH #1574
+#? float()
+functools.wraps(functools.partial(str, 1))(lambda: 1.0)()
 
 # -----------------
 # sqlite3 (#84)
@@ -250,11 +253,33 @@ z.read('name').upper
 # -----------------
 # contextlib
 # -----------------
-
+# python > 2.7
+from typing import Iterator
 import contextlib
 with contextlib.closing('asd') as string:
     #? str()
     string
+
+@contextlib.contextmanager
+def cm1() -> Iterator[float]:
+    yield 1
+with cm1() as x:
+    #? float()
+    x
+
+@contextlib.contextmanager
+def cm2() -> float:
+    yield 1
+with cm2() as x:
+    #?
+    x
+
+@contextlib.contextmanager
+def cm3():
+    yield 3
+with cm3() as x:
+    #? int()
+    x
 
 # -----------------
 # operator

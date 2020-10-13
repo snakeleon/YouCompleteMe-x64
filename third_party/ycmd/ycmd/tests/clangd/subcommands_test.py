@@ -604,7 +604,7 @@ def FixIt_Check_cpp11_Ins( results ):
           } ),
         } )
       ),
-      'location': has_entries( { 'line_num': 16, 'column_num': 0 } )
+      'location': has_entries( { 'line_num': 16, 'column_num': 1 } )
     } ) )
   } ) )
 
@@ -758,40 +758,6 @@ def FixIt_Check_cpp11_MultiFirst( results ):
         ),
         'location': has_entries( { 'line_num': 54, 'column_num': 15 } )
       } ),
-      # second fix-it at 54,52
-      has_entries( {
-        'kind': 'quickfix',
-        'chunks': contains_exactly(
-          has_entries( {
-            'replacement_text': equal_to( '' ),
-            'range': has_entries( {
-              'start': has_entries( { 'line_num': 54, 'column_num': 52 } ),
-              'end'  : has_entries( { 'line_num': 54, 'column_num': 53 } ),
-            } ),
-          } ),
-          has_entries( {
-            'replacement_text': equal_to( '~' ),
-            'range': has_entries( {
-              'start': has_entries( { 'line_num': 54, 'column_num': 58 } ),
-              'end'  : has_entries( { 'line_num': 54, 'column_num': 58 } ),
-            } ),
-          } ),
-        ),
-        'location': has_entries( { 'line_num': 54, 'column_num': 15 } )
-      } ),
-      has_entries( {
-        'kind': 'quickfix',
-        'chunks': contains_exactly(
-          has_entries( {
-            'replacement_text': equal_to( '= default;' ),
-            'range': has_entries( {
-              'start': has_entries( { 'line_num': 54, 'column_num': 64 } ),
-              'end'  : has_entries( { 'line_num': 54, 'column_num': 67 } ),
-            } ),
-          } )
-        ),
-        'location': has_entries( { 'line_num': 54, 'column_num': 15 } )
-      } ),
     )
   } ) )
 
@@ -799,20 +765,6 @@ def FixIt_Check_cpp11_MultiFirst( results ):
 def FixIt_Check_cpp11_MultiSecond( results ):
   assert_that( results, has_entries( {
     'fixits': contains_exactly(
-      # first fix-it at 54,16
-      has_entries( {
-        'kind': 'quickfix',
-        'chunks': contains_exactly(
-          has_entries( {
-            'replacement_text': equal_to( 'foo' ),
-            'range': has_entries( {
-              'start': has_entries( { 'line_num': 54, 'column_num': 16 } ),
-              'end'  : has_entries( { 'line_num': 54, 'column_num': 19 } ),
-            } ),
-          } )
-        ),
-        'location': has_entries( { 'line_num': 54, 'column_num': 51 } )
-      } ),
       # second fix-it at 54,52
       has_entries( {
         'kind': 'quickfix',
@@ -993,7 +945,7 @@ def FixIt_Check_AutoExpand_Resolved( results ):
 
 
 @pytest.mark.parametrize( 'line,column,language,filepath,check', [
-    [ 16, 0,  'cpp11', PathToTestFile( 'FixIt_Clang_cpp11.cpp' ),
+    [ 16, 1,  'cpp11', PathToTestFile( 'FixIt_Clang_cpp11.cpp' ),
       FixIt_Check_cpp11_Ins ],
     [ 25, 14, 'cpp11', PathToTestFile( 'FixIt_Clang_cpp11.cpp' ),
       FixIt_Check_cpp11_InsMultiLine ],
@@ -1009,7 +961,8 @@ def FixIt_Check_AutoExpand_Resolved( results ):
       FixIt_Check_objc_NoFixIt ],
     [ 3, 12,  'cuda', PathToTestFile( 'cuda', 'fixit_test.cu' ),
       FixIt_Check_cuda ],
-    # multiple errors on a single line; both with fixits
+    # multiple errors on a single line; both with fixits. The cursor is on the
+    # first one (so just that one is fixed)
     [ 54, 15, 'cpp11', PathToTestFile( 'FixIt_Clang_cpp11.cpp' ),
       FixIt_Check_cpp11_MultiFirst ],
     # should put closest fix-it first?
@@ -1030,7 +983,6 @@ def Subcommands_FixIt_all_test( app, line, column, language, filepath, check ):
   RunFixItTest( app, line, column, language, filepath, check )
 
 
-@WithRetry
 def RunRangedFixItTest( app, rng, expected, chosen_fixit = 0 ):
   contents = ReadFile( PathToTestFile( 'FixIt_Clang_cpp11.cpp' ) )
   args = {
@@ -1057,6 +1009,7 @@ def RunRangedFixItTest( app, rng, expected, chosen_fixit = 0 ):
   expected( response )
 
 
+@WithRetry
 @pytest.mark.parametrize( 'test', [
     [ {
         'start': { 'line_num': 80, 'column_num': 1 },
@@ -1115,6 +1068,7 @@ def Subcommands_FixIt_AlreadyResolved_test( app ):
   assert_that( actual, equal_to( expected ) )
 
 
+@WithRetry
 @IsolatedYcmd( { 'clangd_args': [ '-hidden-features' ] } )
 def Subcommands_FixIt_ClangdTweaks_test( app ):
   selection = {

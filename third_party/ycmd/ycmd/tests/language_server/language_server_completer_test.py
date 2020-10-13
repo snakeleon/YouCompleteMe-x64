@@ -55,7 +55,8 @@ class MockCompleter( lsc.LanguageServerCompleter, DummyCompleter ):
     user_options.update( custom_options )
     super().__init__( user_options )
 
-    self._connection = MockConnection()
+    self._connection = MockConnection(
+        lambda request: self.WorkspaceConfigurationResponse( request ) )
     self._started = False
 
   def Language( self ):
@@ -323,7 +324,7 @@ def LanguageServerCompleter_GoTo_test( app ):
         )
       else:
         result = completer.OnUserCommand( [ command ], request_data )
-        print( 'Result: {}'.format( result ) )
+        print( f'Result: { result }' )
         assert_that( result, exception )
 
 
@@ -578,7 +579,7 @@ def WorkspaceEditToFixIt_test():
     lsc.WorkspaceEditToFixIt( request_data, workspace_edit, 'test' )
   ] )
 
-  print( 'Response: {0}'.format( response ) )
+  print( f'Response: { response }' )
   assert_that(
     response,
     has_entries( {
@@ -609,8 +610,8 @@ def WorkspaceEditToFixIt_test():
     lsc.WorkspaceEditToFixIt( request_data, workspace_edit, 'test' )
   ] )
 
-  print( 'Response: {0}'.format( response ) )
-  print( 'Type Response: {0}'.format( type( response ) ) )
+  print( f'Response: { response }' )
+  print( f'Type Response: { type( response ) }' )
 
   assert_that(
     response,
@@ -647,6 +648,23 @@ def LanguageServerCompleter_DelayedInitialization_test( app ):
 
       update.assert_called_with( request_data )
       purge.assert_called_with( 'Test.ycmtest' )
+
+
+@IsolatedYcmd()
+def LanguageServerCompleter_RejectWorkspaceConfigurationRequest_test( app ):
+  completer = MockCompleter()
+  notification = {
+    'jsonrpc': '2.0',
+    'method': 'workspace/configuration',
+    'id': 1234,
+    'params': {
+      'items': [ { 'section': 'whatever' } ]
+    }
+  }
+  with patch( 'ycmd.completers.language_server.'
+              'language_server_protocol.Reject' ) as reject:
+    completer.GetConnection()._DispatchMessage( notification )
+    reject.assert_called_with( notification, lsp.Errors.MethodNotFound )
 
 
 @IsolatedYcmd()
@@ -1021,6 +1039,8 @@ def LanguageServerCompleter_GetCodeActions_CursorOnEmptyLine_test( app ):
                      has_entry( 'fixits', empty() ) )
         assert_that(
           # Range passed to lsp.CodeAction.
+          # LSP requires to use the start of the next line as the end position
+          # for a range that ends with a newline.
           code_action.call_args[ 0 ][ 2 ],
           has_entries( {
             'start': has_entries( {
@@ -1028,7 +1048,7 @@ def LanguageServerCompleter_GetCodeActions_CursorOnEmptyLine_test( app ):
               'character': 0
             } ),
             'end': has_entries( {
-              'line': 0,
+              'line': 1,
               'character': 0
             } )
           } )

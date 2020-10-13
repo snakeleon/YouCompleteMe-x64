@@ -56,7 +56,7 @@ a
 (3 ** 3)
 #? int() str()
 (3 ** 'a')
-#? int() str()
+#? int()
 (3 + 'a')
 #? bool()
 (3 == 'a')
@@ -99,6 +99,15 @@ else:
 # results.
 #? str() int()
 a
+
+if 'X' not in 'Y':
+    b = 3
+else:
+    b = ''
+# For now don't really check for truth values. So in should return both
+# results.
+#? str() int()
+b
 
 # -----------------
 # for flow assignments
@@ -147,3 +156,39 @@ a = foobarbaz + 'hello'
 
 #? int() float()
 {'hello': 1, 'bar': 1.0}[a]
+
+# -----------------
+# stubs
+# -----------------
+
+from datetime import datetime, timedelta
+
+#?
+(datetime - timedelta)
+#? datetime()
+(datetime() - timedelta())
+#? timedelta()
+(datetime() - datetime())
+#? timedelta()
+(timedelta() - datetime())
+#? timedelta()
+(timedelta() - timedelta())
+
+# -----------------
+# magic methods
+# -----------------
+
+# python >= 3.5
+
+class C:
+    def __sub__(self, other) -> int: ...
+    def __radd__(self, other) -> float: ...
+
+#? int()
+(C() - object())
+#? C() object()
+(object() - C())
+#? C() object()
+(C() + object())
+#? float()
+(object() + C())

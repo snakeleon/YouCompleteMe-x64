@@ -98,20 +98,18 @@ class GoCompleter( language_server_completer.LanguageServerCompleter ):
 
 
   def DefaultSettings( self, request_data ):
+    return { 'hoverKind': 'Structured' }
+
+
+  def ExtraCapabilities( self ):
     return {
-      'hoverKind': 'Structured',
-      'fuzzyMatching': False,
+      'workspace': { 'configuration': True }
     }
 
 
-  def CodeActionLiteralToFixIt( self, request_data, code_action_literal ):
-    document_changes = code_action_literal[ 'edit' ][ 'documentChanges' ]
-    for text_document_edit in document_changes:
-      for text_edit in text_document_edit[ 'edits' ]:
-        end_line = text_edit[ 'range' ][ 'end' ][ 'line' ]
-        # LSP offsets are zero based, plus `request_data[ 'lines' ]` contains
-        # a trailing empty line.
-        if end_line >= len( request_data[ 'lines' ] ) - 1:
-          return None
-
-    return super().CodeActionLiteralToFixIt( request_data, code_action_literal )
+  def WorkspaceConfigurationResponse( self, request ):
+    # Returns the same settings for each "section", since gopls requests
+    # settings for each open project, but ycmd only has a single settings
+    # object per LSP completer.
+    return [ self._settings.get( 'ls', {} )
+             for i in request[ 'params' ][ 'items' ] ]
