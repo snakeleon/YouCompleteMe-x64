@@ -38,7 +38,7 @@ BWIPEOUT_REGEX = re.compile(
 GETBUFVAR_REGEX = re.compile(
   '^getbufvar\\((?P<buffer_number>[0-9]+), "(?P<option>.+)"\\)$' )
 MATCHADD_REGEX = re.compile(
-  '^matchadd\\(\'(?P<group>.+)\', \'(?P<pattern>.+)\'\\)$' )
+  '^matchadd\\(\'(?P<group>.+)\', \'(?P<pattern>.+)\', -1\\)$' )
 MATCHDELETE_REGEX = re.compile( '^matchdelete\\((?P<id>\\d+)\\)$' )
 OMNIFUNC_REGEX_FORMAT = (
   '^{omnifunc_name}\\((?P<findstart>[01]),[\'"](?P<base>.*)[\'"]\\)$' )
@@ -393,6 +393,7 @@ class VimBuffer:
    - |filetype| : buffer filetype. Empty string if no filetype is set;
    - |modified| : True if the buffer has unsaved changes, False otherwise;
    - |bufhidden|: value of the 'bufhidden' option (see :h bufhidden);
+   - |vars|:      dict for buffer-local variables
    - |omnifunc| : omni completion function used by the buffer. Must be a Python
                   function that takes the same arguments and returns the same
                   values as a Vim completion function (:h complete-functions).
@@ -411,7 +412,8 @@ class VimBuffer:
                       bufhidden = '',
                       omnifunc = None,
                       visual_start = None,
-                      visual_end = None ):
+                      visual_end = None,
+                      vars = {} ):
     self.name = os.path.realpath( name ) if name else ''
     self.number = number
     self.contents = contents
@@ -427,6 +429,7 @@ class VimBuffer:
     }
     self.visual_start = visual_start
     self.visual_end = visual_end
+    self.vars = vars # should really be a vim-specific dict-like obj
 
 
   def __getitem__( self, index ):

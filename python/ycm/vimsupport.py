@@ -277,7 +277,7 @@ def GetDiagnosticMatchesInCurrentWindow():
 def AddDiagnosticMatch( match ):
   # TODO: Use matchaddpos which is much faster given that we always are using a
   # location rather than an actual pattern
-  return GetIntValue( f"matchadd('{ match.group }', '{ match.pattern }')" )
+  return GetIntValue( f"matchadd('{ match.group }', '{ match.pattern }', -1)" )
 
 
 def RemoveDiagnosticMatch( match ):
@@ -398,6 +398,9 @@ def ComputeFittingHeightForCurrentWindow():
 
 
 def SetFittingHeightForCurrentWindow():
+  if int( vim.current.buffer.vars.get( 'ycm_no_resize', 0 ) ):
+    return
+
   vim.command( f'{ ComputeFittingHeightForCurrentWindow() }wincmd _' )
 
 

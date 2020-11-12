@@ -11,6 +11,21 @@ NOTE: Minimum Requirements Have Changed
 Our policy is to support the Vim version that's in the latest LTS of Ubuntu.
 That's currently Ubuntu 20.04 which contains `vim-nox` at `v8.1.2269`.
 
+For neovim users, 0.4.4 is required.
+
+NOTE: Minimum compiler versions will soon be increased
+----------------------------------------
+
+In order to provide the best possible performance and stability, ycmd will
+soon update its code to C++17. This will require a version bump of the minimum
+supported compilers. The new requirements will be:
+
+| Compiler | Current Min | Upcoming |
+|-|-|-|
+| GCC | 4.8 | 8 |
+| Clang | 4 | 7 |
+| MSVC | 14 (VS 2015) | 15.7 (VS 2017) |
+
 Help, Advice, Support
 ---------------------
 
@@ -742,7 +757,6 @@ Quick Feature Summary
 * Type information for identifiers (`GetType`)
 * Renaming symbols (`RefactorRename <new name>`)
 * Code formatting (`Format`)
-* Execute custom server command (`ExecuteCommand <args>`)
 * Management of `rust-analyzer` server instance
 
 ### Java
@@ -1989,10 +2003,9 @@ flags.
 
 #### The `ExecuteCommand <args>` subcommand
 
-Some LSP completers (currently Rust and Java completers) support executing
-server specific commands. Consult the [rust-analyzer][] and [jdt.ls][] respective
-documentations to find out what commands are supported and which arguments are
-expected.
+Some LSP completers (currently only Java completers) support executing
+server specific commands. Consult the [jdt.ls][] documentation to find out
+what commands are supported and which arguments are expected.
 
 The support for `ExecuteCommand` was implemented to support plugins like
 [vimspector][] to debug java, but isn't limited to that specific use case.
@@ -2345,6 +2358,20 @@ Default: `{'*': 1}`
 let g:ycm_filetype_whitelist = {'*': 1}
 ```
 
+** Completion in buffers with no filetype **
+
+There is one exception to the above rule. YCM supports completion in buffers
+with no filetype set, but this must be _explicitly_ whitelisted. To identify
+buffers with no filetype, we use the `ycm_nofiletype` pseudo-filetype. To enable
+completion in buffers with no filetype, set:
+
+```viml
+let g:ycm_filetype_whitelist = {
+  \ '*': 1,
+  \ 'ycm_nofiletype': 1
+  \ }
+```
+
 ### The `g:ycm_filetype_blacklist` option
 
 This option controls for which Vim filetypes (see `:h filetype`) should YCM be
@@ -2371,6 +2398,10 @@ let g:ycm_filetype_blacklist = {
       \ 'mail': 1
       \}
 ```
+
+In addition, `ycm_nofiletype` (representing buffers with no filetype set)
+is blacklisted if `ycm_nofiletype` is not _explicitly_ whitelisted (using
+`g:ycm_filetype_whitelist`).
 
 ### The `g:ycm_filetype_specific_completion_to_disable` option
 
