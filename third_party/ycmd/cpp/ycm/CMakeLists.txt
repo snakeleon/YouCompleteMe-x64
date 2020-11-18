@@ -30,47 +30,47 @@ if ( USE_CLANG_COMPLETER AND
      NOT PATH_TO_LLVM_ROOT AND
      NOT EXTERNAL_LIBCLANG_PATH )
 
-  set( CLANG_VERSION 10.0.0 )
+  set( CLANG_VERSION 11.0.0 )
 
   if ( APPLE )
     set( LIBCLANG_DIRNAME "libclang-${CLANG_VERSION}-x86_64-apple-darwin" )
     set( LIBCLANG_SHA256
-         "157c755c0d208414203b56057fd4f9b81dba93fd968e4435217ba1e4026136a8" )
+         "6ac0caea93177c2d260c5e31d2e4ddaf734bfe68d0f002b2eecc61de081b116f" )
   elseif ( WIN32 )
     if( 64_BIT_PLATFORM )
       set( LIBCLANG_DIRNAME "libclang-${CLANG_VERSION}-win64" )
       set( LIBCLANG_SHA256
-           "45a2d797fbf9ff53ad5de3891f20c73cf6e2256761501dd32b60948c5fa84dc8" )
+           "8648dfff108e1860c4dd39c30f324badbc5a902dd7b66b5fe8433c31b8b14629" )
     else()
       set( LIBCLANG_DIRNAME "libclang-${CLANG_VERSION}-win32" )
       set( LIBCLANG_SHA256
-           "9715703fc7f82bc79310296a811e611bc43406faf9102d89ab44ee6a5807a4cb" )
+           "5ae3e89f8024ec0eebd4f32ca86cb0793ecdb3bf0dd6625acd73e5c2f62d22f6" )
     endif()
   elseif ( SYSTEM_IS_FREEBSD )
     if ( 64_BIT_PLATFORM )
       set( LIBCLANG_DIRNAME
            "libclang-${CLANG_VERSION}-amd64-unknown-freebsd11" )
       set( LIBCLANG_SHA256
-           "7e4f7ee6cff7360c65b73955b6fe177f4c896fc2376d86acaa8c835ee9ca0da9" )
+           "d98eb1b9265f2753d7d91ed78ad0cbcf06a60a9aa0d131e796fbb68e2b53ca8a" )
     else()
       set( LIBCLANG_DIRNAME
            "libclang-${CLANG_VERSION}-i386-unknown-freebsd11" )
       set( LIBCLANG_SHA256
-           "0e34866976876af3c8635ee3aab74361c10904ff617250fa199c5fb1c948c881" )
+           "976b400a433b6031631d0ea2ee529d7835ec4a0ae2192990c45f0669a6c2ac17" )
     endif()
   elseif ( CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64.*|AARCH64.*)" )
     set( LIBCLANG_DIRNAME "libclang-${CLANG_VERSION}-aarch64-linux-gnu" )
     set( LIBCLANG_SHA256
-         "558cea25b1a7331be13c74b2e14246ac3762c81b68c064a5eaf4e7a1afffebf0" )
+         "abe7907760eb2bfb144ede03ab9861974e2c781a976b3ad360d279397cc254cf" )
   elseif ( CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm.*|ARM.*)" )
     set( LIBCLANG_DIRNAME "libclang-${CLANG_VERSION}-armv7a-linux-gnueabihf" )
     set( LIBCLANG_SHA256
-         "ea6eb8d3183f55323b13179fa5a884e86c6c23cdab6cb21df8f340de220f4747" )
+         "8c77b15c91ca3199f76c266e1df5ab73111b5158b5bf5169c37998c7660ffbfa" )
   elseif ( CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64)" )
     set( LIBCLANG_DIRNAME
          "libclang-${CLANG_VERSION}-x86_64-unknown-linux-gnu" )
     set( LIBCLANG_SHA256
-         "23c213ae2dba9cc98d09a4997de60e10f270276335f05f1bacf861678e231809" )
+         "069992f137eeb5d40008ac6a69b448b236de0ea8d119b9f8a2f92cb4d9962917" )
   else()
     message( FATAL_ERROR
       "No prebuilt Clang ${CLANG_VERSION} binaries for this system. "
@@ -191,15 +191,12 @@ if ( APPLE )
   set( CMAKE_INCLUDE_SYSTEM_FLAG_CXX "-isystem " )
 endif()
 
-if ( USE_SYSTEM_BOOST )
-  set( Boost_COMPONENTS filesystem )
-  find_package( Boost REQUIRED COMPONENTS ${Boost_COMPONENTS} )
-else()
-  set( Boost_INCLUDE_DIR ${BoostParts_SOURCE_DIR} )
-  set( Boost_LIBRARIES BoostParts )
-endif()
-
 set( PYBIND11_INCLUDES_DIR "${CMAKE_SOURCE_DIR}/pybind11" )
+
+# Makes MSVC conform to the standard
+if ( MSVC )
+  set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /permissive-" )
+endif()
 
 file( GLOB_RECURSE SERVER_SOURCES *.h *.cpp )
 
@@ -228,14 +225,13 @@ endif()
 
 # The SYSTEM flag makes sure that -isystem[header path] is passed to the
 # compiler instead of the standard -I[header path]. Headers included with
-# -isystem do not generate warnings (and they shouldn't; e.g. boost warnings are
-# just noise for us since we won't be changing them).
+# -isystem do not generate warnings (and they shouldn't; e.g. pybind11 warnings
+# are just noise for us since we won't be changing them).
 # Since there is no -isystem flag equivalent on Windows, headers from external
 # projects may conflict with our headers and override them. We prevent that by
 # including these directories after ours.
 include_directories(
   SYSTEM
-  ${Boost_INCLUDE_DIR}
   ${PYBIND11_INCLUDES_DIR}
   ${PYTHON_INCLUDE_DIRS}
   ${CLANG_INCLUDES_DIR}
@@ -318,6 +314,36 @@ if ( UNIX AND NOT ( APPLE OR SYSTEM_IS_OPENBSD OR HAIKU ) )
   set( EXTRA_LIBS rt )
 endif()
 
+# Check if we need to add -lstdc++fs or -lc++fs or nothing
+if( MSVC )
+  set( STD_FS_NO_LIB_NEEDED TRUE )
+else()
+  file( WRITE ${CMAKE_CURRENT_BINARY_DIR}/main.cpp "#include <filesystem>\nint main( int argc, char ** argv ) {\n  std::filesystem::path p( argv[ 0 ] );\n  return p.string().length();\n}" )
+  try_compile( STD_FS_NO_LIB_NEEDED ${CMAKE_CURRENT_BINARY_DIR}
+               SOURCES ${CMAKE_CURRENT_BINARY_DIR}/main.cpp
+               COMPILE_DEFINITIONS -std=c++17 )
+  try_compile( STD_FS_NEEDS_STDCXXFS ${CMAKE_CURRENT_BINARY_DIR}
+               SOURCES ${CMAKE_CURRENT_BINARY_DIR}/main.cpp
+               COMPILE_DEFINITIONS -std=c++17
+               LINK_LIBRARIES stdc++fs )
+  try_compile( STD_FS_NEEDS_CXXFS ${CMAKE_CURRENT_BINARY_DIR}
+               SOURCES ${CMAKE_CURRENT_BINARY_DIR}/main.cpp
+               COMPILE_DEFINITIONS -std=c++17
+               LINK_LIBRARIES c++fs )
+  file( REMOVE ${CMAKE_CURRENT_BINARY_DIR}/main.cpp )
+endif()
+
+if( ${STD_FS_NEEDS_STDCXXFS} )
+  set( STD_FS_LIB stdc++fs )
+elseif( ${STD_FS_NEEDS_CXXFS} )
+  set( STD_FS_LIB c++fs )
+elseif( ${STD_FS_NO_LIB_NEEDED} )
+  set( STD_FS_LIB "" )
+else()
+  message( WARNING "Unknown compiler - not passing -lstdc++fs" )
+  set( STD_FS_LIB "" )
+endif()
+
 #############################################################################
 
 add_library( ${PROJECT_NAME} SHARED
@@ -331,9 +357,9 @@ if ( USE_CLANG_COMPLETER AND NOT LIBCLANG_TARGET )
 endif()
 
 target_link_libraries( ${PROJECT_NAME}
-                       ${Boost_LIBRARIES}
                        ${PYTHON_LIBRARIES}
                        ${LIBCLANG_TARGET}
+                       ${STD_FS_LIB}
                        ${EXTRA_LIBS}
                      )
 
@@ -398,11 +424,7 @@ set_target_properties( ${PROJECT_NAME} PROPERTIES
 
 #############################################################################
 
-
-# For some reason, Xcode is too dumb to understand the -isystem flag and thus
-# borks on warnings in Boost.
-if ( USE_DEV_FLAGS AND ( CMAKE_COMPILER_IS_GNUCXX OR COMPILER_IS_CLANG ) AND
-     NOT CMAKE_GENERATOR_IS_XCODE )
+if ( USE_DEV_FLAGS AND ( CMAKE_COMPILER_IS_GNUCXX OR COMPILER_IS_CLANG ) )
   # We want all warnings, and warnings should be treated as errors
   set( CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra -Werror" )
 endif()

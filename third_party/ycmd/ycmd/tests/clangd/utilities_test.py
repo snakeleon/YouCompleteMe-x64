@@ -90,8 +90,8 @@ def ClangdCompleter_GetClangdCommand_CustomBinary_test():
         side_effect = [ None,
                         ( 5, 0, 0 ),
                         clangd_completer.MIN_SUPPORTED_VERSION,
-                        ( 10, 0, 0 ),
-                        ( 10, 10, 10 ),
+                        ( 11, 0, 0 ),
+                        ( 11, 10, 10 ),
                         ( 100, 100, 100 ) ] )
 def ClangdCompleter_CheckClangdVersion_test( *args ):
   assert_that( clangd_completer.CheckClangdVersion( 'clangd' ),
@@ -241,3 +241,8 @@ def ClangdCompleter_StartServer_Fails_test( app ):
                      ) )
       assert_that( resp.status_code, equal_to( 200 ) )
       shutdown.assert_called()
+
+
+def Dummy_test():
+  # Workaround for https://github.com/pytest-dev/pytest-rerunfailures/issues/51
+  assert True

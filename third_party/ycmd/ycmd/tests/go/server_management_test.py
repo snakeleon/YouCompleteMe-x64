@@ -126,7 +126,7 @@ def ServerManagement_StartServer_Fails_test( app ):
 
     assert_that( resp.status_code, equal_to( 200 ) )
 
-    request_data = BuildRequest( filetype = 'java' )
+    request_data = BuildRequest( filetype = 'go' )
     assert_that( app.post_json( '/debug_info', request_data ).json,
                  has_entry(
                    'completer',
@@ -134,3 +134,8 @@ def ServerManagement_StartServer_Fails_test( app ):
                      has_entry( 'is_running', False )
                    ) )
                  ) )
+
+
+def Dummy_test():
+  # Workaround for https://github.com/pytest-dev/pytest-rerunfailures/issues/51
+  assert True

@@ -78,8 +78,11 @@ def FindTSServer( user_options_path ):
     return tsserver
   # The TSServer executable is installed at the root directory on Windows while
   # it's installed in the bin folder on other platforms.
-  for executable in [ os.path.join( TSSERVER_DIR, 'bin', 'tsserver' ),
-                      os.path.join( TSSERVER_DIR, 'tsserver' ),
+  for executable in [ os.path.join( TSSERVER_DIR,
+                                    'node_modules',
+                                    'typescript',
+                                    'bin',
+                                    'tsserver' ),
                       'tsserver' ]:
     tsserver = utils.FindExecutable( executable )
     if tsserver:
@@ -379,12 +382,12 @@ class TypeScriptCompleter( Completer ):
 
   def ComputeCandidatesInner( self, request_data ):
     self._Reload( request_data )
-    entries = self._SendRequest( 'completions', {
+    entries = self._SendRequest( 'completionInfo', {
       'file':                         request_data[ 'filepath' ],
       'line':                         request_data[ 'line_num' ],
       'offset':                       request_data[ 'start_codepoint' ],
       'includeExternalModuleExports': True
-    } )
+    } )[ 'entries' ]
     # Ignore entries with the "warning" kind. They are identifiers from the
     # current file that TSServer returns sometimes in JavaScript.
     return [ responses.BuildCompletionData(

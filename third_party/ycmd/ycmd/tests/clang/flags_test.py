@@ -1283,10 +1283,10 @@ def CompilationDatabase_CUDALanguageFlags_test():
           os.path.join( tmp_dir, 'test.cuh' ),
           add_extra_clang_flags = False )[ 0 ],
         contains_exactly( 'clang++',
-                  '-x',
-                  'cuda',
-                  '--driver-mode=g++',
-                  '-Wall' ) )
+                          '--driver-mode=g++',
+                          '-Wall',
+                          '-x',
+                          'cuda' ) )
 
 
 def _MakeRelativePathsInFlagsAbsoluteTest( test ):
@@ -1591,3 +1591,8 @@ def MakeRelativePathsInFlagsAbsolute_NoWorkingDir_test():
     'expect': [ 'list', 'of', 'flags', 'not', 'changed', '-Itest' ],
     'wd': ''
   } )
+
+
+def Dummy_test():
+  # Workaround for https://github.com/pytest-dev/pytest-rerunfailures/issues/51
+  assert True

@@ -152,6 +152,18 @@ def Subcommands_Format_WholeFile_Spaces_test( app ):
             ChunkMatcher( ' ',
                           LocationMatcher( filepath,  8,  6 ),
                           LocationMatcher( filepath,  8,  6 ) ),
+            ChunkMatcher( ' ',
+                          LocationMatcher( filepath, 18,  1 ),
+                          LocationMatcher( filepath, 18,  2 ) ),
+            ChunkMatcher( ' ',
+                          LocationMatcher( filepath, 19,  1 ),
+                          LocationMatcher( filepath, 19,  2 ) ),
+            ChunkMatcher( ' ',
+                          LocationMatcher( filepath, 20,  1 ),
+                          LocationMatcher( filepath, 20,  2 ) ),
+            ChunkMatcher( ' ',
+                          LocationMatcher( filepath, 21,  1 ),
+                          LocationMatcher( filepath, 21,  2 ) ),
             ChunkMatcher( '    ',
                           LocationMatcher( filepath, 24,  1 ),
                           LocationMatcher( filepath, 24,  3 ) ),
@@ -223,6 +235,18 @@ def Subcommands_Format_WholeFile_Tabs_test( app ):
             ChunkMatcher( ' ',
                           LocationMatcher( filepath,  8,  6 ),
                           LocationMatcher( filepath,  8,  6 ) ),
+            ChunkMatcher( ' ',
+                          LocationMatcher( filepath, 18,  1 ),
+                          LocationMatcher( filepath, 18,  2 ) ),
+            ChunkMatcher( ' ',
+                          LocationMatcher( filepath, 19,  1 ),
+                          LocationMatcher( filepath, 19,  2 ) ),
+            ChunkMatcher( ' ',
+                          LocationMatcher( filepath, 20,  1 ),
+                          LocationMatcher( filepath, 20,  2 ) ),
+            ChunkMatcher( ' ',
+                          LocationMatcher( filepath, 21,  1 ),
+                          LocationMatcher( filepath, 21,  2 ) ),
             ChunkMatcher( '\t',
                           LocationMatcher( filepath, 24,  1 ),
                           LocationMatcher( filepath, 24,  3 ) ),
@@ -770,3 +794,8 @@ def Subcommands_RefactorRename_MultipleFiles_test( app ):
       } )
     }
   } )
+
+
+def Dummy_test():
+  # Workaround for https://github.com/pytest-dev/pytest-rerunfailures/issues/51
+  assert True

@@ -29,7 +29,6 @@
 # For more information, please refer to <http://unlicense.org/>
 
 from distutils.sysconfig import get_python_inc
-import os
 import platform
 import os.path as p
 import subprocess
@@ -79,23 +78,13 @@ get_python_inc(),
 '-I',
 'cpp/ycm/ClangCompleter',
 '-isystem',
-'cpp/ycm/tests/gmock/gtest',
+'cpp/ycm/tests/gmock/googlemock/include',
 '-isystem',
-'cpp/ycm/tests/gmock/gtest/include',
-'-isystem',
-'cpp/ycm/tests/gmock',
-'-isystem',
-'cpp/ycm/tests/gmock/include',
+'cpp/ycm/tests/gmock/googletest/include',
 '-isystem',
 'cpp/ycm/benchmarks/benchmark/include',
+'-std=c++17',
 ]
-
-# Clang automatically sets the '-std=' flag to 'c++14' for MSVC 2015 or later,
-# which is required for compiling the standard library, and to 'c++11' for older
-# versions.
-if platform.system() != 'Windows':
-  flags.append( '-std=c++11' )
-
 
 # Set this to the absolute path to the folder (NOT the file!) containing the
 # compile_commands.json file to use that instead of 'flags'. See here for
@@ -200,8 +189,7 @@ def PythonSysPath( **kwargs ):
 
   sys_path[ 0:0 ] = [ p.join( DIR_OF_THIS_SCRIPT ),
                       p.join( DIR_OF_THIRD_PARTY, 'bottle' ),
-                      p.join( DIR_OF_THIRD_PARTY, 'cregex',
-                              'regex_{}'.format( major_version ) ),
+                      p.join( DIR_OF_THIRD_PARTY, 'regex-build' ),
                       p.join( DIR_OF_THIRD_PARTY, 'frozendict' ),
                       p.join( DIR_OF_THIRD_PARTY, 'jedi_deps', 'jedi' ),
                       p.join( DIR_OF_THIRD_PARTY, 'jedi_deps', 'parso' ),

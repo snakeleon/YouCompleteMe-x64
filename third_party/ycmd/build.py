@@ -81,15 +81,13 @@ DYNAMIC_PYTHON_LIBRARY_REGEX = """
   )$
 """
 
-JDTLS_MILESTONE = '0.59.0'
-JDTLS_BUILD_STAMP = '202007221016'
+JDTLS_MILESTONE = '0.63.0'
+JDTLS_BUILD_STAMP = '202010141717'
 JDTLS_SHA256 = (
-  'a3a7999032114673bd2212d929a74c56b22fece0fb7e7410bd82f3e17443a295'
+  '56eef6b138bdaa60ff8a794d622d390abac8286c0e5e1370616baf9a601fd1c8'
 )
 
-TSSERVER_VERSION = '3.9.7'
-
-RUST_TOOLCHAIN = 'nightly-2020-08-19'
+RUST_TOOLCHAIN = 'nightly-2020-10-05'
 RUST_ANALYZER_DIR = p.join( DIR_OF_THIRD_PARTY, 'rust-analyzer' )
 
 BUILD_ERROR_MESSAGE = (
@@ -101,7 +99,7 @@ BUILD_ERROR_MESSAGE = (
   'issue tracker, including the entire output of this script\n'
   'and the invocation line used to run it.' )
 
-CLANGD_VERSION = '10.0.0'
+CLANGD_VERSION = '11.0.0'
 CLANGD_BINARIES_ERROR_MESSAGE = (
   'No prebuilt Clang {version} binaries for {platform}. '
   'You\'ll have to compile Clangd {version} from source '
@@ -201,7 +199,7 @@ def FindExecutable( executable ):
     executable_name = executable + extension
     if not os.path.isfile( executable_name ):
       for path in paths:
-        executable_path = os.path.join( path, executable_name )
+        executable_path = p.join( path, executable_name )
         if os.path.isfile( executable_path ):
           return executable_path
     else:
@@ -403,7 +401,7 @@ def ParseArguments():
   parser.add_argument( '--system-libclang', action = 'store_true',
                        help = 'Use system libclang instead of downloading one '
                        'from llvm.org. NOT RECOMMENDED OR SUPPORTED!' )
-  parser.add_argument( '--msvc', type = int, choices = [ 14, 15, 16 ],
+  parser.add_argument( '--msvc', type = int, choices = [ 15, 16 ],
                        default = 16, help = 'Choose the Microsoft Visual '
                        'Studio version (default: %(default)s).' )
   parser.add_argument( '--ninja', action = 'store_true',
@@ -560,8 +558,8 @@ def RunYcmdTests( args, build_dir ):
             '--gen-suppressions=all',
             '--error-exitcode=1',
             '--leak-check=full',
-            '--show-leak-kinds=all',
-            '--show-reachable=no',
+            '--show-leak-kinds=definite,indirect',
+            '--errors-for-leak-kinds=definite,indirect',
             '--suppressions=' + p.join( DIR_OF_THIS_SCRIPT,
                                         'valgrind.suppressions' ),
             p.join( tests_dir, 'ycm_core_tests' ) ]
@@ -665,32 +663,32 @@ def BuildYcmdLib( cmake, cmake_common_args, script_args ):
       RemoveDirectory( build_dir )
 
 
-def BuildRegexModule( cmake, cmake_common_args, script_args ):
-  build_dir = mkdtemp( prefix = 'regex_build_' )
+def BuildRegexModule( script_args ):
+  build_dir = p.join( DIR_OF_THIRD_PARTY, 'regex-build', '3' )
+  lib_dir = p.join( DIR_OF_THIRD_PARTY, 'regex-build' )
 
   try:
-    os.chdir( build_dir )
+    os.chdir( p.join( DIR_OF_THIRD_PARTY, 'mrab-regex' ) )
 
-    configure_command = [ cmake ] + cmake_common_args
-    configure_command.append( p.join( DIR_OF_THIS_SCRIPT,
-                                      'third_party', 'cregex' ) )
+    RemoveDirectoryIfExists( build_dir )
+    RemoveDirectoryIfExists( lib_dir )
 
-    CheckCall( configure_command,
-               exit_message = BUILD_ERROR_MESSAGE,
-               quiet = script_args.quiet,
-               status_message = 'Generating regex build configuration' )
+    try:
+      import setuptools # noqa
+      CheckCall( [ sys.executable,
+                   'setup.py',
+                   'build',
+                   '--build-base=' + build_dir,
+                   '--build-lib=' + lib_dir ],
+                 exit_message = 'Failed to build regex module.',
+                 quiet = script_args.quiet,
+                 status_message = 'Building regex module' )
+    except ImportError:
+      pass # Swallow the error - ycmd will fall back to the standard `re`.
 
-    build_config = GetCMakeBuildConfiguration( script_args )
-
-    build_command = ( [ cmake, '--build', '.', '--target', '_regex' ] +
-                      build_config )
-    CheckCall( build_command,
-               exit_message = BUILD_ERROR_MESSAGE,
-               quiet = script_args.quiet,
-               status_message = 'Compiling regex module' )
   finally:
+    RemoveDirectoryIfExists( build_dir )
     os.chdir( DIR_OF_THIS_SCRIPT )
-    RemoveDirectory( build_dir )
 
 
 def EnableCsCompleter( args ):
@@ -734,7 +732,7 @@ def MkDirIfMissing( path ):
 
 def CleanCsCompleter( build_dir, version ):
   for file_name in os.listdir( build_dir ):
-    file_path = os.path.join( build_dir, file_name )
+    file_path = p.join( build_dir, file_name )
     if file_name == version:
       continue
     if os.path.isfile( file_path ):
@@ -845,7 +843,7 @@ def EnableGoCompleter( args ):
   new_env[ 'GOPATH' ] = p.join( DIR_OF_THIS_SCRIPT, 'third_party', 'go' )
   new_env.pop( 'GOROOT', None )
   new_env[ 'GOBIN' ] = p.join( new_env[ 'GOPATH' ], 'bin' )
-  CheckCall( [ go, 'get', 'golang.org/x/tools/gopls@v0.4.4' ],
+  CheckCall( [ go, 'get', 'golang.org/x/tools/gopls@v0.5.1' ],
              env = new_env,
              quiet = args.quiet,
              status_message = 'Building gopls for go completion' )
@@ -878,7 +876,7 @@ def EnableRustCompleter( switches ):
     new_env = os.environ.copy()
     new_env[ 'RUSTUP_HOME' ] = install_dir
 
-    rustup_init = os.path.join( install_dir, 'rustup-init' )
+    rustup_init = p.join( install_dir, 'rustup-init' )
 
     if OnWindows():
       rustup_cmd = [ rustup_init ]
@@ -898,7 +896,7 @@ def EnableRustCompleter( switches ):
                env = new_env,
                quiet = switches.quiet )
 
-    rustup = os.path.join( install_dir, 'bin', 'rustup' )
+    rustup = p.join( install_dir, 'bin', 'rustup' )
 
     try:
       CheckCall( [ rustup, 'toolchain', 'install', RUST_TOOLCHAIN ],
@@ -936,25 +934,6 @@ def EnableRustCompleter( switches ):
 
 def EnableJavaScriptCompleter( args ):
   npm = FindExecutableOrDie( 'npm', 'npm is required to set up Tern.' )
-
-  # We install Tern into a runtime directory. This allows us to control
-  # precisely the version (and/or git commit) that is used by ycmd.  We use a
-  # separate runtime directory rather than a submodule checkout directory
-  # because we want to allow users to install third party plugins to
-  # node_modules of the Tern runtime.  We also want to be able to install our
-  # own plugins to improve the user experience for all users.
-  #
-  # This is not possible if we use a git submodule for Tern and simply run 'npm
-  # install' within the submodule source directory, as subsequent 'npm install
-  # tern-my-plugin' will (heinously) install another (arbitrary) version of Tern
-  # within the Tern source tree (e.g. third_party/tern/node_modules/tern. The
-  # reason for this is that the plugin that gets installed has "tern" as a
-  # dependency, and npm isn't smart enough to know that you're installing
-  # *within* the Tern distribution. Or it isn't intended to work that way.
-  #
-  # So instead, we have a package.json within our "Tern runtime" directory
-  # (third_party/tern_runtime) that defines the packages that we require,
-  # including Tern and any plugins which we require as standard.
   os.chdir( p.join( DIR_OF_THIS_SCRIPT, 'third_party', 'tern_runtime' ) )
   CheckCall( [ npm, 'install', '--production' ],
              quiet = args.quiet,
@@ -971,7 +950,7 @@ def CheckJavaVersion( required_version ):
     new_env.pop( 'JAVA_TOOL_OPTIONS', None )
     java_version = int(
       subprocess.check_output(
-        [ java, os.path.join( DIR_OF_THIS_SCRIPT, 'CheckJavaVersion.java' ) ],
+        [ java, p.join( DIR_OF_THIS_SCRIPT, 'CheckJavaVersion.java' ) ],
         stderr=subprocess.STDOUT,
         env = new_env )
       .decode( 'utf-8' )
@@ -1040,45 +1019,45 @@ def EnableJavaCompleter( switches ):
 
 
 def EnableTypeScriptCompleter( args ):
+  RemoveDirectoryIfExists( p.join( DIR_OF_THIRD_PARTY, 'tsserver', 'bin' ) )
+  RemoveDirectoryIfExists( p.join( DIR_OF_THIRD_PARTY, 'tsserver', 'lib' ) )
   npm = FindExecutableOrDie( 'npm', 'npm is required to install TSServer.' )
-  tsserver_folder = p.join( DIR_OF_THIRD_PARTY, 'tsserver' )
-  CheckCall( [ npm, 'install', '-g', '--prefix', tsserver_folder,
-               'typescript@{version}'.format( version = TSSERVER_VERSION ) ],
+  os.chdir( p.join( DIR_OF_THIRD_PARTY, 'tsserver' ) )
+  CheckCall( [ npm, 'install', '--production' ],
              quiet = args.quiet,
-             status_message = 'Installing TSServer for JavaScript '
-                              'and TypeScript completion' )
+             status_message = 'Setting up TSserver for TypeScript completion' )
 
 
 def GetClangdTarget():
   if OnWindows():
     return [
       ( 'clangd-{version}-win64',
-        '193ebaa9bddb750d3678342de16cd59724e10b919d5da1f78e0202db0c67c339' ),
+        '6c9ac8abc7b7597f92268624d200326f8681eecb387c875d319b7fdc9f400102' ),
       ( 'clangd-{version}-win32',
-        '83d9cb3f18e23558997f6248559095d468dab3e3132b9e12b62401707a085d11' ) ]
+        '67dba0988e55d472ebef78d1b0c7227261818809a4dd66d45cf8ed2cdc92825c' ) ]
   if OnMac():
     return [
       ( 'clangd-{version}-x86_64-apple-darwin',
-        '641e07ba19a38a9570260125df6464cd75a3d209c661177bfc8221ceb090bd6a' ) ]
+        '04be91e7812328c3262963a3206c1ebc87e0e46892323a1b8eea980ffbf2d16f' ) ]
   if OnFreeBSD():
     return [
       ( 'clangd-{version}-amd64-unknown-freebsd11',
-        'eef613abbc5946f489cd5ef369eb29ad78881b08514be780c0a4dc1cec9cdbec' ),
+        '2532850e2269d533d5b4bf9cb676587fd3e80914b0dbee13b694d9f3eb4b45b1' ),
       ( 'clangd-{version}-i386-unknown-freebsd11',
-        'aba343ba9bc080b19fa8162018f8e1bf4cc55907a892d50ce8ff7515cf666fd7' ) ]
+        '542d2012da260df76e4747abeef2a90dfb8f7923bf781dab296eaf484bfec4f6' ) ]
   if OnAArch64():
     return [
       ( 'clangd-{version}-aarch64-linux-gnu',
-        '1ee49413e2216d59f7df994a3b528d9deed2f0d999716ab2d5c584fbb0c1a337' ) ]
+        '4a62bb2ca1b60ef0be0617c9caa1f297edf1a60f81c48c366625a715f9563e8e' ) ]
   if OnArm():
     return [
       None, # First list index is for 64bit archives. ARMv7 is 32bit only.
       ( 'clangd-{version}-armv7a-linux-gnueabihf',
-        'db2e81ae6d70bc53d6558181aebc8dcd6d0ec6ae30fee7d533c1fa4a66d6ed4c' ) ]
+        'fd00fc69c49ff397a38cf4ba5ded3ccd2e6c5c955b9e3a9d7b26fce8a1465b05' ) ]
   if OnX86_64():
     return [
       ( 'clangd-{version}-x86_64-unknown-linux-gnu',
-        '36b99e35b00ce7aa20738e33ede95a775ff62e10711130917711a3cab38fd85d' ) ]
+        '6288eb10e24d50227415e787bdc9392c3fe6917ceb25cc1c41f9843b8d9f9461' ) ]
   sys.exit( CLANGD_BINARIES_ERROR_MESSAGE.format( version = CLANGD_VERSION,
                                                   platform = 'this system' ) )
 
@@ -1145,12 +1124,12 @@ def WritePythonUsedDuringBuild():
     f.write( sys.executable )
 
 
-def CompileWatchdog( script_args ):
+def BuildWatchdogModule( script_args ):
+  DIR_OF_WATCHDOG_DEPS = p.join( DIR_OF_THIRD_PARTY, 'watchdog_deps' )
+  build_dir = p.join( DIR_OF_WATCHDOG_DEPS, 'watchdog', 'build', '3' )
+  lib_dir = p.join( DIR_OF_WATCHDOG_DEPS, 'watchdog', 'build', 'lib3' )
   try:
-    DIR_OF_WATCHDOG_DEPS = p.join( DIR_OF_THIRD_PARTY, 'watchdog_deps' )
     os.chdir( p.join( DIR_OF_WATCHDOG_DEPS, 'watchdog' ) )
-    build_dir = os.path.join( DIR_OF_WATCHDOG_DEPS, 'watchdog', 'build', '3' )
-    lib_dir = os.path.join( DIR_OF_WATCHDOG_DEPS, 'watchdog', 'build', 'lib3' )
 
     RemoveDirectoryIfExists( build_dir )
     RemoveDirectoryIfExists( lib_dir )
@@ -1175,6 +1154,7 @@ def CompileWatchdog( script_args ):
       shutil.copytree( p.join( 'src', 'watchdog' ),
                        p.join( lib_dir, 'watchdog' ) )
   finally:
+    RemoveDirectoryIfExists( build_dir )
     os.chdir( DIR_OF_THIS_SCRIPT )
 
 
@@ -1186,9 +1166,8 @@ def DoCmakeBuilds( args ):
   BuildYcmdLib( cmake, cmake_common_args, args )
   WritePythonUsedDuringBuild()
 
-  BuildRegexModule( cmake, cmake_common_args, args )
-
-  CompileWatchdog( args )
+  BuildRegexModule( args )
+  BuildWatchdogModule( args )
 
 
 def Main():
