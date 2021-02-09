@@ -243,6 +243,13 @@ officially supported.
 brew install cmake python mono go nodejs
 ```
 
+- For java support you must install a JDK, one way to do this is with homebrew:
+
+```
+$ brew install java
+$ sudo ln -sfn /usr/local/opt/openjdk/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk.jdk
+```
+
 - Pre-installed macOS *system* Vim does not support Python 3. So you need to install either a Vim that supports Python 3 OR [MacVim][] with [Homebrew][brew]:
 
   - Option 1: Installing a Vim that supports Python 3
@@ -344,16 +351,23 @@ that are conservatively turned off by default that you may want to turn on.
 
 ### Linux 64-bit
 
+The following assume you're using Ubuntu 20.04.
+
 #### Quick start, installing all completers
 
 - Install YCM plugin via [Vundle][]
 - Install cmake, vim and python
 
 ```
-apt install build-essential cmake vim python3-dev
+apt install build-essential cmake vim-nox python3-dev
 ```
 
-- Install mono-complete, go, node and npm
+- Install mono-complete, go, node, java and npm
+
+```
+apt install mono-complete golang nodejs default-jdk npm
+```
+
 - Compile YCM
 
 ```
@@ -1171,6 +1185,10 @@ Gradle projects require a [build.gradle][gradle-project]. Again, there is a
 The format of [build.gradle][gradle-project] files is way beyond the scope of
 this document, but we do recommend using the various tools that can generate
 them for you, if you're not familiar with them already.
+
+Some users have experienced issues with their jdt.ls  when using the Groovy
+language for their build.gradle. As such, try using
+[Kotlin](https://github.com/ycm-core/lsp-examples#kotlin) instead.
 
 #### Troubleshooting
 
@@ -3432,7 +3450,7 @@ This software is licensed under the [GPL v3 license][gpl].
 
 - ycm_core  核心版本: 44 (17 November 2020) 静态编译
 - libclang  版本: 11.0.0 (12 October 2020) [Clang][Clang]
-- Python    支持: 3.9.0 (5 October 2020) [Python][python-win-download]
+- Python    支持: 3.9.1 (7 December 2020) [Python][python-win-download]
 
 
 支持操作系统:
