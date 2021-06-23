@@ -89,6 +89,9 @@ PROVIDERS_MAP = {
   'workspaceSymbolProvider': (
     lambda self, request_data, args: self.GoToSymbol( request_data, args )
   ),
+  'documentSymbolProvider': (
+    lambda self, request_data, args: self.GoToDocumentOutline( request_data )
+  )
 }
 
 # Each command is mapped to a list of providers. This allows a command to use
@@ -98,18 +101,19 @@ PROVIDERS_MAP = {
 # like GoTo where it's convenient to jump to the declaration if already on the
 # definition and vice versa.
 DEFAULT_SUBCOMMANDS_MAP = {
-  'ExecuteCommand':     [ 'executeCommandProvider' ],
-  'FixIt':              [ 'codeActionProvider' ],
-  'GoToDefinition':     [ 'definitionProvider' ],
-  'GoToDeclaration':    [ 'declarationProvider', 'definitionProvider' ],
-  'GoTo':               [ ( 'definitionProvider', 'declarationProvider' ),
-                          'definitionProvider' ],
-  'GoToType':           [ 'typeDefinitionProvider' ],
-  'GoToImplementation': [ 'implementationProvider' ],
-  'GoToReferences':     [ 'referencesProvider' ],
-  'RefactorRename':     [ 'renameProvider' ],
-  'Format':             [ 'documentFormattingProvider' ],
-  'GoToSymbol':         [ 'workspaceSymbolProvider' ],
+  'ExecuteCommand':      [ 'executeCommandProvider' ],
+  'FixIt':               [ 'codeActionProvider' ],
+  'GoToDefinition':      [ 'definitionProvider' ],
+  'GoToDeclaration':     [ 'declarationProvider', 'definitionProvider' ],
+  'GoTo':                [ ( 'definitionProvider', 'declarationProvider' ),
+                           'definitionProvider' ],
+  'GoToType':            [ 'typeDefinitionProvider' ],
+  'GoToImplementation':  [ 'implementationProvider' ],
+  'GoToReferences':      [ 'referencesProvider' ],
+  'RefactorRename':      [ 'renameProvider' ],
+  'Format':              [ 'documentFormattingProvider' ],
+  'GoToSymbol':          [ 'workspaceSymbolProvider' ],
+  'GoToDocumentOutline': [ 'documentSymbolProvider' ],
 }
 
 
@@ -597,24 +601,32 @@ class LanguageServerConnection( threading.Thread ):
 
   def _ServerToClientRequest( self, request ):
     method = request[ 'method' ]
-    if method == 'workspace/applyEdit':
-      self._collector.CollectApplyEdit( request, self )
-    elif method == 'workspace/configuration':
-      response = self._workspace_conf_handler( request )
-      if response is not None:
-        self.SendResponse( lsp.Accept( request, response ) )
-      else:
+    try:
+      if method == 'workspace/applyEdit':
+        self._collector.CollectApplyEdit( request, self )
+      elif method == 'workspace/configuration':
+        response = self._workspace_conf_handler( request )
+        if response is not None:
+          self.SendResponse( lsp.Accept( request, response ) )
+        else:
+          self.SendResponse( lsp.Reject( request, lsp.Errors.MethodNotFound ) )
+      elif method == 'client/registerCapability':
+        self._HandleDynamicRegistrations( request )
+      elif method == 'client/unregisterCapability':
+        for reg in request[ 'params' ][ 'unregisterations' ]:
+          if reg[ 'method' ] == 'workspace/didChangeWatchedFiles':
+            self._CancelWatchdogThreads()
+        self.SendResponse( lsp.Void( request ) )
+      else: # method unknown - reject
         self.SendResponse( lsp.Reject( request, lsp.Errors.MethodNotFound ) )
-    elif method == 'client/registerCapability':
-      self._HandleDynamicRegistrations( request )
-    elif method == 'client/unregisterCapability':
-      for reg in request[ 'params' ][ 'unregisterations' ]:
-        if reg[ 'method' ] == 'workspace/didChangeWatchedFiles':
-          self._CancelWatchdogThreads()
-      self.SendResponse( lsp.Void( request ) )
-    else:
-      # Reject the request
-      self.SendResponse( lsp.Reject( request, lsp.Errors.MethodNotFound ) )
+      return
+    except Exception:
+      LOGGER.exception( "Handling server to client request failed for request "
+                        "%s, rejecting it. This is probably a bug in ycmd.",
+                        request )
+
+    # unhandled, or failed; reject the request
+    self.SendResponse( lsp.Reject( request, lsp.Errors.MethodNotFound ) )
 
   def _DispatchMessage( self, message ):
     """Called in the message pump thread context when a complete message was
@@ -1517,8 +1529,8 @@ class LanguageServerCompleter( Completer ):
         else:
           begin, end = arg_label
         arg[ 'label' ] = [
-          utils.CodepointOffsetToByteOffset( sig_label, begin ),
-          utils.CodepointOffsetToByteOffset( sig_label, end ) ]
+          utils.CodepointOffsetToByteOffset( sig_label, begin + 1 ) - 1,
+          utils.CodepointOffsetToByteOffset( sig_label, end + 1 ) - 1 ]
     result.setdefault( 'activeParameter', 0 )
     result.setdefault( 'activeSignature', 0 )
     return result
@@ -2396,20 +2408,30 @@ class LanguageServerCompleter( Completer ):
       REQUEST_TIMEOUT_COMMAND )
 
     result = response.get( 'result' ) or []
+    return _SymbolInfoListToGoTo( request_data, result )
 
-    locations = [
-      responses.BuildGoToResponseFromLocation(
-        _PositionToLocationAndDescription( request_data,
-                                           symbol_info[ 'location' ] )[ 0 ],
-        symbol_info[ 'name' ] ) for symbol_info in result
-    ]
 
-    if not locations:
-      raise RuntimeError( "Symbol not found" )
-    elif len( locations ) == 1:
-      return locations[ 0 ]
-    else:
-      return locations
+  def GoToDocumentOutline( self, request_data ):
+    if not self.ServerIsReady():
+      raise RuntimeError( 'Server is initializing. Please wait.' )
+
+    self._UpdateServerWithFileContents( request_data )
+
+    request_id = self.GetConnection().NextRequestId()
+    message = lsp.DocumentSymbol( request_id, request_data )
+    response = self.GetConnection().GetResponse( request_id,
+                                                 message,
+                                                 REQUEST_TIMEOUT_COMMAND )
+
+    result = response.get( 'result' ) or []
+
+    # We should only receive SymbolInformation (not DocumentSymbol)
+    if any( 'range' in s for s in result ):
+      raise ValueError(
+        "Invalid server response; DocumentSymbol not supported" )
+
+    return _SymbolInfoListToGoTo( request_data, result )
+
 
 
   def GetCodeActions( self, request_data, args ):
@@ -2536,10 +2558,13 @@ class LanguageServerCompleter( Completer ):
     new_name = args[ 0 ]
 
     request_id = self.GetConnection().NextRequestId()
-    response = self.GetConnection().GetResponse(
-      request_id,
-      lsp.Rename( request_id, request_data, new_name ),
-      REQUEST_TIMEOUT_COMMAND )
+    try:
+      response = self.GetConnection().GetResponse(
+        request_id,
+        lsp.Rename( request_id, request_data, new_name ),
+        REQUEST_TIMEOUT_COMMAND )
+    except ResponseFailedException:
+      raise RuntimeError( 'Cannot rename the symbol under cursor.' )
 
     fixit = WorkspaceEditToFixIt( request_data, response[ 'result' ] )
     if not fixit:
@@ -2955,6 +2980,37 @@ def _LocationListToGoTo( request_data, positions ):
     raise RuntimeError( 'Cannot jump to location' )
 
 
+def _SymbolInfoListToGoTo( request_data, symbols ):
+  """Convert a list of LSP SymbolInformation into a YCM GoTo response"""
+
+  def BuildGoToLocationFromSymbol( symbol ):
+    location, line_value = _PositionToLocationAndDescription(
+      request_data,
+      symbol[ 'location' ] )
+
+    description = ( f'{ lsp.SYMBOL_KIND[ symbol[ "kind" ] ] }: '
+                    f'{ symbol[ "name" ] }' )
+
+    goto = responses.BuildGoToResponseFromLocation( location,
+                                                    description )
+    goto[ 'extra_data' ] = {
+      'kind': lsp.SYMBOL_KIND[ symbol[ 'kind' ] ],
+      'name': symbol[ 'name' ],
+    }
+    return goto
+
+  locations = [ BuildGoToLocationFromSymbol( s ) for s in
+                sorted( symbols,
+                        key = lambda s: ( s[ 'kind' ], s[ 'name' ] ) ) ]
+
+  if not locations:
+    raise RuntimeError( "Symbol not found" )
+  elif len( locations ) == 1:
+    return locations[ 0 ]
+  else:
+    return locations
+
+
 def _PositionToLocationAndDescription( request_data, position ):
   """Convert a LSP position to a ycmd location."""
   try:
@@ -3153,9 +3209,12 @@ class LanguageServerCompletionsCache( CompletionsCache ):
     return request_data[ 'query' ].startswith( self._request_data[ 'query' ] )
 
 
-  def GetCompletionsIfCacheValid( self, request_data ):
+  def GetCompletionsIfCacheValid( self,
+                                  request_data,
+                                  **kwargs ):
     with self._access_lock:
-      if ( not self._is_incomplete and
+      if ( ( not self._is_incomplete
+             or kwargs.get( 'ignore_incomplete' ) ) and
            ( self._use_start_column or self._IsQueryPrefix( request_data ) ) ):
         return super().GetCompletionsIfCacheValidNoLock( request_data )
       return None

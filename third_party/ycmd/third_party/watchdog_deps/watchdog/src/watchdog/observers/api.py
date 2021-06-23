@@ -1,8 +1,7 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+# coding: utf-8
 #
 # Copyright 2011 Yesudeep Mangalapilly <yesudeep@gmail.com>
-# Copyright 2012 Google, Inc.
+# Copyright 2012 Google, Inc & contributors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,10 +15,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from __future__ import with_statement
+import queue
 import threading
+from pathlib import Path
+
 from watchdog.utils import BaseThread
-from watchdog.utils.compat import queue
 from watchdog.utils.bricks import SkipRepeatsQueue
 
 DEFAULT_EMITTER_TIMEOUT = 1    # in seconds.
@@ -36,7 +36,7 @@ class EventQueue(SkipRepeatsQueue):
     """
 
 
-class ObservedWatch(object):
+class ObservedWatch:
     """An scheduled watch.
 
     :param path:
@@ -46,7 +46,10 @@ class ObservedWatch(object):
     """
 
     def __init__(self, path, recursive):
-        self._path = path
+        if isinstance(path, Path):
+            self._path = str(path)
+        else:
+            self._path = path
         self._is_recursive = recursive
 
     @property
@@ -254,7 +257,7 @@ class BaseObserver(EventDispatcher):
             except Exception:
                 self._remove_emitter(emitter)
                 raise
-        super(BaseObserver, self).start()
+        super().start()
 
     def schedule(self, event_handler, path, recursive=False):
         """

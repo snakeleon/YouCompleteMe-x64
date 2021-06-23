@@ -97,6 +97,7 @@ def Subcommands_DefinedSubcommands_test( app ):
                                     'GoTo',
                                     'GoToDeclaration',
                                     'GoToDefinition',
+                                    'GoToDocumentOutline',
                                     'GoToImplementation',
                                     'GoToReferences',
                                     'GoToSymbol',
@@ -141,6 +142,7 @@ def Subcommands_ServerNotInitialized_test( app ):
   Test( app, 'RefactorRename', [ 'test' ] )
 
 
+@WithRetry
 @SharedYcmd
 def Subcommands_Format_WholeFile_test( app ):
   filepath = PathToTestFile( 'common', 'src', 'main.rs' )
@@ -160,16 +162,21 @@ def Subcommands_Format_WholeFile_test( app ):
       'data': has_entries( {
         'fixits': contains_exactly( has_entries( {
           'chunks': contains_exactly(
-            # Let's just rewrite the whole file...
-            ChunkMatcher( "mod test;\n\nuse test::*;\n\nstruct Earth {}"
-                          "\nstruct Mars {}\ntrait Atmosphere {}\nimpl "
-                          "Atmosphere for Earth {}\nimpl Atmosphere for "
-                          "Mars {}\n\nfn main() {\n    create_universe();"
-                          "\n    let builder = Builder {};\n    builder."
-                          "build_\n}\n\nfn format_test() {\n    let a: "
-                          "i32 = 5;\n}\n",
-                          LocationMatcher( filepath,  1, 1 ),
-                          LocationMatcher( filepath, 23, 1 ) ),
+            ChunkMatcher( "",
+                          LocationMatcher( filepath, 17,  4 ),
+                          LocationMatcher( filepath, 17, 16 ) ),
+            ChunkMatcher( "",
+                          LocationMatcher( filepath, 18,  1 ),
+                          LocationMatcher( filepath, 19,  1 ) ),
+            ChunkMatcher( "",
+                          LocationMatcher( filepath, 19,  8 ),
+                          LocationMatcher( filepath, 20,  8 ) ),
+            ChunkMatcher( "",
+                          LocationMatcher( filepath, 20, 10 ),
+                          LocationMatcher( filepath, 20, 11 ) ),
+            ChunkMatcher( "",
+                          LocationMatcher( filepath, 20, 13 ),
+                          LocationMatcher( filepath, 21,  1 ) ),
           )
         } ) )
       } )
@@ -226,7 +233,7 @@ def Subcommands_GetDoc_NoDocumentation_test( app ):
                    'raises an error',
     'request': {
       'command': 'GetDoc',
-      'line_num': 4,
+      'line_num': 3,
       'column_num': 11,
       'filepath': PathToTestFile( 'common', 'src', 'test.rs' ),
     },
@@ -266,7 +273,7 @@ def Subcommands_GetType_UnknownType_test( app ):
     'description': 'GetType on a unknown type raises an error',
     'request': {
       'command': 'GetType',
-      'line_num': 2,
+      'line_num': 3,
       'column_num': 4,
       'filepath': PathToTestFile( 'common', 'src', 'test.rs' ),
     },
@@ -438,11 +445,11 @@ def Subcommands_RefactorRename_Works_test( app ):
           'text': '',
           'chunks': contains_exactly(
             ChunkMatcher( 'update_universe',
-                          LocationMatcher( test_filepath,  2,  8 ),
-                          LocationMatcher( test_filepath,  2, 23 ) ),
-            ChunkMatcher( 'update_universe',
                           LocationMatcher( main_filepath, 12,  5 ),
                           LocationMatcher( main_filepath, 12, 20 ) ),
+            ChunkMatcher( 'update_universe',
+                          LocationMatcher( test_filepath,  2,  8 ),
+                          LocationMatcher( test_filepath,  2, 23 ) ),
           )
         } ) )
       } )

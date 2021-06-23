@@ -47,11 +47,13 @@ YCM_EXPORT inline char Lowercase( uint8_t ascii_character ) {
 
 
 YCM_EXPORT inline std::string Lowercase( std::string_view text ) {
-  std::string result;
-  result.reserve( text.size() );
-  for ( auto ascii_character : text ) {
-    result.push_back( Lowercase( static_cast< uint8_t >( ascii_character ) ) );
-  }
+  std::string result( text.size(), '\0' );
+  std::transform( text.begin(),
+                  text.end(),
+                  result.begin(),
+                  []( char c ) {
+                    return Lowercase( static_cast< uint8_t >( c ) );
+                  } );
   return result;
 }
 
@@ -61,29 +63,35 @@ YCM_EXPORT inline std::string Lowercase( std::string_view text ) {
 std::vector< std::string > ReadUtf8File( const fs::path &filepath );
 
 
-template <class Container, class Key>
+template <class Container, class Key, typename Value>
 typename Container::mapped_type &
 GetValueElseInsert( Container &container,
-                    const Key &key,
-                    typename Container::mapped_type &&value ) {
-  return container.insert(
-    typename Container::value_type( key, std::move( value ) ) ).first->second;
+                    Key&& key,
+                    Value&& value ) {
+  return container.try_emplace(
+    std::forward< Key >( key ), std::forward< Value >( value ) ).first->second;
 }
 
 
-template <class Container, class Key>
-bool ContainsKey( Container &container, const Key &key ) {
-  return container.find( key ) != container.end();
-}
+template<typename C, typename = void>
+struct is_associative : std::false_type {};
 
+template<typename C>
+struct is_associative<C, std::void_t<typename C::mapped_type>> : std::true_type {};
 
 template <class Container, class Key, class Ret>
 Ret
 FindWithDefault( Container &container,
                  const Key &key,
                  Ret&& value ) {
-  static_assert( std::is_constructible_v< Ret, typename Container::mapped_type > );
-  typename Container::const_iterator it = container.find( key );
+  typename Container::const_iterator it = [ &key ]( auto&& c ) {
+    if constexpr ( is_associative<Container>::value ) {
+      return c.find( key );
+    } else {
+      return std::find_if( c.begin(), c.end(), [ &key ]( auto&& p ) {
+          return p.first == key; } );
+    }
+  }( container );
   if ( it != container.end() ) {
     return Ret{ it->second };
   }

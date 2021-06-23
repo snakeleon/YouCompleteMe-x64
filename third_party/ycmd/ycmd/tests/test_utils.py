@@ -136,7 +136,11 @@ def MessageMatcher( msg ):
   return has_entry( 'message', contains_string( msg ) )
 
 
-def LocationMatcher( filepath, line_num, column_num, description=None ):
+def LocationMatcher( filepath,
+                     line_num,
+                     column_num,
+                     description=None,
+                     extra_data=None ):
   entry = {
     'line_num': line_num,
     'column_num': column_num,
@@ -144,6 +148,8 @@ def LocationMatcher( filepath, line_num, column_num, description=None ):
   }
   if description is not None:
     entry[ 'description' ] = description
+  if extra_data is not None:
+    entry[ 'extra_data' ] = has_entries( **extra_data )
 
   return has_entries( entry )
 
@@ -186,21 +192,25 @@ def CompleterProjectDirectoryMatcher( project_directory ):
   )
 
 
-def SignatureMatcher( label, parameters ):
-  return has_entries( {
+def SignatureMatcher( label, parameters, docs = None ):
+  entries = {
     'label': equal_to( label ),
     'parameters': contains_exactly( *parameters )
-  } )
+  }
+  if docs is not None:
+    entries.update( { 'documentation': docs } )
+  return has_entries( entries )
 
 
 def SignatureAvailableMatcher( available ):
   return has_entries( { 'available': equal_to( available ) } )
 
 
-def ParameterMatcher( begin, end ):
-  return has_entries( {
-    'label': contains_exactly( begin, end )
-  } )
+def ParameterMatcher( begin, end, docs = None ):
+  entries = { 'label': contains_exactly( begin, end ) }
+  if docs is not None:
+    entries.update( { 'documentation': docs } )
+  return has_entries( entries )
 
 
 @contextlib.contextmanager

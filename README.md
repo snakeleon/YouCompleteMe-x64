@@ -68,9 +68,10 @@ Contents
     - [Client-Server Architecture](#client-server-architecture)
     - [Completion String Ranking](#completion-string-ranking)
     - [General Semantic Completion](#general-semantic-completion)
+    - [Signature Help](#signature-help)
     - [C-family Semantic Completion](#c-family-semantic-completion)
     - [Java Semantic Completion](#java-semantic-completion)
-	- [C# Semantic Completion](#c-semantic-completion)
+    - [C# Semantic Completion](#c-semantic-completion)
     - [Python Semantic Completion](#python-semantic-completion)
     - [Rust Semantic Completion](#rust-semantic-completion)
     - [Go Semantic Completion](#go-semantic-completion)
@@ -80,6 +81,7 @@ Contents
     - [Writing New Semantic Completers](#writing-new-semantic-completers)
     - [Diagnostic Display](#diagnostic-display)
         - [Diagnostic Highlighting Groups](#diagnostic-highlighting-groups)
+    - [Symbol Search](#symbol-search)
 - [Commands](#commands)
     - [YcmCompleter subcommands](#ycmcompleter-subcommands)
         - [GoTo Commands](#goto-commands)
@@ -93,10 +95,6 @@ Contents
 - [Contributor Code of Conduct](#contributor-code-of-conduct)
 - [Contact](#contact)
 - [License](#license)
-- [中文入门指引](#中文入门指引)
-	- [关于版本](#关于版本)
-	- [脚本配置](#脚本配置)
-	- [使用技巧](#使用技巧)
 
 
 Intro
@@ -179,7 +177,7 @@ number of languages, including:
 - displaying signature help (argument hints) when entering the arguments to a
   function call (Vim only)
 - [finding declarations, definitions, usages](#goto-commands), etc.
-  of identifiers,
+  of identifiers, and an [interactive symbol finder](#symbol-search)
 - [displaying type information](#the-gettype-subcommand) for classes,
   variables, functions etc.,
 - displaying documentation for methods, members, etc. in the [preview
@@ -253,12 +251,12 @@ $ sudo ln -sfn /usr/local/opt/openjdk/libexec/openjdk.jdk /Library/Java/JavaVirt
 - Pre-installed macOS *system* Vim does not support Python 3. So you need to install either a Vim that supports Python 3 OR [MacVim][] with [Homebrew][brew]:
 
   - Option 1: Installing a Vim that supports Python 3
-
+  
   ```
   brew install vim
   ```
   - Option 2: Installing [MacVim][]
-
+  
   ```
   brew install macvim
   ```
@@ -283,8 +281,8 @@ A Vim that supports Python 3 or [MacVim][] is required. YCM won't work with the 
 its Python 3 support is broken. If you don't already use a Vim that supports Python 3 or [MacVim][], install it
 with [Homebrew][brew]. Install CMake as well:
 
-    brew install vim cmake
-
+    brew install vim cmake     
+    
    OR
 
     brew install macvim cmake
@@ -330,10 +328,9 @@ The following additional language support options are available:
 - Java support: install [JDK8 (version 8 required)][jdk-install] and add
   `--java-completer` when calling `install.py`.
 
-To simply compile with everything enabled, there's a `--all` flag. You need to
-specify it manually by adding `--clangd-completer`. So, to install with all
-language features, ensure `xbuild`, `go`, `node` and `npm` tools
-are installed and in your `PATH`, then simply run:
+To simply compile with everything enabled, there's a `--all` flag. So, to
+install with all language features, ensure `xbuild`, `go`, `node` and `npm`
+tools are installed and in your `PATH`, then simply run:
 
 ```
 cd ~/.vim/bundle/YouCompleteMe
@@ -445,10 +442,9 @@ The following additional language support options are available:
 - Java support: install [JDK8 (version 8 required)][jdk-install] and add
   `--java-completer` when calling `install.py`.
 
-To simply compile with everything enabled, there's a `--all` flag. You need to
-specify it manually by adding `--clangd-completer`. So, to install with all
-language features, ensure `xbuild`, `go`, `node`, `npm` and tools
-are installed and in your `PATH`, then simply run:
+To simply compile with everything enabled, there's a `--all` flag. So, to
+install with all language features, ensure `xbuild`, `go`, `node` and `npm`
+tools are installed and in your `PATH`, then simply run:
 
 ```
 cd ~/.vim/bundle/YouCompleteMe
@@ -469,7 +465,7 @@ that are conservatively turned off by default that you may want to turn on.
 #### Quick start, installing all completers
 
 - Install YCM plugin via [Vundle][]
-- Install [Visual Studio Build Tools 2017][visual-studio-download]
+- Install [Visual Studio Build Tools 2019][visual-studio-download]
 - Install cmake, vim and python
 - Install go, node and npm
 - Compile YCM
@@ -532,8 +528,8 @@ Download and install the following software:
   matching the version number exactly.
 - [CMake][cmake-download]. Add CMake executable to the PATH environment
   variable.
-- [Visual Studio Build Tools 2017][visual-studio-download]. During setup,
-  select _Visual C++ build tools_ in _Workloads_.
+- [Build Tools for Visual Studio 2019][visual-studio-download]. During setup,
+  select _C++ build tools_ in _Workloads_.
 
 Compiling YCM **with** semantic support for C-family languages through
 **clangd**:
@@ -562,10 +558,9 @@ The following additional language support options are available:
 - Java support: install [JDK8 (version 8 required)][jdk-install] and add
   `--java-completer` when calling `install.py`.
 
-To simply compile with everything enabled, there's a `--all` flag. You need to
-specify it manually by adding `--clangd-completer`. So, to install with all
-language features, ensure `msbuild`, `go`, `node` and `npm` tools
-are installed and in your `PATH`, then simply run:
+To simply compile with everything enabled, there's a `--all` flag. So, to
+install with all language features, ensure `msbuild`, `go`, `node` and `npm`
+tools are installed and in your `PATH`, then simply run:
 
 ```
 cd %USERPROFILE%/vimfiles/bundle/YouCompleteMe
@@ -669,10 +664,9 @@ The following additional language support options are available:
 - Java support: install [JDK8 (version 8 required)][jdk-install] and add
   `--java-completer` when calling `./install.py`.
 
-To simply compile with everything enabled, there's a `--all` flag. You need to
-specify it manually by adding `--clangd-completer`. So, to install with all
-language features, ensure `xbuild`, `go`, `node`, `npm` and tools
-are installed and in your `PATH`, then simply run:
+To simply compile with everything enabled, there's a `--all` flag. So, to
+install with all language features, ensure `xbuild`, `go`, `node` and `npm`
+tools are installed and in your `PATH`, then simply run:
 
 ```
 cd ~/.vim/bundle/YouCompleteMe
@@ -709,7 +703,8 @@ Quick Feature Summary
 * Signature help
 * Real-time diagnostic display
 * Go to include/declaration/definition (`GoTo`, etc.)
-* Find Symbol (`GoToSymbol`)
+* Find Symbol (`GoToSymbol`), with interactive search
+* Document outline (`GoToDocumentOutline`), with interactive search
 * View documentation comments for identifiers (`GetDoc`)
 * Type information for identifiers (`GetType`)
 * Automatically fix certain errors (`FixIt`)
@@ -724,7 +719,7 @@ Quick Feature Summary
 * Real-time diagnostic display
 * Go to declaration/definition (`GoTo`, etc.)
 * Go to implementation (`GoToImplementation`)
-* Find Symbol (`GoToSymbol`)
+* Find Symbol (`GoToSymbol`), with interactive search
 * View documentation comments for identifiers (`GetDoc`)
 * Type information for identifiers (`GetType`)
 * Automatically fix certain errors (`FixIt`)
@@ -737,7 +732,7 @@ Quick Feature Summary
 * Semantic auto-completion
 * Signature help
 * Go to definition (`GoTo`)
-* Find Symbol (`GoToSymbol`)
+* Find Symbol (`GoToSymbol`), with interactive search
 * Reference finding (`GoToReferences`)
 * View documentation comments for identifiers (`GetDoc`)
 * Type information for identifiers (`GetType`)
@@ -751,6 +746,7 @@ Quick Feature Summary
 * Go to declaration/definition (`GoTo`, etc.)
 * Go to type definition (`GoToType`)
 * Go to implementation (`GoToImplementation`)
+* Document outline (`GoToDocumentOutline`), with interactive search
 * Automatically fix certain errors (`FixIt`)
 * View documentation comments for identifiers (`GetDoc`)
 * Type information for identifiers (`GetType`)
@@ -766,7 +762,7 @@ Quick Feature Summary
   identical)
 * Go to type definition (`GoToType`)
 * Go to implementation (`GoToImplementation`)
-* Find Symbol (`GoToSymbol`)
+* Find Symbol (`GoToSymbol`), with interactive search
 * Reference finding (`GoToReferences`)
 * View documentation comments for identifiers (`GetDoc`)
 * Type information for identifiers (`GetType`)
@@ -783,6 +779,7 @@ Quick Feature Summary
 * Go to declaration/definition (`GoTo`, etc.)
 * Go to implementation (`GoToImplementation`)
 * Reference finding (`GoToReferences`)
+* Document outline (`GoToDocumentOutline`), with interactive search
 * View documentation comments for identifiers (`GetDoc`)
 * Automatically fix certain errors (`FixIt`)
 * Type information for identifiers (`GetType`)
@@ -799,8 +796,9 @@ Quick Feature Summary
   identical)
 * Go to type definition (`GoToType`)
 * Go to implementation (`GoToImplementation`)
-* Find Symbol (`GoToSymbol`)
+* Find Symbol (`GoToSymbol`), with interactive search
 * Reference finding (`GoToReferences`)
+* Document outline (`GoToDocumentOutline`), with interactive search
 * View documentation comments for identifiers (`GetDoc`)
 * Type information for identifiers (`GetType`)
 * Automatically fix certain errors including code generation (`FixIt`)
@@ -913,9 +911,8 @@ string.
 
 ### Signature Help
 
-Signature help is an **experimental** feature for which we value your feedback.
 Valid signatures are displayed in a second popup menu and the current signature
-is highlighed along with the current arguemnt.
+is highlighted along with the current argument.
 
 Signature help is triggered in insert mode automatically when
 `g:ycm_auto_trigger` is enabled and is not supported when it is not enabled.
@@ -1431,8 +1428,8 @@ of [`g:ycm_language_server`](#the-gycm_language_server-option) option. An
 example of a value of this option would be:
 
 ```viml
-let g:ycm_language_server =
-  \ [
+let g:ycm_language_server = 
+  \ [ 
   \   {
   \     'name': 'yaml',
   \     'cmdline': [ '/path/to/yaml/server/yaml-language-server', '--stdio' ],
@@ -1647,6 +1644,61 @@ Here's how you'd change the style for a group:
 highlight YcmErrorLine guibg=#3f0000
 ```
 
+### Symbol Search
+
+***This feature requires Vim and does not work in Neovim***
+
+YCM provides a way to search for and jump to a symbol in the current project or
+document when using supported languages.
+
+You can search for symbols in the current workspace when the `GoToSymbol`
+request is supported and the current document when `GoToDocumentOutline` is
+supported.
+
+Here's a quick demo: 
+
+[![asciicast](https://asciinema.org/a/4JmYLAaz5hOHbZDD0hbsQpY8C.svg)](https://asciinema.org/a/4JmYLAaz5hOHbZDD0hbsQpY8C)
+
+As you can see, you can type and YCM filters down the list as you type. The
+current set of matches are displayed in a popup window in the centre of the
+screen and you can select an entry with the keyboard, to jump to that position.
+Any matches are then added to the quickfix list.
+
+To enable:
+
+* `nmap <something> <Plug>(YCMFindSymbolInWorkspace)`
+* `nmap <something> <Plug>(YCMFindSymbolInDocument)`
+
+e.g.
+
+* `nmap <leader>yfw <Plug>(YCMFindSymbolInWorkspace)`
+* `nmap <leader>yfd <Plug>(YCMFindSymbolInDocument)`
+
+When searching, YCM opens a prompt buffer at the top of the screen for the
+input, and puts you in insert mode. This means that you can hit `<Esc>` to go
+into normal mode and use any other input commands that are supported in prompt
+buffers. As you type characters, the serch is updated.
+
+While the popup is open, the following keys are intercepted:
+
+* `<C-j>`, `<Down>`, `<C-n>`, `<Tab>` - select the next item
+* `<C-k>`, `<Up>`, `<C-p>`, `<S-Tab>` - select the previous item
+* `<PageUp>`, `<kPageUp>` - jump up one screenful of items 
+* `<PageDown>`, `<kPageDown>` - jump down one screenful of items
+* `<Home>`, `<kHome>` - jump to first item
+* `<End>`, `<kEnd>` - jump to last item
+* `<CR>` - jump to the selected item
+* `<C-c>` cancel/dismiss the popup
+
+The search is also cancelled if you leave the prompt buffer window at any time,
+so you can use window commands `<C-w>...` for example.
+
+#### Closing the popup
+
+***NOTE***: Pressing `<Esc>` does not close the popup - you must use `Ctrl-c`
+for that, or use a window command (e.g. `<Ctrl-w>j`) or the mouse to leave the
+prompt buffer window.
+
 Commands
 --------
 
@@ -1803,7 +1855,8 @@ Supported in filetypes: `c, cpp, objc, objcpp, cuda`
 #### The `GoToSymbol <symbol query>` subcommand
 
 Finds the definition of all symbols matching a specified string. Note that this
-does not use any sort of smart/fuzzy matching.
+does not use any sort of smart/fuzzy matching. However, an [interactive symbol
+search](#symbol-search) is also available.
 
 Supported in filetypes: `c, cpp, objc, objcpp, cuda, cs, java, javascript, python, typescript`
 
@@ -1837,6 +1890,13 @@ Looks up the symbol under the cursor and jumps to the definition of its type
 e.g. if the symbol is an object, go to the definition of its class.
 
 Supported in filetypes: `go, java, javascript, typescript`
+
+#### The `GoToDocumentOutline` subcommand
+
+Provides a list of symbols in current document, in the quickfix list. See also
+[interactive symbol search](#symbol-search).
+
+Supported in filetypes: `c, cpp, objc, objcpp, cuda, go, java, rust`
 
 ### Semantic Information Commands
 
@@ -2615,7 +2675,7 @@ language supports. It's selected heuristically in this order of preference:
 
 1. `GetHover` with `markdown` syntax
 2. `GetDoc` with no syntax
-3. `GetType` with the syntax of the current file.
+3. `GetType` with the syntax of the current file. 
 
 You can customise this by manually setting up `b:ycm_hover` to your liking. This
 buffer-local variable can be set to a dictionary with the following keys:
@@ -3436,100 +3496,6 @@ License
 This software is licensed under the [GPL v3 license][gpl].
 © 2015-2018 YouCompleteMe contributors
 
-
-中文入门指引
-------------
-
-首先本中文入门指引只涉及 YouCompleteMe 插件中 C-家族（C/C++/Objective-C/Objective-C++）的自动补全引擎 ycmd 的安装与配置，
-这里仅作简单的说明，而其它所支持语言的补全引擎请参阅官方安装配置说明。
-
-> (PS: 此项目仓库中已经集成了编译好的基于 Windows 系统的 ycmd 引擎，所以同时支持 Windows 版的 Emacs 的使用。
-   Linux系统安装编译非常方便，请按照官方文档中的说明进行编译。)
-
-### 关于版本
-
-- ycm_core  核心版本: 44 (17 November 2020) 静态编译
-- libclang  版本: 11.0.0 (12 October 2020) [Clang][Clang]
-- Python    支持: 3.9.1 (7 December 2020) [Python][python-win-download]
-
-
-支持操作系统:
-
-- Windows Vista
-- Windows 7
-- Windows 8
-- Windows 10
-
-支持架构:
-
-- x86 (x86_32, x32, i686); [YouCompleteMe-x86][YouCompleteMe-x86] for Windows 32bit
-- x64 (x86_64, amd64); [YouCompleteMe-x64][YouCompleteMe-x64] for Windows 64bit
-
-> NOTE: 该版本已经集成编译好的基于 Windows 系统的二进制文件，直接安装加以配置就可正常使用；同时可用于 Windows 版的 Emacs。
-
-### 脚本配置
-
-自用的 `.ycm_extra_conf.py` 模板文件在 python 目录下，作为默认的全局配置加载，参考 [使用技巧](#使用技巧) 第2条。
-配置中相关的编译器编译开关项请参考 `Clang` 编译器手册自己增补。
-最新版 `libclang`（4.0或更高）加入了目标平台开关来确定依赖哪个工具链后端的标准库文件，配置方法如下:
-
-    Minw64:
-	    --target=x86_64-pc-mingw32
-    Minw32:
-	    --target=i686-pc-mingw32
-    MSVC:
-        默认为MSVC的标准库，请忽略此选项
-
-> `libclang`的基本选项`--target`是定义目标平台结构，通用格式为 `<arch><sub>-<vendor>-<sys>-<abi>`, 相关参数请查阅 `Clang` 文档中 [Target Triple][Target Triple] 的说明。
-
-### 使用技巧
-
-- 1.  自己使用的加载配置项(Vimrc中配置)片段:
-```viml
-" 按操作系统选择使用版本:
-if has("win64")
-    Plug 'snakeleon/YouCompleteMe-x64'
-elseif has("win32")
-    Plug 'snakeleon/YouCompleteMe-x86'
-else
-    Plug 'Valloric/YouCompleteMe'
-endif
-```
-- 2.  加载默认全局python脚本 `.ycm_extra_conf.py`(libclang工作方式)，在Vimrc中配置:
-```viml
-" 加载默认全局脚本配置文件:
-if has("win64")
-    let g:ycm_global_ycm_extra_conf = $VIM.'/vimfiles/bundle/YouCompleteMe-x64/python/.ycm_extra_conf.py'
-elseif has("win32")
-    let g:ycm_global_ycm_extra_conf = $VIM.'/vimfiles/bundle/YouCompleteMe-x86/python/.ycm_extra_conf.py'
-else
-    let g:ycm_global_ycm_extra_conf = $HOME.'/.vim/bundle/YouCompleteMe/python/.ycm_extra_conf.py'
-endif
-```
-> NOTE: 如果您想针对不同的项目单独设置脚本文件;
-就将该个项目的 `.ycm_extra_conf.py` 文件放在该项目目录下，注意其中项目语言 如果是C写的项目请将 `'-x'` 项后的 `'c++'` 改为 `'c'` , 补全引擎后台会以.c文件的方式编译检查；
-	其中编译特性使用了c++11 (-std=c++11), 使用时请根据您的项目具体情况进行调整。
-
-- 3.  使用全新 `Clangd` 后端，提供更多的功能和更好的性能, 与 `libclang` 比较它的优势详见：[C-family Semantic Completion](#c-family-semantic-completion)
-```viml
-" 查询是否支持 Clangd 语法引擎
-if g:iswindows
-    let g:clangd = glob('d:\program files\llvm\bin\clangd*')
-else
-    let g:clangd = glob('/usr/bin/clangd*')
-endif
-if !empty(g:clangd)
-    let g:ycm_clangd_binary_path = g:clangd
-    if version >= 802   " VIM 8.2 以上支持 popup 特性
-    " 关闭 echodoc 的帮助说明，使用 clangd 的帮助说明
-    autocmd FileType c,cpp call echodoc#disable()
-    endif
-endif
-```
-- 4.  Windows 下出现服务器错误，日志提示 `ModuleNotFoundError: No module named 'watchdog'` ，这是 `ycmd` 的脚本引用依赖项 `watchdog` 模块路径有误，
-可手动在命令行模式下安装 `watchdog` 模块: `pip install watchdog`  解决。如果你使用的 VIM for Windows 版本太低或支持的特性不满足自己的需求，自己编译又麻烦；那么特别推荐一个编译好的项目：[Vim builds for Windows][Vim builds for Windows] 此版本更新维护较频繁，官方更新补丁时都会及时跟上。如果大家喜欢或者有任何疑问，可以在页面下方有编译者的 E-Mail 可以联系，或者对其赞助支持。
-
-
 [ycmd]: https://github.com/ycm-core/ycmd
 [Clang]: https://clang.llvm.org/
 [vundle]: https://github.com/VundleVim/Vundle.vim#about
@@ -3565,7 +3531,7 @@ endif
 [tsconfig.json]: https://www.typescriptlang.org/docs/handbook/tsconfig-json.html
 [vim-win-download]: https://github.com/vim/vim-win32-installer/releases
 [python-win-download]: https://www.python.org/downloads/windows/
-[visual-studio-download]: https://visualstudio.microsoft.com/thank-you-downloading-visual-studio/?sku=BuildTools&rel=15
+[visual-studio-download]: https://visualstudio.microsoft.com/thank-you-downloading-visual-studio/?sku=BuildTools&rel=16
 [mono-install-macos]: https://www.mono-project.com/docs/getting-started/install/mac/
 [mono-install-linux]: https://www.mono-project.com/download/stable/#download-lin
 [go-install]: https://golang.org/doc/install
@@ -3601,7 +3567,3 @@ endif
 [wiki-faq]: https://github.com/ycm-core/YouCompleteMe/wiki/FAQ
 [wiki-full-install]: https://github.com/ycm-core/YouCompleteMe/wiki/Full-Installation-Guide
 [wiki-troubleshooting]: https://github.com/ycm-core/YouCompleteMe/wiki/Troubleshooting-steps-for-ycmd-server-SHUT-DOWN
-[YouCompleteMe-x86]: https://github.com/snakeleon/YouCompleteMe-x86
-[YouCompleteMe-x64]: https://github.com/snakeleon/YouCompleteMe-x64
-[Vim builds for Windows]: https://tuxproject.de/projects/vim/
-[Target Triple]: http://clang.llvm.org/docs/CrossCompilation.html

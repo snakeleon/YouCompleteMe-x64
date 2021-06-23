@@ -16,7 +16,7 @@
 # along with YouCompleteMe.  If not, see <http://www.gnu.org/licenses/>.
 
 project( ycm_core_tests )
-cmake_minimum_required( VERSION 2.8 )
+cmake_minimum_required( VERSION 3.14 )
 
 # The gtest library triggers warnings, so we turn them off; it's not up to us to
 # fix gtest warnings, it's up to upstream.
@@ -31,83 +31,60 @@ endif()
 option( USE_SYSTEM_GMOCK "Set to ON to use the system gmock/gtest libraries" OFF )
 
 if ( USE_SYSTEM_GMOCK )
-  set( CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake;${CMAKE_MODULE_PATH}" )
   find_package( GTest REQUIRED )
-  find_package( GMock REQUIRED )
 else()
   if ( WIN32 )
     # Override BUILD_SHARED_LIBS option in gmock and gtest CMakeLists
     set( BUILD_SHARED_LIBS ON CACHE BOOL "Build shared libraries (DLLs)." )
   endif()
 
+  include( FetchContent )
+  FetchContent_Declare(
+    gmock
+    GIT_REPOSITORY https://github.com/google/googletest
+    GIT_TAG f5e592d8ee5ffb1d9af5be7f715ce3576b8bf9c4
+    SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/gmock
+  )
+  FetchContent_GetProperties( gmock )
+  if ( NOT benchmark_POPULATED )
+    FetchContent_Populate( gmock )
+  endif()
   add_subdirectory( gmock )
-  set( GTEST_INCLUDE_DIRS ${gtest_SOURCE_DIR} ${gtest_SOURCE_DIR}/include )
-  set( GMOCK_INCLUDE_DIRS ${gmock_SOURCE_DIR} ${gmock_SOURCE_DIR}/include )
-  set( GTEST_LIBRARIES "" )
-  set( GMOCK_LIBRARIES gmock )
 endif()
 
-include_directories(
-  ${ycm_core_SOURCE_DIR}
-  ${ycm_core_SOURCE_DIR}/../whereami
-  )
+file( GLOB SOURCES *.h *.cpp )
 
-include_directories(
-  SYSTEM
-  ${GMOCK_INCLUDE_DIRS}
-  ${GTEST_INCLUDE_DIRS}
-  )
+if ( USE_CLANG_COMPLETER )
+  file( GLOB_RECURSE add_clang ClangCompleter/*.h ClangCompleter/*.cpp )
 
-link_directories( ${PYTHON_LIBRARIES} )
-
-file( GLOB_RECURSE SOURCES *.h *.cpp )
-
-# We don't want gmock sources in this target
-file( GLOB_RECURSE to_remove gmock/*.h gmock/*.cpp CMakeFiles/*.cpp
-  testdata/*.cpp testdata/*.h )
-
-if( to_remove )
-  list( REMOVE_ITEM SOURCES ${to_remove} )
-endif()
-
-if ( NOT USE_CLANG_COMPLETER )
-  file( GLOB_RECURSE to_remove_clang ClangCompleter/*.h ClangCompleter/*.cpp )
-
-  if( to_remove_clang )
-    list( REMOVE_ITEM SOURCES ${to_remove_clang} )
+  if( add_clang )
+    list( APPEND SOURCES ${add_clang} )
   endif()
 endif()
 
-add_executable( ${PROJECT_NAME}
-                ${SOURCES}
-              )
+add_executable( ${PROJECT_NAME} ${SOURCES} )
+
+target_include_directories(
+  ${PROJECT_NAME}
+  SYSTEM
+  PRIVATE ${ycm_core_SOURCE_DIR}/../whereami
+  )
 
 if ( MSVC )
-  # This is needed to compile tests with the gtest shared library
-  set_target_properties( ${PROJECT_NAME}
-                         PROPERTIES
-                         COMPILE_DEFINITIONS
-                         "GTEST_LINKED_AS_SHARED_LIBRARY=1" )
-
-  # Fix gtest build on MSVC 11.  See: http://stackoverflow.com/a/8274747
-  if ( MSVC_VERSION EQUAL 1700 )
-    add_definitions( /D _VARIADIC_MAX=10 )
-  endif()
-
-  # Build gmock and ycm_core_tests targets in cmake ycm/tests folder
+  # Build ycm_core_tests and dependencies targets in cmake ycm/tests folder
   foreach( OUTPUTCONFIG ${CMAKE_CONFIGURATION_TYPES} )
-    string( TOUPPER ${OUTPUTCONFIG} OUTPUTCONFIG )
-    set_target_properties( ${GMOCK_LIBRARIES} PROPERTIES
-      RUNTIME_OUTPUT_DIRECTORY_${OUTPUTCONFIG} ${PROJECT_BINARY_DIR} )
-    set_target_properties( ${PROJECT_NAME} PROPERTIES
-      RUNTIME_OUTPUT_DIRECTORY_${OUTPUTCONFIG} ${PROJECT_BINARY_DIR} )
+    foreach( TARGET_LIBRARY gtest gmock ${PROJECT_NAME} )
+      string( TOUPPER ${OUTPUTCONFIG} OUTPUTCONFIG )
+      set_target_properties( ${TARGET_LIBRARY} PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY_${OUTPUTCONFIG} ${PROJECT_BINARY_DIR} )
+    endforeach()
   endforeach()
 endif()
 
 target_link_libraries( ${PROJECT_NAME}
-                       ycm_core
-                       ${GTEST_LIBRARIES}
-                       ${GMOCK_LIBRARIES} )
+                       PRIVATE ycm_core
+                       PRIVATE gtest
+                       PRIVATE gmock )
 
 if ( NOT CMAKE_GENERATOR_IS_XCODE )
   # There is no portable way of discovering the absolute path of the executable,

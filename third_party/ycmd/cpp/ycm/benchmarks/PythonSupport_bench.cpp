@@ -16,21 +16,19 @@
 // along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "BenchUtils.h"
-#include "CandidateRepository.h"
-#include "CharacterRepository.h"
-#include "CodePointRepository.h"
+#include "Repository.h"
 #include "PythonSupport.h"
 
-#include <benchmark/benchmark_api.h>
+#include <benchmark/benchmark.h>
 
 namespace YouCompleteMe {
 
 class PythonSupportFixture : public benchmark::Fixture {
 public:
   void SetUp( const benchmark::State& ) {
-    CodePointRepository::Instance().ClearCodePoints();
-    CharacterRepository::Instance().ClearCharacters();
-    CandidateRepository::Instance().ClearCandidates();
+    Repository< CodePoint >::Instance().ClearElements();
+    Repository< Character >::Instance().ClearElements();
+    Repository< Candidate >::Instance().ClearElements();
   }
 };
 
@@ -50,12 +48,14 @@ BENCHMARK_DEFINE_F( PythonSupportFixture,
     candidates.append( candidate );
   }
 
-  while ( state.KeepRunning() ) {
+  pybind11::str candidate_property("insertion_text");
+  for ( auto _ : state ) {
     state.PauseTiming();
-    CharacterRepository::Instance().ClearCharacters();
-    CandidateRepository::Instance().ClearCandidates();
+    Repository< Character >::Instance().ClearElements();
+    Repository< Candidate >::Instance().ClearElements();
+    std::string query = "aA";
     state.ResumeTiming();
-    FilterAndSortCandidates( candidates, "insertion_text", "aA",
+    FilterAndSortCandidates( candidates, candidate_property, query,
                              state.range( 1 ) );
   }
 
@@ -78,12 +78,15 @@ BENCHMARK_DEFINE_F( PythonSupportFixture,
     candidates.append( candidate );
   }
 
+  pybind11::str candidate_property("insertion_text");
   // Store the candidates in the repository.
-  FilterAndSortCandidates( candidates, "insertion_text", "aA",
+  std::string query = "aA";
+  FilterAndSortCandidates( candidates, candidate_property, query,
                            state.range( 1 ) );
 
-  while ( state.KeepRunning() ) {
-    FilterAndSortCandidates( candidates, "insertion_text", "aA",
+  for ( auto _ : state ) {
+    std::string query = "aA";
+    FilterAndSortCandidates( candidates, candidate_property, query,
                              state.range( 1 ) );
   }
 

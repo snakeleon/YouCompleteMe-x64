@@ -17,6 +17,9 @@ import sysconfig
 import tarfile
 from zipfile import ZipFile
 import tempfile
+import urllib.request
+
+IS_MSYS = 'MSYS' == os.environ.get( 'MSYSTEM' )
 
 IS_64BIT = sys.maxsize > 2**32
 PY_MAJOR, PY_MINOR = sys.version_info[ 0 : 2 ]
@@ -34,21 +37,11 @@ for folder in os.listdir( DIR_OF_THIRD_PARTY ):
   abs_folder_path = p.join( DIR_OF_THIRD_PARTY, folder )
   if p.isdir( abs_folder_path ) and not os.listdir( abs_folder_path ):
     sys.exit(
-      'ERROR: folder {} in {} is empty; you probably forgot to run:\n'
-      '\tgit submodule update --init --recursive\n'.format( folder,
-                                                            DIR_OF_THIRD_PARTY )
+      f'ERROR: folder { folder } in { DIR_OF_THIRD_PARTY } is empty; '
+      'you probably forgot to run:\n'
+      '\tgit submodule update --init --recursive\n'
     )
 
-sys.path[ 0:0 ] = [ p.join( DIR_OF_THIRD_PARTY, 'requests_deps', 'requests' ),
-                    p.join( DIR_OF_THIRD_PARTY,
-                            'requests_deps',
-                            'urllib3',
-                            'src' ),
-                    p.join( DIR_OF_THIRD_PARTY, 'requests_deps', 'chardet' ),
-                    p.join( DIR_OF_THIRD_PARTY, 'requests_deps', 'certifi' ),
-                    p.join( DIR_OF_THIRD_PARTY, 'requests_deps', 'idna' ) ]
-
-import requests
 
 NO_DYNAMIC_PYTHON_ERROR = (
   'ERROR: found static Python library ({library}) but a dynamic one is '
@@ -81,13 +74,13 @@ DYNAMIC_PYTHON_LIBRARY_REGEX = """
   )$
 """
 
-JDTLS_MILESTONE = '0.63.0'
-JDTLS_BUILD_STAMP = '202010141717'
+JDTLS_MILESTONE = '0.68.0'
+JDTLS_BUILD_STAMP = '202101202016'
 JDTLS_SHA256 = (
-  '56eef6b138bdaa60ff8a794d622d390abac8286c0e5e1370616baf9a601fd1c8'
+  'df9c9b497ce86b1d57756b2292ad0f7bfaa76aed8a4b63a31c589e85018b7993'
 )
 
-RUST_TOOLCHAIN = 'nightly-2020-10-05'
+RUST_TOOLCHAIN = 'nightly-2021-04-14'
 RUST_ANALYZER_DIR = p.join( DIR_OF_THIRD_PARTY, 'rust-analyzer' )
 
 BUILD_ERROR_MESSAGE = (
@@ -99,7 +92,7 @@ BUILD_ERROR_MESSAGE = (
   'issue tracker, including the entire output of this script\n'
   'and the invocation line used to run it.' )
 
-CLANGD_VERSION = '11.0.0'
+CLANGD_VERSION = '12.0.0'
 CLANGD_BINARIES_ERROR_MESSAGE = (
   'No prebuilt Clang {version} binaries for {platform}. '
   'You\'ll have to compile Clangd {version} from source '
@@ -117,8 +110,7 @@ def RemoveDirectory( directory ):
     except OSError:
       try_number += 1
   raise RuntimeError(
-    'Cannot remove directory {} after {} tries.'.format( directory,
-                                                         max_tries ) )
+    f'Cannot remove directory { directory } after { max_tries } tries.' )
 
 
 
@@ -139,10 +131,9 @@ def CheckFileIntegrity( file_path, check_sum ):
 
 
 def DownloadFileTo( download_url, file_path ):
-  request = requests.get( download_url, stream = True )
-  with open( file_path, 'wb' ) as package_file:
-    package_file.write( request.content )
-  request.close()
+  with urllib.request.urlopen( download_url ) as response:
+    with open( file_path, 'wb' ) as package_file:
+      package_file.write( response.read() )
 
 
 def OnMac():
@@ -173,9 +164,8 @@ def FindExecutableOrDie( executable, message ):
   path = FindExecutable( executable )
 
   if not path:
-    sys.exit( "ERROR: Unable to find executable '{}'. {}".format(
-      executable,
-      message ) )
+    sys.exit( f"ERROR: Unable to find executable '{ executable }'. "
+              f"{ message }" )
 
   return path
 
@@ -237,9 +227,7 @@ def CheckCall( args, **kwargs ):
 
 def _CheckCallQuiet( args, status_message, **kwargs ):
   if status_message:
-    # __future__ not appear to support flush= on print_function
-    sys.stdout.write( status_message + '...' )
-    sys.stdout.flush()
+    print( status_message + '...', flush = True, end = '' )
 
   with tempfile.NamedTemporaryFile() as temp_file:
     _CheckCall( args, stdout=temp_file, stderr=subprocess.STDOUT, **kwargs )
@@ -277,7 +265,7 @@ def GetGlobalPythonPrefix():
 def GetPossiblePythonLibraryDirectories():
   prefix = GetGlobalPythonPrefix()
 
-  if OnWindows():
+  if OnWindows() and not IS_MSYS:
     return [ p.join( prefix, 'libs' ) ]
   # On pyenv and some distributions, there is no Python dynamic library in the
   # directory returned by the LIBPL variable. Such library can be found in the
@@ -348,31 +336,30 @@ def CustomPythonCmakeArgs( args ):
   # The CMake 'FindPythonLibs' Module does not work properly.
   # So we are forced to do its job for it.
   if not args.quiet:
-    print( 'Searching Python {major}.{minor} libraries...'.format(
-      major = PY_MAJOR, minor = PY_MINOR ) )
+    print( f'Searching Python { PY_MAJOR }.{ PY_MINOR } libraries...' )
 
   python_library, python_include = FindPythonLibraries()
 
   if not args.quiet:
-    print( 'Found Python library: {0}'.format( python_library ) )
-    print( 'Found Python headers folder: {0}'.format( python_include ) )
+    print( f'Found Python library: { python_library }' )
+    print( f'Found Python headers folder: { python_include }' )
 
   return [
-    '-DPYTHON_LIBRARY={0}'.format( python_library ),
-    '-DPYTHON_INCLUDE_DIR={0}'.format( python_include )
+    f'-DPython3_LIBRARY={ python_library }',
+    f'-DPython3_EXECUTABLE={ sys.executable }',
+    f'-DPython3_INCLUDE_DIR={ python_include }'
   ]
 
 
 def GetGenerator( args ):
   if args.ninja:
     return 'Ninja'
-  if OnWindows():
+  if OnWindows() and not IS_MSYS:
     # The architecture must be specified through the -A option for the Visual
     # Studio 16 generator.
     if args.msvc == 16:
       return 'Visual Studio 16'
-    return 'Visual Studio {version}{arch}'.format(
-        version = args.msvc, arch = ' Win64' if IS_64BIT else '' )
+    return f"Visual Studio { args.msvc }{ ' Win64' if IS_64BIT else '' }"
   return 'Unix Makefiles'
 
 
@@ -481,19 +468,23 @@ def ParseArguments():
 
 
 def FindCmake( args ):
-  cmake_exe = 'cmake'
+  cmake_exe = [ 'cmake3', 'cmake' ]
 
   if args.cmake_path:
-    cmake_exe = args.cmake_path
+    cmake_exe.insert( 0, args.cmake_path )
 
-  return FindExecutableOrDie( cmake_exe, 'CMake is required to build ycmd' )
+  cmake = PathToFirstExistingExecutable( cmake_exe )
+  if cmake is None:
+    sys.exit( "ERROR: Unable to find cmake executable in any of"
+              f" { cmake_exe }. CMake is required to build ycmd" )
+  return cmake
 
 
 def GetCmakeCommonArgs( args ):
   cmake_args = [ '-G', GetGenerator( args ) ]
 
   # Set the architecture for the Visual Studio 16 generator.
-  if OnWindows() and args.msvc == 16 and not args.ninja:
+  if OnWindows() and args.msvc == 16 and not args.ninja and not IS_MSYS:
     arch = 'x64' if IS_64BIT else 'Win32'
     cmake_args.extend( [ '-A', arch ] )
 
@@ -544,26 +535,23 @@ def RunYcmdTests( args, build_dir ):
   else:
     new_env[ 'LD_LIBRARY_PATH' ] = LIBCLANG_DIR
 
-  tests_cmd = [ p.join( tests_dir, 'ycm_core_tests' ) ]
+  tests_cmd = [ p.join( tests_dir, 'ycm_core_tests' ), '--gtest_brief' ]
   if args.core_tests != '*':
-    tests_cmd.append( '--gtest_filter={}'.format( args.core_tests ) )
-  if not args.valgrind:
-    CheckCall( tests_cmd,
-               env = new_env,
-               quiet = args.quiet,
-               status_message = 'Running ycmd tests' )
-  else:
+    tests_cmd.append( f'--gtest_filter={ args.core_tests }' )
+  if args.valgrind:
     new_env[ 'PYTHONMALLOC' ] = 'malloc'
-    cmd = [ 'valgrind',
+    tests_cmd = [ 'valgrind',
             '--gen-suppressions=all',
             '--error-exitcode=1',
             '--leak-check=full',
             '--show-leak-kinds=definite,indirect',
             '--errors-for-leak-kinds=definite,indirect',
             '--suppressions=' + p.join( DIR_OF_THIS_SCRIPT,
-                                        'valgrind.suppressions' ),
-            p.join( tests_dir, 'ycm_core_tests' ) ]
-    CheckCall( cmd, env = new_env )
+                                        'valgrind.suppressions' ) ] + tests_cmd
+  CheckCall( tests_cmd,
+      env = new_env,
+      quiet = args.quiet,
+      status_message = 'Running ycmd tests' )
 
 
 def RunYcmdBenchmarks( args, build_dir ):
@@ -647,8 +635,7 @@ def BuildYcmdLib( cmake, cmake_common_args, script_args ):
       CheckCall( build_command,
                  exit_message = BUILD_ERROR_MESSAGE,
                  quiet = script_args.quiet,
-                 status_message = 'Compiling ycmd target: {0}'.format(
-                   target ) )
+                 status_message = f'Compiling ycmd target: { target }' )
 
     if script_args.core_tests:
       RunYcmdTests( script_args, build_dir )
@@ -709,7 +696,7 @@ def EnableCsCompleter( args ):
     download_data = GetCsCompleterDataForPlatform()
     version = download_data[ 'version' ]
 
-    WriteStdout( "Installing Omnisharp {}\n".format( version ) )
+    WriteStdout( f"Installing Omnisharp { version }\n" )
 
     CleanCsCompleter( build_dir, version )
     package_path = DownloadCsCompleter( WriteStdout, download_data )
@@ -759,10 +746,9 @@ def DownloadCsCompleter( writeStdout, download_data ):
     writeStdout( 'DONE\n' )
 
   if p.exists( package_path ):
-    writeStdout( 'Using cached Omnisharp: {}\n'.format( file_name ) )
+    writeStdout( f'Using cached Omnisharp: { file_name }\n' )
   else:
-    writeStdout( 'Downloading Omnisharp from {}...'.format(
-                    download_url ) )
+    writeStdout( f'Downloading Omnisharp from { download_url }...' )
     DownloadFileTo( download_url, package_path )
     writeStdout( 'DONE\n' )
 
@@ -770,7 +756,7 @@ def DownloadCsCompleter( writeStdout, download_data ):
 
 
 def ExtractCsCompleter( writeStdout, build_dir, package_path ):
-  writeStdout( 'Extracting Omnisharp to {}...'.format( build_dir ) )
+  writeStdout( f'Extracting Omnisharp to { build_dir }...' )
   if OnWindows():
     with ZipFile( package_path, 'r' ) as package_zip:
       package_zip.extractall()
@@ -843,7 +829,7 @@ def EnableGoCompleter( args ):
   new_env[ 'GOPATH' ] = p.join( DIR_OF_THIS_SCRIPT, 'third_party', 'go' )
   new_env.pop( 'GOROOT', None )
   new_env[ 'GOBIN' ] = p.join( new_env[ 'GOPATH' ], 'bin' )
-  CheckCall( [ go, 'get', 'golang.org/x/tools/gopls@v0.5.1' ],
+  CheckCall( [ go, 'get', 'golang.org/x/tools/gopls@v0.6.4' ],
              env = new_env,
              quiet = args.quiet,
              status_message = 'Building gopls for go completion' )
@@ -880,8 +866,7 @@ def EnableRustCompleter( switches ):
 
     if OnWindows():
       rustup_cmd = [ rustup_init ]
-      rustup_url = 'https://win.rustup.rs/{}'.format(
-        'x86_64' if IS_64BIT else 'i686' )
+      rustup_url = f"https://win.rustup.rs/{ 'x86_64' if IS_64BIT else 'i686' }"
     else:
       rustup_cmd = [ 'sh', rustup_init ]
       rustup_url = 'https://sh.rustup.rs'
@@ -1003,12 +988,12 @@ def EnableJavaCompleter( switches ):
 
 
   if p.exists( file_name ):
-    Print( 'Using cached jdt.ls: {0}'.format( file_name ) )
+    Print( f'Using cached jdt.ls: { file_name }' )
   else:
-    Print( "Downloading jdt.ls from {0}...".format( url ) )
+    Print( f"Downloading jdt.ls from { url }..." )
     DownloadFileTo( url, file_name )
 
-  Print( "Extracting jdt.ls to {0}...".format( REPOSITORY ) )
+  Print( f"Extracting jdt.ls to { REPOSITORY }..." )
   with tarfile.open( file_name ) as package_tar:
     package_tar.extractall( REPOSITORY )
 
@@ -1032,32 +1017,32 @@ def GetClangdTarget():
   if OnWindows():
     return [
       ( 'clangd-{version}-win64',
-        '6c9ac8abc7b7597f92268624d200326f8681eecb387c875d319b7fdc9f400102' ),
+        'c9e4f11822a60b49b9cd0be0673302c7595df09ce2eed4c030559b4102589c54' ),
       ( 'clangd-{version}-win32',
-        '67dba0988e55d472ebef78d1b0c7227261818809a4dd66d45cf8ed2cdc92825c' ) ]
+        'f7cbd73e99783687898a7370b8ae8875ac25e97ef2b1a9fc7c7e3c4b2fc8e5c5' ) ]
   if OnMac():
     return [
       ( 'clangd-{version}-x86_64-apple-darwin',
-        '04be91e7812328c3262963a3206c1ebc87e0e46892323a1b8eea980ffbf2d16f' ) ]
+        '4982c5e56274102ce0c830aad4cdbe21efd51883e5fc2cbe05ef29e4b820e6ec' ) ]
   if OnFreeBSD():
     return [
       ( 'clangd-{version}-amd64-unknown-freebsd11',
-        '2532850e2269d533d5b4bf9cb676587fd3e80914b0dbee13b694d9f3eb4b45b1' ),
+        '0aaf368d65d03299c593a5a2eac9eeb6b7a15f6348096b225b6428dc254e7d25' ),
       ( 'clangd-{version}-i386-unknown-freebsd11',
-        '542d2012da260df76e4747abeef2a90dfb8f7923bf781dab296eaf484bfec4f6' ) ]
+        'b0e5b88fb628a9b21e50c92136b184326f48d6b5f99d779694dfc361614f641e' ) ]
   if OnAArch64():
     return [
       ( 'clangd-{version}-aarch64-linux-gnu',
-        '4a62bb2ca1b60ef0be0617c9caa1f297edf1a60f81c48c366625a715f9563e8e' ) ]
+        '5057ef4fafd5aaf7aefb0916603314e58658a166e76a33ea5c3810dabe2b2480' ) ]
   if OnArm():
     return [
       None, # First list index is for 64bit archives. ARMv7 is 32bit only.
       ( 'clangd-{version}-armv7a-linux-gnueabihf',
-        'fd00fc69c49ff397a38cf4ba5ded3ccd2e6c5c955b9e3a9d7b26fce8a1465b05' ) ]
+        '31588fef3fcab8c5859a6372406921029ea16d80e2119ca532ee384330b177ce' ) ]
   if OnX86_64():
     return [
       ( 'clangd-{version}-x86_64-unknown-linux-gnu',
-        '6288eb10e24d50227415e787bdc9392c3fe6917ceb25cc1c41f9843b8d9f9461' ) ]
+        '0bb712b8d2a2d6861ea28b11167fc01c21336e5bce8682caab60257e32d9bba1' ) ]
   sys.exit( CLANGD_BINARIES_ERROR_MESSAGE.format( version = CLANGD_VERSION,
                                                   platform = 'this system' ) )
 
@@ -1070,8 +1055,9 @@ def DownloadClangd( printer ):
   target = GetClangdTarget()
   target_name, check_sum = target[ not IS_64BIT ]
   target_name = target_name.format( version = CLANGD_VERSION )
-  file_name = '{}.tar.bz2'.format( target_name )
-  download_url = 'https://dl.bintray.com/ycm-core/clangd/{}'.format( file_name )
+  file_name = f'{ target_name }.tar.bz2'
+  download_url = ( 'https://github.com/ycm-core/llvm/releases/download/'
+                   f'{ CLANGD_VERSION }/{ file_name }' )
 
   file_name = p.join( CLANGD_CACHE_DIR, file_name )
 
@@ -1084,14 +1070,14 @@ def DownloadClangd( printer ):
     os.remove( file_name )
 
   if p.exists( file_name ):
-    printer( 'Using cached Clangd: {}'.format( file_name ) )
+    printer( f'Using cached Clangd: { file_name }' )
   else:
-    printer( "Downloading Clangd from {}...".format( download_url ) )
+    printer( f"Downloading Clangd from { download_url }..." )
     DownloadFileTo( download_url, file_name )
     if not CheckFileIntegrity( file_name, check_sum ):
       sys.exit( 'ERROR: downloaded Clangd archive does not match checksum.' )
 
-  printer( "Extracting Clangd to {}...".format( CLANGD_OUTPUT_DIR ) )
+  printer( f"Extracting Clangd to { CLANGD_OUTPUT_DIR }..." )
   with tarfile.open( file_name ) as package_tar:
     package_tar.extractall( CLANGD_OUTPUT_DIR )
 

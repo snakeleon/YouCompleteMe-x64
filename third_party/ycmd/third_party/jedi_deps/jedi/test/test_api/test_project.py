@@ -1,11 +1,12 @@
 import os
-import sys
+from pathlib import Path
 
 import pytest
 
 from ..helpers import get_example_dir, set_cwd, root_dir, test_dir
 from jedi import Interpreter
 from jedi.api import Project, get_default_project
+from jedi.api.project import _is_potential_project, _CONTAINS_POTENTIAL_PROJECT
 
 
 def test_django_default_project(Script):
@@ -17,18 +18,22 @@ def test_django_default_project(Script):
     )
     c, = script.complete()
     assert c.name == "SomeModel"
-    assert script._inference_state.project._django is True
+
+    project = script._inference_state.project
+    assert project._django is True
+    assert project.sys_path is None
+    assert project.smart_sys_path is True
+    assert project.load_unsafe_extensions is False
 
 
 def test_django_default_project_of_file(Script):
     project = get_default_project(__file__)
-    d = os.path.dirname
-    assert project._path == d(d(d(__file__)))
+    assert project._path == Path(__file__).parent.parent.parent
 
 
 def test_interpreter_project_path():
     # Run from anywhere it should be the cwd.
-    dir = os.path.join(root_dir, 'test')
+    dir = Path(root_dir).joinpath('test')
     with set_cwd(dir):
         project = Interpreter('', [locals()])._inference_state.project
         assert project._path == dir
@@ -70,8 +75,9 @@ def test_load_save_project(tmpdir):
 
         ('class sample_int.real', [], {}),
         ('foo sample_int.real', [], {}),
-        ('def sample_int.real', ['stub:builtins.int.real'], {}),
-        ('function sample_int.real', ['stub:builtins.int.real'], {}),
+        ('def sample_int.to_bytes', ['stub:builtins.int.to_bytes'], {}),
+        ('function sample_int.to_bytes', ['stub:builtins.int.to_bytes'], {}),
+        ('property sample_int.real', ['stub:builtins.int.real'], {}),
 
         # With modules
         ('test_project.test_search', ['test_api.test_project.test_search'], {}),
@@ -133,8 +139,7 @@ def test_load_save_project(tmpdir):
         ('multiprocessin', ['multiprocessing'], dict(complete=True)),
     ]
 )
-@pytest.mark.skipif(sys.version_info < (3, 6), reason="Ignore Python 2, because EOL")
-def test_search(string, full_names, kwargs, skip_pre_python36):
+def test_search(string, full_names, kwargs):
     some_search_test_var = 1.0
     project = Project(test_dir)
     if kwargs.pop('complete', False) is True:
@@ -152,8 +157,25 @@ def test_search(string, full_names, kwargs, skip_pre_python36):
         ('test_load_save_p', ['roject'], False),
     ]
 )
-@pytest.mark.skipif(sys.version_info < (3, 6), reason="Ignore Python 2, because EOL")
-def test_complete_search(Script, string, completions, all_scopes, skip_pre_python36):
+def test_complete_search(Script, string, completions, all_scopes):
     project = Project(test_dir)
     defs = project.complete_search(string, all_scopes=all_scopes)
     assert [d.complete for d in defs] == completions
+
+
+@pytest.mark.parametrize(
+    'path,expected', [
+        (Path(__file__).parents[2], True), # The path of the project
+        (Path(__file__).parents[1], False), # The path of the tests, not a project
+        (Path.home(), None)
+    ]
+)
+def test_is_potential_project(path, expected):
+
+    if expected is None:
+        try:
+            expected = _CONTAINS_POTENTIAL_PROJECT in os.listdir(path)
+        except OSError:
+            expected = False
+
+    assert _is_potential_project(path) == expected

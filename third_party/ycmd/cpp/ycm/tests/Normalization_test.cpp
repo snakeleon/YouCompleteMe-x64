@@ -16,7 +16,7 @@
 // along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
 #include "Character.h"
-#include "CharacterRepository.h"
+#include "Repository.h"
 #include "CodePoint.h"
 #include "TestUtils.h"
 
@@ -52,25 +52,30 @@ std::ostream& operator<<( std::ostream& os,
 class NormalizationTest : public TestWithParam< NormalizationTuple > {
 protected:
   NormalizationTest()
-    : repo_( CharacterRepository::Instance() ) {
+    : repo_( Repository< Character >::Instance() ) {
   }
 
   virtual void SetUp() {
-    repo_.ClearCharacters();
+    repo_.ClearElements();
     tuple_ = GetParam();
   }
 
-  CharacterRepository &repo_;
+  Repository< Character > &repo_;
   NormalizationTuple tuple_;
 };
 
 
 TEST_P( NormalizationTest, NormalizationFormDecompositionIsConform ) {
-  EXPECT_THAT( Character( tuple_.source ).Normal(), Equals( tuple_.nfd  ) );
-  EXPECT_THAT( Character( tuple_.nfc    ).Normal(), Equals( tuple_.nfd  ) );
-  EXPECT_THAT( Character( tuple_.nfd    ).Normal(), Equals( tuple_.nfd  ) );
-  EXPECT_THAT( Character( tuple_.nfkc   ).Normal(), Equals( tuple_.nfkd ) );
-  EXPECT_THAT( Character( tuple_.nfkd   ).Normal(), Equals( tuple_.nfkd ) );
+  EXPECT_THAT( Character( NormalizeInput( tuple_.source ) ).Normal(),
+               Equals( tuple_.nfd  ) );
+  EXPECT_THAT( Character( NormalizeInput( tuple_.nfc    ) ).Normal(),
+               Equals( tuple_.nfd  ) );
+  EXPECT_THAT( Character( NormalizeInput( tuple_.nfd    ) ).Normal(),
+               Equals( tuple_.nfd  ) );
+  EXPECT_THAT( Character( NormalizeInput( tuple_.nfkc   ) ).Normal(),
+               Equals( tuple_.nfkd ) );
+  EXPECT_THAT( Character( NormalizeInput( tuple_.nfkd   ) ).Normal(),
+               Equals( tuple_.nfkd ) );
 }
 
 

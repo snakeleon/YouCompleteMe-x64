@@ -52,8 +52,15 @@ Jedi can currently be used with the following editors/projects:
 - wdb_ - Web Debugger
 - `Eric IDE`_ (Available as a plugin)
 - `IPython 6.0.0+ <https://ipython.readthedocs.io/en/stable/whatsnew/version6.html>`_
+- `xonsh shell <https://xon.sh/contents.html>`_ has `jedi extension <https://xon.sh/xontribs.html#jedi>`_
 
 and many more!
+
+There are a few language servers that use Jedi:
+
+- `jedi-language-server <https://github.com/pappasam/jedi-language-server>`_
+- `python-language-server <https://github.com/palantir/python-language-server>`_
+- `anakin-language-server <https://github.com/muffinmad/anakin-language-server>`_
 
 Here are some pictures taken from jedi-vim_:
 
@@ -76,8 +83,9 @@ Docs are available at `https://jedi.readthedocs.org/en/latest/
 and/or fixes are awesome and most welcome. Jedi uses `semantic versioning
 <https://semver.org/>`_.
 
-If you want to stay up-to-date (News / RFCs), please subscribe to this `github
-thread <https://github.com/davidhalter/jedi/issues/1063>`_.:
+If you want to stay **up-to-date** with releases, please **subscribe** to this
+mailing list: https://groups.google.com/g/jedi-announce. To subscribe you can
+simply send an empty email to ``jedi-announce+subscribe@googlegroups.com``.
 
 Issues & Questions
 ==================
@@ -98,7 +106,7 @@ Features and Limitations
 Jedi's features are listed here:
 `Features <https://jedi.readthedocs.org/en/latest/docs/features.html>`_.
 
-You can run Jedi on CPython 2.7 or 3.5+ but it should also
+You can run Jedi on Python 3.6+ but it should also
 understand code that is older than those versions. Additionally you should be
 able to use `Virtualenvs <https://jedi.readthedocs.org/en/latest/docs/api.html#environments>`_
 very well.

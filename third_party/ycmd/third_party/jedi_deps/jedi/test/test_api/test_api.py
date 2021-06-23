@@ -3,34 +3,31 @@ Test all things related to the ``jedi.api`` module.
 """
 
 import os
-import sys
 from textwrap import dedent
 
 import pytest
 from pytest import raises
 from parso import cache
 
-from jedi._compatibility import unicode
 from jedi import preload_module
 from jedi.inference.gradual import typeshed
 from test.helpers import test_dir, get_example_dir
 
 
-@pytest.mark.skipif(sys.version_info[0] == 2, reason="Ignore Python 2, EoL")
 def test_preload_modules():
-    def check_loaded(*modules):
+    def check_loaded(*module_names):
         for grammar_cache in cache.parser_cache.values():
             if None in grammar_cache:
                 break
         # Filter the typeshed parser cache.
         typeshed_cache_count = sum(
             1 for path in grammar_cache
-            if path is not None and path.startswith(typeshed.TYPESHED_PATH)
+            if path is not None and str(path).startswith(str(typeshed.TYPESHED_PATH))
         )
         # +1 for None module (currently used)
-        assert len(grammar_cache) - typeshed_cache_count == len(modules) + 1
-        for i in modules:
-            assert [i in k for k in grammar_cache.keys() if k is not None]
+        assert len(grammar_cache) - typeshed_cache_count == len(module_names) + 1
+        for i in module_names:
+            assert [i in str(k) for k in grammar_cache.keys() if k is not None]
 
     old_cache = cache.parser_cache.copy()
     cache.parser_cache.clear()
@@ -119,8 +116,8 @@ def test_completion_on_complex_literals(Script):
     # However this has been disabled again, because it apparently annoyed
     # users. So no completion after j without a space :)
     assert not Script('4j').complete()
-    assert ({c.name for c in Script('4j ').complete()} ==
-            {'if', 'and', 'in', 'is', 'not', 'or'})
+    assert ({c.name for c in Script('4j ').complete()}
+            == {'if', 'and', 'in', 'is', 'not', 'or'})
 
 
 def test_goto_non_name(Script, environment):
@@ -205,11 +202,11 @@ def test_goto_follow_imports(Script):
     import inspect
     inspect.isfunction""")
     definition, = Script(code).goto(column=0, follow_imports=True)
-    assert 'inspect.py' in definition.module_path
+    assert definition.module_path.name == 'inspect.py'
     assert (definition.line, definition.column) == (1, 0)
 
     definition, = Script(code).goto(follow_imports=True)
-    assert 'inspect.py' in definition.module_path
+    assert definition.module_path.name == 'inspect.py'
     assert (definition.line, definition.column) > (1, 0)
 
     code = '''def param(p): pass\nparam(1)'''
@@ -240,11 +237,11 @@ def test_goto_module(Script):
         assert module.module_path == expected
 
     base_path = get_example_dir('simple_import')
-    path = os.path.join(base_path, '__init__.py')
+    path = base_path.joinpath('__init__.py')
 
-    check(1, os.path.join(base_path, 'module.py'))
-    check(1, os.path.join(base_path, 'module.py'), follow_imports=True)
-    check(5, os.path.join(base_path, 'module2.py'))
+    check(1, base_path.joinpath('module.py'))
+    check(1, base_path.joinpath('module.py'), follow_imports=True)
+    check(5, base_path.joinpath('module2.py'))
 
 
 def test_goto_definition_cursor(Script):
@@ -320,7 +317,7 @@ def test_goto_follow_builtin_imports(Script):
 
 def test_docstrings_for_completions(Script):
     for c in Script('').complete():
-        assert isinstance(c.docstring(), (str, unicode))
+        assert isinstance(c.docstring(), str)
 
 
 def test_fuzzy_completion(Script):
@@ -331,9 +328,7 @@ def test_fuzzy_completion(Script):
 
 def test_math_fuzzy_completion(Script, environment):
     script = Script('import math\nmath.og')
-    expected = ['copysign', 'log', 'log10', 'log1p']
-    if environment.version_info.major >= 3:
-        expected.append('log2')
+    expected = ['copysign', 'log', 'log10', 'log1p', 'log2']
     completions = script.complete(fuzzy=True)
     assert expected == [comp.name for comp in completions]
     for c in completions:
@@ -375,3 +370,35 @@ def test_multi_goto(Script):
     y, = script.goto(line=4)
     assert x.line == 1
     assert y.line == 2
+
+
+@pytest.mark.parametrize(
+    'code, column, expected', [
+        ('str() ', 3, 'str'),
+        ('str() ', 4, 'str'),
+        ('str() ', 5, 'str'),
+        ('str() ', 6, None),
+        ('str(    ) ', 6, None),
+        ('   1', 1, None),
+        ('str(1) ', 3, 'str'),
+        ('str(1) ', 4, 'int'),
+        ('str(1) ', 5, 'int'),
+        ('str(1) ', 6, 'str'),
+        ('str(1) ', 7, None),
+        ('str( 1) ', 4, 'str'),
+        ('str( 1) ', 5, 'int'),
+        ('str(+1) ', 4, 'str'),
+        ('str(+1) ', 5, 'int'),
+        ('str(1, 1.) ', 3, 'str'),
+        ('str(1, 1.) ', 4, 'int'),
+        ('str(1, 1.) ', 5, 'int'),
+        ('str(1, 1.) ', 6, None),
+        ('str(1, 1.) ', 7, 'float'),
+    ]
+)
+def test_infer_after_parentheses(Script, code, column, expected):
+    completions = Script(code).infer(column=column)
+    if expected is None:
+        assert completions == []
+    else:
+        assert [c.name for c in completions] == [expected]

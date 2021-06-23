@@ -6,6 +6,25 @@ Changelog
 Unreleased
 ++++++++++
 
+0.18.0 (2020-12-25)
++++++++++++++++++++
+
+- Dropped Python 2 and Python 3.5
+- Using ``pathlib.Path()`` as an output instead of ``str`` in most places:
+  - ``Project.path``
+  - ``Script.path``
+  - ``Definition.module_path``
+  - ``Refactoring.get_renames``
+  - ``Refactoring.get_changed_files``
+- Functions with ``@property`` now return ``property`` instead of ``function``
+  in ``Name().type``
+- Started using annotations
+- Better support for the walrus operator
+- Project attributes are now read accessible
+- Removed all deprecations
+
+This is likely going to be the last minor release before 1.0.
+
 0.17.2 (2020-07-17)
 +++++++++++++++++++
 

@@ -3,7 +3,6 @@
 
 from textwrap import dedent
 from inspect import cleandoc
-import os
 
 import pytest
 
@@ -374,6 +373,34 @@ def test_type_II(Script):
             assert c.type == 'keyword'
 
 
+@pytest.mark.parametrize(
+    'added_code, expected_type, expected_infer_type', [
+        ('Foo().x', 'property', 'instance'),
+        ('Foo.x', 'property', 'property'),
+        ('Foo().y', 'function', 'function'),
+        ('Foo.y', 'function', 'function'),
+        ('Foo().z', 'function', 'function'),
+        ('Foo.z', 'function', 'function'),
+    ]
+)
+def test_class_types(goto_or_help_or_infer, added_code, expected_type,
+                     expected_infer_type):
+    code = dedent('''\
+        class Foo:
+            @property
+            def x(self): return 1
+            @staticmethod
+            def y(self): ...
+            @classmethod
+            def z(self): ...
+        ''')
+    d, = goto_or_help_or_infer(code + added_code)
+    if goto_or_help_or_infer.type == 'infer':
+        assert d.type == expected_infer_type
+    else:
+        assert d.type == expected_type
+
+
 """
 This tests the BaseName.goto function, not the jedi
 function. They are not really different in functionality, but really
@@ -486,10 +513,14 @@ def test_added_equals_to_params(Script):
 
     assert run('foo(bar').name_with_symbols == 'bar='
     assert run('foo(bar').complete == '='
+    assert run('foo(bar').get_completion_prefix_length() == 3
     assert run('foo(bar, baz').complete == '='
+    assert run('foo(bar, baz').get_completion_prefix_length() == 3
     assert run('    bar').name_with_symbols == 'bar'
     assert run('    bar').complete == ''
+    assert run('    bar').get_completion_prefix_length() == 3
     x = run('foo(bar=isins').name_with_symbols
+    assert run('foo(bar=isins').get_completion_prefix_length() == 5
     assert x == 'isinstance'
 
 
@@ -534,8 +565,8 @@ def test_execute(Script, code, description):
         ('from pkg import Foo; Foo().bar', 'bar', 'module.py'),
     ])
 def test_inheritance_module_path(Script, goto, code, name, file_name):
-    base_path = os.path.join(get_example_dir('inheritance'), 'pkg')
-    whatever_path = os.path.join(base_path, 'NOT_EXISTING.py')
+    base_path = get_example_dir('inheritance', 'pkg')
+    whatever_path = base_path.joinpath('NOT_EXISTING.py')
 
     script = Script(code, path=whatever_path)
     if goto is None:
@@ -544,7 +575,7 @@ def test_inheritance_module_path(Script, goto, code, name, file_name):
         func, = script.goto(follow_imports=goto)
     assert func.type == 'function'
     assert func.name == name
-    assert func.module_path == os.path.join(base_path, file_name)
+    assert func.module_path == base_path.joinpath(file_name)
 
 
 def test_definition_goto_follow_imports(Script):
@@ -595,7 +626,7 @@ def test_definition_goto_follow_imports(Script):
          'foo(x: str, y: int=None) -> Union[int, str]'),
     ]
 )
-def test_get_type_hint(Script, code, expected, skip_pre_python36):
+def test_get_type_hint(Script, code, expected):
     code = 'from typing import *\n' + code
     d, = Script(code).goto()
     assert d.get_type_hint() == expected

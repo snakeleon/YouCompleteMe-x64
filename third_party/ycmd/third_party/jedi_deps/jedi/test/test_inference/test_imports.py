@@ -4,46 +4,47 @@ Tests".
 """
 
 import os
+from pathlib import Path
 
 import pytest
 
+import jedi
 from jedi.file_io import FileIO
-from jedi._compatibility import find_module_py33, find_module
 from jedi.inference import compiled
 from jedi.inference import imports
 from jedi.api.project import Project
 from jedi.inference.gradual.conversion import _stub_to_python_value_set
 from jedi.inference.references import get_module_contexts_containing_name
 from ..helpers import get_example_dir, test_dir, test_dir_project, root_dir
+from jedi.inference.compiled.subprocess.functions import _find_module_py33, _find_module
 
 THIS_DIR = os.path.dirname(__file__)
 
 
-@pytest.mark.skipif('sys.version_info < (3,3)')
-def test_find_module_py33():
+def test_find_module_basic():
     """Needs to work like the old find_module."""
-    assert find_module_py33('_io') == (None, False)
+    assert _find_module_py33('_io') == (None, False)
     with pytest.raises(ImportError):
-        assert find_module_py33('_DOESNTEXIST_') == (None, None)
+        assert _find_module_py33('_DOESNTEXIST_') == (None, None)
 
 
 def test_find_module_package():
-    file_io, is_package = find_module('json')
-    assert file_io.path.endswith(os.path.join('json', '__init__.py'))
+    file_io, is_package = _find_module('json')
+    assert file_io.path.parts[-2:] == ('json', '__init__.py')
     assert is_package is True
 
 
 def test_find_module_not_package():
-    file_io, is_package = find_module('io')
-    assert file_io.path.endswith('io.py')
+    file_io, is_package = _find_module('io')
+    assert file_io.path.name == 'io.py'
     assert is_package is False
 
 
-pkg_zip_path = get_example_dir('zipped_imports', 'pkg.zip')
+pkg_zip_path = Path(get_example_dir('zipped_imports', 'pkg.zip'))
 
 
 def test_find_module_package_zipped(Script, inference_state, environment):
-    sys_path = environment.get_sys_path() + [pkg_zip_path]
+    sys_path = environment.get_sys_path() + [str(pkg_zip_path)]
 
     project = Project('.', sys_path=sys_path)
     script = Script('import pkg; pkg.mod', project=project)
@@ -51,12 +52,12 @@ def test_find_module_package_zipped(Script, inference_state, environment):
 
     file_io, is_package = inference_state.compiled_subprocess.get_module_info(
         sys_path=sys_path,
-        string=u'pkg',
-        full_name=u'pkg'
+        string='pkg',
+        full_name='pkg'
     )
     assert file_io is not None
-    assert file_io.path.endswith(os.path.join('pkg.zip', 'pkg', '__init__.py'))
-    assert file_io._zip_path.endswith('pkg.zip')
+    assert file_io.path.parts[-3:] == ('pkg.zip', 'pkg', '__init__.py')
+    assert file_io._zip_path.name == 'pkg.zip'
     assert is_package is True
 
 
@@ -86,15 +87,18 @@ def test_find_module_package_zipped(Script, inference_state, environment):
 
 )
 def test_correct_zip_package_behavior(Script, inference_state, environment, code,
-                                      file, package, path, skip_python2):
-    sys_path = environment.get_sys_path() + [pkg_zip_path]
+                                      file, package, path):
+    sys_path = environment.get_sys_path() + [str(pkg_zip_path)]
     pkg, = Script(code, project=Project('.', sys_path=sys_path)).infer()
     value, = pkg._name.infer()
-    assert value.py__file__() == os.path.join(pkg_zip_path, 'pkg', file)
+    assert value.py__file__() == pkg_zip_path.joinpath('pkg', file)
     assert '.'.join(value.py__package__()) == package
     assert value.is_package() is (path is not None)
     if path is not None:
-        assert value.py__path__() == [os.path.join(pkg_zip_path, path)]
+        assert value.py__path__() == [str(pkg_zip_path.joinpath(path))]
+
+    value.string_names = None
+    assert value.py__package__() == []
 
 
 def test_find_module_not_package_zipped(Script, inference_state, environment):
@@ -104,11 +108,11 @@ def test_find_module_not_package_zipped(Script, inference_state, environment):
     assert len(script.complete()) == 1
 
     file_io, is_package = inference_state.compiled_subprocess.get_module_info(
-        sys_path=sys_path,
-        string=u'not_pkg',
-        full_name=u'not_pkg'
+        sys_path=map(str, sys_path),
+        string='not_pkg',
+        full_name='not_pkg'
     )
-    assert file_io.path.endswith(os.path.join('not_pkg.zip', 'not_pkg.py'))
+    assert file_io.path.parts[-2:] == ('not_pkg.zip', 'not_pkg.py')
     assert is_package is False
 
 
@@ -250,8 +254,7 @@ def test_named_import(Script):
     assert len(Script(s, path='/').infer(1, 10)) == 1
 
 
-@pytest.mark.skipif('True', reason='The nested import stuff is still very messy.')
-def test_goto_following_on_imports(Script):
+def test_nested_import(Script):
     s = "import multiprocessing.dummy; multiprocessing.dummy"
     g = Script(s).goto()
     assert len(g) == 1
@@ -432,22 +435,16 @@ def test_import_name_calculation(Script):
 
 @pytest.mark.parametrize('name', ('builtins', 'typing'))
 def test_pre_defined_imports_module(Script, environment, name):
-    if environment.version_info.major < 3 and name == 'builtins':
-        name = '__builtin__'
-
     path = os.path.join(root_dir, name + '.py')
     module = Script('', path=path)._get_module_context()
     assert module.string_names == (name,)
 
-    assert module.inference_state.builtins_module.py__file__() != path
-    assert module.inference_state.typing_module.py__file__() != path
+    assert str(module.inference_state.builtins_module.py__file__()) != path
+    assert str(module.inference_state.typing_module.py__file__()) != path
 
 
 @pytest.mark.parametrize('name', ('builtins', 'typing'))
 def test_import_needed_modules_by_jedi(Script, environment, tmpdir, name):
-    if environment.version_info.major < 3 and name == 'builtins':
-        name = '__builtin__'
-
     module_path = tmpdir.join(name + '.py')
     module_path.write('int = ...')
     script = Script(
@@ -456,8 +453,8 @@ def test_import_needed_modules_by_jedi(Script, environment, tmpdir, name):
         project=Project('.', sys_path=[tmpdir.strpath] + environment.get_sys_path()),
     )
     module, = script.infer()
-    assert module._inference_state.builtins_module.py__file__() != module_path
-    assert module._inference_state.typing_module.py__file__() != module_path
+    assert str(module._inference_state.builtins_module.py__file__()) != module_path
+    assert str(module._inference_state.typing_module.py__file__()) != module_path
 
 
 def test_import_with_semicolon(Script):
@@ -475,3 +472,29 @@ def test_relative_import_star(Script):
     script = Script(source, path='export.py')
 
     assert script.complete(3, len("furl.c"))
+
+
+@pytest.mark.parametrize('with_init', [False, True])
+def test_relative_imports_without_path_and_setup_py(
+        Script, inference_state, environment, tmpdir, with_init):
+    # Contrary to other tests here we create a temporary folder that is not
+    # part of a folder with a setup.py that signifies
+    tmpdir.join('file1.py').write('do_foo = 1')
+    other_path = tmpdir.join('other_files')
+    other_path.join('file2.py').write('def do_nothing():\n pass', ensure=True)
+    if with_init:
+        other_path.join('__init__.py').write('')
+
+    for name, code in [('file2', 'from . import file2'),
+                       ('file1', 'from .. import file1')]:
+        for func in (jedi.Script.goto, jedi.Script.infer):
+            n, = func(Script(code, path=other_path.join('test1.py').strpath))
+            assert n.name == name
+            assert n.type == 'module'
+            assert n.line == 1
+
+
+def test_import_recursion(Script):
+    path = get_example_dir('import-recursion', "cq_example.py")
+    for c in Script(path=path).complete(3, 3):
+        c.docstring()

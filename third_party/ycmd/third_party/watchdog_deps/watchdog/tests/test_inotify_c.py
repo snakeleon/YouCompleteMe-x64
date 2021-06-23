@@ -1,4 +1,3 @@
-from __future__ import unicode_literals
 
 import pytest
 from watchdog.utils import platform
@@ -12,13 +11,13 @@ import errno
 import logging
 import os
 from functools import partial
+from queue import Queue
 
 from watchdog.events import DirCreatedEvent, DirDeletedEvent, DirModifiedEvent
 from watchdog.observers.api import ObservedWatch
 from watchdog.observers.inotify import InotifyFullEmitter, InotifyEmitter
 from watchdog.observers.inotify_c import Inotify
 
-from . import Queue
 from .shell import mkdtemp, rm
 
 
@@ -167,4 +166,14 @@ def test_non_ascii_path():
         assert isinstance(event.src_path, type(u""))
         assert event.src_path == path
         # Just make sure it doesn't raise an exception.
+        assert repr(event)
+
+
+def test_watch_file():
+    path = p("this_is_a_file")
+    with open(path, "a"):
+        pass
+    with watching(path):
+        os.remove(path)
+        event, _ = event_queue.get(timeout=5)
         assert repr(event)

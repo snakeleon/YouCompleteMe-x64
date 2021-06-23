@@ -76,7 +76,9 @@ def Subcommands_DefinedSubcommands_test( app ):
                                              'GoTo',
                                              'GoToDeclaration',
                                              'GoToDefinition',
+                                             'GoToDocumentOutline',
                                              'GoToImprecise',
+                                             'GoToImplementation',
                                              'GoToInclude',
                                              'GoToReferences',
                                              'GoToSymbol',
@@ -100,6 +102,7 @@ def Subcommands_DefinedSubcommands_test( app ):
   'GoToDeclaration',
   'GoToDefinition',
   'GoToInclude',
+  'GoToImplementation',
   'GoToReferences',
   'RefactorRename',
 ] )
@@ -179,7 +182,8 @@ def RunGoToTest_all( app, folder, command, test ):
         LocationMatcher(
           PathToTestFile( folder, os.path.normpath( location[ 0 ] ) ),
           location[ 1 ],
-          location[ 2 ]
+          location[ 2 ],
+          **( {} if len( location ) < 4 else location[ 3 ] )
         ) for location in response
       ] )
     }
@@ -189,7 +193,8 @@ def RunGoToTest_all( app, folder, command, test ):
       'data': LocationMatcher(
         PathToTestFile( folder, os.path.normpath( response[ 0 ] ) ),
         response[ 1 ],
-        response[ 2 ]
+        response[ 2 ],
+        **( {} if len( response ) < 4 else response[ 3 ] )
       )
     }
   else:
@@ -307,10 +312,22 @@ def Subcommands_GoToReferences_test( app, test ):
 @pytest.mark.parametrize( 'test', [
   # In same file - 1 result
   { 'req': ( 'goto.cc', 1, 1, [ 'out_of_line' ] ),
-    'res': ( 'goto.cc', 14, 13 ) },
+    'res': ( 'goto.cc', 14, 13, {
+      'description': 'Function: out_of_line',
+      'extra_data': { 'kind': 'Function', 'name': 'out_of_line', } }
+    ) },
   # In same file - multiple results
   { 'req': ( 'goto.cc', 1, 1, [ 'line' ] ),
-    'res': [ ( 'goto.cc', 6, 10 ), ( 'goto.cc', 14, 13 ) ] },
+    'res': [
+      ( 'goto.cc', 6, 10, {
+        'description': 'Function: in_line',
+        'extra_data': { 'kind': 'Function', 'name': 'in_line' },
+        } ),
+      ( 'goto.cc', 14, 13, {
+        'description': 'Function: out_of_line',
+        'extra_data': { 'kind': 'Function', 'name': 'out_of_line' },
+        } ),
+    ] },
   # None
   { 'req': ( 'goto.cc', 1, 1, [ '' ] ), 'res': 'Symbol not found' },
 
@@ -321,6 +338,69 @@ def Subcommands_GoToReferences_test( app, test ):
 @SharedYcmd
 def Subcommands_GoToSymbol_test( app, test ):
   RunGoToTest_all( app, '', 'GoToSymbol', test )
+
+
+@pytest.mark.parametrize( 'test', [
+  # In same file - multiple results
+  { 'req': ( 'goto.cc', 1, 1 ),
+    'res': [
+      ( 'goto.cc', 2, 1, {
+        'description': "Namespace: Local",
+        'extra_data': { 'kind': 'Namespace', 'name': 'Local' } } ),
+      ( 'goto.cc', 14, 1, {
+        'description': "Function: Local::out_of_line",
+        'extra_data': { 'kind': 'Function', 'name': 'Local::out_of_line' } } ),
+      ( 'goto.cc', 6, 5, {
+        'description': "Function: in_line",
+        'extra_data': { 'kind': 'Function', 'name': 'in_line' } } ),
+      ( 'goto.cc', 11, 5, {
+        'description': 'Function: out_of_line',
+        'extra_data': { 'kind': 'Function', 'name': 'out_of_line' } } ),
+      ( 'goto.cc', 19, 1, {
+        'description': "Function: test",
+        'extra_data': { 'kind': 'Function', 'name': 'test' } } ),
+      ( 'goto.cc', 21, 1, {
+        'description': "Function: test",
+        'extra_data': { 'kind': 'Function', 'name': 'test' } } ),
+      ( 'goto.cc', 30, 1, {
+        'description': "Function: unicode",
+        'extra_data': { 'kind': 'Function', 'name': 'unicode' } } ),
+      ( 'goto.cc', 4, 5, {
+        'description': "Variable: x",
+        'extra_data': { 'kind': 'Variable', 'name': 'x' } } ),
+    ] },
+] )
+@SharedYcmd
+def Subcommands_GoToDocumentOutline_test( app, test ):
+  RunGoToTest_all( app, '', 'GoToDocumentOutline', test )
+
+
+@pytest.mark.parametrize( 'test', [
+  { 'req': ( 'virtual.cpp', 1, 9 ),
+    'res': [
+      ( 'virtual.cpp', 5, 8 ),
+      ( 'virtual.cpp', 13, 8, ),
+      ( 'virtual.cpp', 9, 8 ),
+  ] },
+  { 'req': ( 'virtual.cpp', 2, 15 ),
+    'res': [
+      ( 'virtual.cpp', 10, 15 ),
+      ( 'virtual.cpp', 6, 7 ),
+  ] },
+  { 'req': ( 'virtual.cpp', 9, 8 ),
+    'res': ( 'virtual.cpp', 14, 8 ) },
+  { 'req': ( 'virtual.cpp', 13, 15 ),
+    'res': [
+      ( 'virtual.cpp', 5, 8 ),
+      ( 'virtual.cpp', 13, 8, ),
+      ( 'virtual.cpp', 9, 8 ),
+  ] },
+  { 'req': ( 'virtual.cpp', 10, 15 ),
+    'res': 'Cannot jump to location' },
+] )
+@SharedYcmd
+def Subcommands_GoToImplementation_test( app, test ):
+  RunGoToTest_all( app, '', 'GoToImplementation', test )
 
 
 def RunGetSemanticTest( app,
@@ -872,8 +952,8 @@ def FixIt_Check_cpp11_SpellCheck( results ):
       has_entries( {
         'kind': 'refactor',
         'text': contains_string( "Add using-declaration for "
-                                 "SpellingIsNotMyStrongPoint and "
-                                 "remove qualifier." ),
+                                 "SpellingIsNotMyStringPiont and "
+                                 "remove qualifier" ),
         'resolve': True
       } ) )
   } ) )
@@ -1096,12 +1176,16 @@ def Subcommands_FixIt_ClangdTweaks_test( app ):
 
 @SharedYcmd
 def Subcommands_RefactorRename_test( app ):
+  basic_cpp = PathToTestFile( 'basic.cpp' )
+  gettype_clang_text_cc = PathToTestFile( 'GetType_Clang_test.cc' )
+  goto_clang_zerobasedline = PathToTestFile(
+      'GoTo_Clang_ZeroBasedLineAndColumn_test.cc' )
   test = {
     'request': {
       'filetype': 'cpp',
       'completer_target': 'filetype_default',
-      'contents': ReadFile( PathToTestFile( 'basic.cpp' ) ),
-      'filepath': PathToTestFile( 'basic.cpp' ),
+      'contents': ReadFile( basic_cpp ),
+      'filepath': basic_cpp,
       'command_arguments': [ 'RefactorRename', 'Bar' ],
       'line_num': 17,
       'column_num': 4,
@@ -1112,17 +1196,41 @@ def Subcommands_RefactorRename_test( app ):
         'fixits': contains_exactly( has_entries( {
           'chunks': contains_exactly(
             ChunkMatcher( 'Bar',
-                          LineColMatcher( 1, 8 ),
-                          LineColMatcher( 1, 11 ) ),
+                          LocationMatcher( gettype_clang_text_cc, 12, 8 ),
+                          LocationMatcher( gettype_clang_text_cc, 12, 11 ) ),
             ChunkMatcher( 'Bar',
-                          LineColMatcher( 9, 3 ),
-                          LineColMatcher( 9, 6 ) ),
+                          LocationMatcher( gettype_clang_text_cc, 24, 3 ),
+                          LocationMatcher( gettype_clang_text_cc, 24, 6 ) ),
             ChunkMatcher( 'Bar',
-                          LineColMatcher( 15,  8 ),
-                          LineColMatcher( 15, 11 ) ),
+                          LocationMatcher( gettype_clang_text_cc, 39, 3 ),
+                          LocationMatcher( gettype_clang_text_cc, 39, 6 ) ),
             ChunkMatcher( 'Bar',
-                          LineColMatcher( 17, 3 ),
-                          LineColMatcher( 17, 6 ) ),
+                          LocationMatcher( gettype_clang_text_cc, 40, 3 ),
+                          LocationMatcher( gettype_clang_text_cc, 40, 6 ) ),
+            ChunkMatcher( 'Bar',
+                          LocationMatcher( gettype_clang_text_cc, 42, 9 ),
+                          LocationMatcher( gettype_clang_text_cc, 42, 12 ) ),
+            ChunkMatcher( 'Bar',
+                          LocationMatcher( gettype_clang_text_cc, 43, 9 ),
+                          LocationMatcher( gettype_clang_text_cc, 43, 12 ) ),
+            ChunkMatcher( 'Bar',
+                          LocationMatcher( goto_clang_zerobasedline, 2, 8 ),
+                          LocationMatcher( goto_clang_zerobasedline, 2, 11 ) ),
+            ChunkMatcher( 'Bar',
+                          LocationMatcher( goto_clang_zerobasedline, 10, 3 ),
+                          LocationMatcher( goto_clang_zerobasedline, 10, 6 ) ),
+            ChunkMatcher( 'Bar',
+                          LocationMatcher( basic_cpp, 1, 8 ),
+                          LocationMatcher( basic_cpp, 1, 11 ) ),
+            ChunkMatcher( 'Bar',
+                          LocationMatcher( basic_cpp, 9, 3 ),
+                          LocationMatcher( basic_cpp, 9, 6 ) ),
+            ChunkMatcher( 'Bar',
+                          LocationMatcher( basic_cpp, 15,  8 ),
+                          LocationMatcher( basic_cpp, 15, 11 ) ),
+            ChunkMatcher( 'Bar',
+                          LocationMatcher( basic_cpp, 17, 3 ),
+                          LocationMatcher( basic_cpp, 17, 6 ) ),
           )
         } ) )
       } )

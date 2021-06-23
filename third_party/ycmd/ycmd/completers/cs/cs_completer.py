@@ -18,8 +18,10 @@
 from collections import defaultdict
 import os
 import errno
+import json
 import time
-import requests
+import urllib.request
+import urllib.error
 import threading
 from urllib.parse import urljoin
 
@@ -30,7 +32,8 @@ from ycmd.utils import ( ByteOffsetToCodepointOffset,
                          CodepointOffsetToByteOffset,
                          FindExecutable,
                          FindExecutableWithFallback,
-                         LOGGER )
+                         LOGGER,
+                         ToBytes )
 from ycmd import responses
 from ycmd import utils
 
@@ -147,11 +150,13 @@ class CsharpCompleter( Completer ):
         begin = sig_label.find( arg_label, end )
         end = begin + len( arg_label )
         parameters.append( {
+          'documentation': arg.get( 'Documentation', '' ),
           'label': [ CodepointOffsetToByteOffset( sig_label, begin ),
                      CodepointOffsetToByteOffset( sig_label, end ) ]
         } )
 
       return {
+        'documentation': s.get( 'Documentation', '' ),
         'label': sig_label,
         'parameters': parameters
       }
@@ -832,16 +837,25 @@ class CsharpSolutionCompleter( object ):
   def _ServerLocation( self ):
     # We cannot use 127.0.0.1 like we do in other places because OmniSharp
     # server only listens on localhost.
-    return 'http://localhost:' + str( self._omnisharp_port )
+    return f'http://127.0.0.1:{ self._omnisharp_port }'
 
 
   def _GetResponse( self, handler, parameters = {}, timeout = None ):
     """ Handle communication with server """
     target = urljoin( self._ServerLocation(), handler )
     LOGGER.debug( 'TX (%s): %s', handler, parameters )
-    response = requests.post( target, json = parameters, timeout = timeout )
-    LOGGER.debug( 'RX: %s', response.json() )
-    return response.json()
+    try:
+      response = urllib.request.urlopen(
+        target,
+        data = ToBytes( json.dumps( parameters ) ),
+        timeout = timeout )
+      json_response = json.loads( response.read() )
+      response.close()
+    except urllib.error.HTTPError as response:
+      json_response = json.loads( response.fp.read() )
+      response.close()
+    LOGGER.debug( 'RX: %s', json_response )
+    return json_response
 
 
   def _ChooseOmnisharpPort( self ):

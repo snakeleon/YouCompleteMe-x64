@@ -1,8 +1,7 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
+# coding: utf-8
 #
 # Copyright 2011 Yesudeep Mangalapilly <yesudeep@gmail.com>
-# Copyright 2012 Google, Inc.
+# Copyright 2012 Google, Inc & contributors.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,6 +16,7 @@
 # limitations under the License.
 
 import time
+from pathlib import Path
 
 import pytest
 
@@ -28,6 +28,10 @@ from watchdog.observers.api import (
     EventDispatcher,
     EventQueue
 )
+
+
+def test_observer_constructor():
+    ObservedWatch(Path('/foobar'), True)
 
 
 def test_observer__eq__():
@@ -81,6 +85,7 @@ def test_event_dispatcher():
     event_dispatcher.start()
     time.sleep(1)
     event_dispatcher.stop()
+    event_dispatcher.join()
 
 
 def test_observer_basic():
