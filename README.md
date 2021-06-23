@@ -3507,7 +3507,7 @@ This software is licensed under the [GPL v3 license][gpl].
 首先本中文入门指引只涉及 YouCompleteMe 插件中 C-家族（C/C++/Objective-C/Objective-C++）的自动补全引擎 ycmd 的安装与配置，
 这里仅作简单的说明，而其它所支持语言的补全引擎请参阅官方安装配置说明。
 
-> (PS: 此项目仓库中已经集成了编译好的基于 Windows 系统的 ycmd 引擎，所以同时支持 Windows 版的 Emacs 的使用。
+> (PS: 此项目仓库中已经包含了基于 Windows 系统的 ycmd 引擎二进制文件：`ycm_core.pyd` `libclang.dll` ，所以同时支持 Windows 版的 Emacs 的使用。
    Linux系统安装编译非常方便，请按照官方文档中的说明进行编译。)
 
 ### 关于版本
