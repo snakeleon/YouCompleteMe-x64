@@ -3529,7 +3529,7 @@ This software is licensed under the [GPL v3 license][gpl].
 - x86 (x86_32, x32, i686); [YouCompleteMe-x86][YouCompleteMe-x86] for Windows 32bit
 - x64 (x86_64, amd64); [YouCompleteMe-x64][YouCompleteMe-x64] for Windows 64bit
 
-> NOTE: 该版本已经集成编译好的基于 Windows 系统的二进制文件，直接安装加以配置就可正常使用；同时可用于 Windows 版的 Emacs。
+> NOTE: 1202年了，x86 版本已暂停维护，使用不了新版`Clangd`语法引擎的特性。
 
 ### 脚本配置
 
