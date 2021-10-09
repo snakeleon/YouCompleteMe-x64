@@ -95,6 +95,7 @@ Contents
 - [Contributor Code of Conduct](#contributor-code-of-conduct)
 - [Contact](#contact)
 - [License](#license)
+- [Sponsorship](#sponsorship)
 - [中文入门指引](#中文入门指引)
 	- [关于版本](#关于版本)
 	- [脚本配置](#脚本配置)
@@ -3461,6 +3462,17 @@ tells YCM where is the TSServer executable located.
 Similar to [the `gopls` path](#the-gycm-gopls-binaty-path), this option
 tells YCM where is the Omnisharp-Roslyn executable located.
 
+### The `g:ycm_update_diagnostics_in_insert_mode` option
+
+With async diagnostics, LSP servers might send new diagnostics mid-typing.
+If seeing these new diagnostics while typing is not desired, this option can
+be set to 0.
+
+Default: `1`
+
+```viml
+let g:ycm_update_diagnostics_in_insert_mode = 1
+```
 
 FAQ
 ---
@@ -3500,6 +3512,19 @@ License
 This software is licensed under the [GPL v3 license][gpl].
 © 2015-2018 YouCompleteMe contributors
 
+Sponsorship
+-----------
+
+If you like YCM so much that you're wiling to part with your hard-earned cash, please consider donating to one of the following charities, which are meaningful to the current maintainers (in no particular order):
+
+* [Greyhound Rescue Wales](https://greyhoundrescuewales.co.uk)
+* [Be Humane](https://www.budihuman.rs/en)
+* [Cancer Research UK](https://www.cancerresearchuk.org)
+* [ICCF Holland](https://iccf.nl)
+* Any charity of your choosing.
+
+Please note: The YCM maintainers do not specifically endorse nor necessarily have any relationship with the above charities. Disclosure: It is noted that one key maintainer is family with Trustees of Greyhound Rescue Wales.
+
 
 中文入门指引
 ------------
@@ -3512,9 +3537,9 @@ This software is licensed under the [GPL v3 license][gpl].
 
 ### 关于版本
 
-- ycm_core  核心版本: 45 (23 June 2021) 静态编译
-- libclang  版本: 12.0.0 (15 April 2021) [Clang][Clang]
-- Python    支持: 3.9.5 (3 May 2021) [Python][python-win-download]
+- ycm_core  核心版本: 45 (9 October 2021) 静态编译
+- libclang  版本: 13.0.0 (1 October 2021) [Clang][Clang]
+- Python    支持: 3.10.0 (4 October 2021) [Python][python-win-download]
 
 
 支持操作系统:
