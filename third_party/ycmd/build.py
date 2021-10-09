@@ -80,7 +80,7 @@ JDTLS_SHA256 = (
   'df9c9b497ce86b1d57756b2292ad0f7bfaa76aed8a4b63a31c589e85018b7993'
 )
 
-RUST_TOOLCHAIN = 'nightly-2021-04-14'
+RUST_TOOLCHAIN = 'nightly-2021-07-29'
 RUST_ANALYZER_DIR = p.join( DIR_OF_THIRD_PARTY, 'rust-analyzer' )
 
 BUILD_ERROR_MESSAGE = (
@@ -382,9 +382,6 @@ def ParseArguments():
   parser.add_argument( '--ts-completer', action = 'store_true',
                        help = 'Enable JavaScript and TypeScript semantic '
                               'completion engine.' ),
-  parser.add_argument( '--system-boost', action = 'store_true',
-                       help = 'Use the system boost instead of bundled one. '
-                       'NOT RECOMMENDED OR SUPPORTED!' )
   parser.add_argument( '--system-libclang', action = 'store_true',
                        help = 'Use system libclang instead of downloading one '
                        'from llvm.org. NOT RECOMMENDED OR SUPPORTED!' )
@@ -431,6 +428,10 @@ def ParseArguments():
                        help = 'For developers: specify the cmake executable. '
                               'Useful for testing with specific versions, or '
                               'if the system is unable to find cmake.' )
+  parser.add_argument( '--force-sudo',
+                       action = 'store_true',
+                       help = 'Compiling with sudo causes problems. If you'
+                              ' know what you are doing, proceed.' )
 
   # These options are deprecated.
   parser.add_argument( '--omnisharp-completer', action = 'store_true',
@@ -503,9 +504,6 @@ def GetCmakeArgs( parsed_args ):
 
   if parsed_args.system_libclang:
     cmake_args.append( '-DUSE_SYSTEM_LIBCLANG=ON' )
-
-  if parsed_args.system_boost:
-    cmake_args.append( '-DUSE_SYSTEM_BOOST=ON' )
 
   if parsed_args.enable_debug:
     cmake_args.append( '-DCMAKE_BUILD_TYPE=Debug' )
@@ -1156,8 +1154,14 @@ def DoCmakeBuilds( args ):
   BuildWatchdogModule( args )
 
 
-def Main():
+def Main(): # noqa: C901
   args = ParseArguments()
+
+  if 'SUDO_COMMAND' in os.environ:
+    if args.force_sudo:
+      print( 'Forcing build with sudo. If it breaks, keep the pieces.' )
+    else:
+      sys.exit( 'This script should not be run with sudo.' )
 
   if not args.skip_build:
     DoCmakeBuilds( args )
