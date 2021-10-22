@@ -3538,7 +3538,7 @@ Please note: The YCM maintainers do not specifically endorse nor necessarily hav
 
 ### 关于版本
 
-- ycm_core  核心版本: 45 (11 October 2021) 静态编译
+- ycm_core  核心版本: 45 (22 October 2021) 静态编译
 - libclang  版本: 13.0.0 (1 October 2021) [Clang][Clang]
 - Python    支持: 3.10.0 (4 October 2021) [Python][python-win-download]
 
