@@ -18,7 +18,10 @@
 from collections import defaultdict, namedtuple
 from unittest.mock import DEFAULT, MagicMock, patch
 from unittest import skip
-from hamcrest import assert_that, equal_to
+from hamcrest import ( assert_that,
+                       contains_exactly,
+                       contains_inanyorder,
+                       equal_to )
 import contextlib
 import functools
 import json
@@ -31,7 +34,8 @@ from unittest import skipIf
 from ycmd.utils import GetCurrentDirectory, OnMac, OnWindows, ToUnicode
 
 
-BUFNR_REGEX = re.compile( '^bufnr\\(\'(?P<buffer_filename>.+)\', ([01])\\)$' )
+BUFNR_REGEX = re.compile(
+  '^bufnr\\(\'(?P<buffer_filename>.+)\'(, ([01]))?\\)$' )
 BUFWINNR_REGEX = re.compile( '^bufwinnr\\((?P<buffer_number>[0-9]+)\\)$' )
 BWIPEOUT_REGEX = re.compile(
   '^(?:silent! )bwipeout!? (?P<buffer_number>[0-9]+)$' )
@@ -503,6 +507,7 @@ class VimWindow:
     self.buffer = buffer_object
     self.cursor = cursor
     self.options = {}
+    self.vars = {}
 
 
   def __repr__( self ):
@@ -590,6 +595,11 @@ class VimProp:
       return self.start_column
     elif key == 'length':
       return self.end_column - self.start_column
+
+
+  def get( self, key, default = None ):
+    if key == 'type':
+      return self.prop_type
 
 
 class VimSign:
@@ -695,7 +705,8 @@ class ExtendedMock( MagicMock ):
   """
 
   def assert_has_exact_calls( self, calls, any_order = False ):
-    self.assert_has_calls( calls, any_order )
+    contains = contains_inanyorder if any_order else contains_exactly
+    assert_that( self.call_args_list, contains( *calls ) )
     assert_that( self.call_count, equal_to( len( calls ) ) )
 
 

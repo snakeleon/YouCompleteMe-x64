@@ -185,13 +185,12 @@ function! youcompleteme#Enable()
     " buffer is already parsed.
     autocmd BufWritePost,FileWritePost * call s:OnFileSave()
     autocmd FileType * call s:OnFileTypeSet()
-    autocmd BufEnter,CmdwinEnter * call s:OnBufferEnter()
+    autocmd BufEnter,CmdwinEnter,WinEnter * call s:OnBufferEnter()
     autocmd BufUnload * call s:OnBufferUnload()
     autocmd InsertLeave * call s:OnInsertLeave()
     autocmd VimLeave * call s:OnVimLeave()
     autocmd CompleteDone * call s:OnCompleteDone()
     autocmd CompleteChanged * call s:OnCompleteChanged()
-    autocmd BufEnter,WinEnter * call s:UpdateMatches()
   augroup END
 
   " The FileType event is not triggered for the first loaded file. We wait until
@@ -223,6 +222,7 @@ function! youcompleteme#EnableCursorMovedAutocommands()
   augroup ycmcompletemecursormove
     autocmd!
     autocmd CursorMoved * call s:OnCursorMovedNormalMode()
+    autocmd CursorMovedI * let s:current_cursor_position = getpos( '.' )
     autocmd TextChanged * call s:OnTextChangedNormalMode()
     autocmd TextChangedI * call s:OnTextChangedInsertMode( v:false )
     autocmd TextChangedP * call s:OnTextChangedInsertMode( v:true )
@@ -698,6 +698,7 @@ function! s:OnBufferEnter()
   call s:SetUpCompleteopt()
   call s:EnableCompletingInCurrentBuffer()
 
+  py3 ycm_state.UpdateMatches()
   py3 ycm_state.OnBufferVisit()
   " Last parse may be outdated because of changes from other buffers. Force a
   " new parse.
@@ -714,11 +715,6 @@ function! s:OnBufferUnload()
   endif
 
   py3 ycm_state.OnBufferUnload( vimsupport.GetIntValue( 'buffer_number' ) )
-endfunction
-
-
-function! s:UpdateMatches()
-  py3 ycm_state.UpdateMatches()
 endfunction
 
 
@@ -849,6 +845,7 @@ function! s:OnTextChangedInsertMode( popup_is_visible )
     return
   endif
 
+  let s:current_cursor_position = getpos( '.' )
   if s:completion_stopped
     let s:completion_stopped = 0
     let s:completion = s:default_completion
@@ -1043,7 +1040,9 @@ function! s:PollCompletion( ... )
   endif
 
   let s:completion = py3eval( 'ycm_state.GetCompletionResponse()' )
-  call s:Complete()
+  if s:current_cursor_position == getpos( '.' )
+    call s:Complete()
+  endif
 endfunction
 
 
