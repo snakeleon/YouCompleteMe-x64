@@ -250,8 +250,11 @@ though we do our best to signal where we know them.
   vim is not supported (due to it having broken Python intetgration).
 
 ```
-brew install cmake python mono go nodejs
+$ brew install cmake python go nodejs
 ```
+
+- Install mono from [Mono Project](mono-install-macos) (NOTE: on Intel Macs you
+  can also `brew install mono`. On arm Macs, you may require Rosetta)
 
 - For java support you must install a JDK, one way to do this is with Homebrew:
 
@@ -275,12 +278,33 @@ $ sudo ln -sfn /usr/local/opt/openjdk/libexec/openjdk.jdk /Library/Java/JavaVirt
   brew install macvim
   ```
 
-- Compile YCM
+- Compile YCM.
 
-```
-cd ~/.vim/bundle/YouCompleteMe
-python3 install.py --all
-```
+  - For Intel and arm64 Macs, the bundled libclang/clangd work:
+
+    ```
+    cd ~/.vim/bundle/YouCompleteMe
+    python3 install.py --all
+    ```
+
+  - If you have troubles with finding system frameworks or C++ stanard library,
+    try using the homebrew llvm:
+
+    ```
+    brea install llvm
+    cd ~/.vim/bundle/YouCompleteMe
+    python3 install.py --system-libclang --all
+    ```
+
+    And edit your vimrc to add the following line to use the Homebrew llvm's
+    clangd:
+
+    ```viml
+    " Use homebrew's clangd
+    let g:ycm_clangd_binary_path = trim(system('brew --prefix llvm')).'/bin/clangd'
+    ```
+
+
 - For using an arbitrary LSP server, check [the relevant
   section](#plugging-an-arbitrary-lsp-server)
 
@@ -333,9 +357,8 @@ cd ~/.vim/bundle/YouCompleteMe
 
 The following additional language support options are available:
 
-- C# support: install Mono with [Homebrew][brew] or by downloading the [Mono
-  macOS package][mono-install-macos] and add `--cs-completer` when calling
-  `install.py`.
+- C# support: install by downloading the [Mono macOS package][mono-install-macos]
+  and add `--cs-completer` when calling `install.py`.
 - Go support: install [Go][go-install] and add `--go-completer` when calling
   `install.py`.
 - JavaScript and TypeScript support: install [Node.js and npm][npm-install] and
@@ -576,8 +599,8 @@ python install.py --all
 ```
 
 You can specify the Microsoft Visual C++ (MSVC) version using the `--msvc`
-option. YCM officially supports MSVC 14 (Visual Studio 2015), 15 (2017) and
-MSVC 16 (Visual Studio 2019).
+option. YCM officially supports MSVC 15 (2017), MSVC 16 (Visual Studio 2019)
+and MSVC 17 (Visual Studio 17 2022).
 
 That's it. You're done. Refer to the _User Guide_ section on how to use YCM.
 Don't forget that if you want the C-family semantic completion engine to work,
@@ -939,7 +962,7 @@ performance. Users who rely on `override_filename` in their `.ycm_extra_conf.py`
 will need to stay on the old `libclang` engine. Instructions on how to stay on
 the old engine are available on [the wiki][libclang-instructions].
 
-Advantages of clangd over libclang include:
+Some of the features of clangd:
 
 - **Project wide indexing**: Clangd has both dynamic and static index support.
   The dynamic index stores up-to-date symbols coming from any files you are
@@ -961,6 +984,42 @@ Advantages of clangd over libclang include:
   lines or the whole file, whereas libclang doesn't have such functionality.
 - **Performance**: Clangd has faster re-parse and code completion times
   compared to libclang.
+
+#### Installation
+
+On supported architectures, the `install.py` script will download a suitable
+clangd (`--clangd-completer`) or libclang (`--clang-completer`) for you.
+Supported architectures are:
+
+* Linux glibc >= 2.17 (Intel, armv7-a, aarch64) - built on ubuntu 18.04
+* MacOS >=10.15 (Intel, arm64)
+  - For Intel, compatibility per clang.llvm.org downloads
+  - For arm64, macOS 10.15+
+* Windows (Intel) - compatibility per clang.llvm.org downloads
+
+***clangd***:
+
+Typically, clangd is installed by the YCM installer (either with `--all` or with
+`--clangd-completer`). This downlaods a pre-built `clangd` binary for your
+architecture. If your OS or architecture is not supported or too old, you can
+install a compatible `clangd` and use [`g:ycm_clangd_binary_path`]() to point to
+it.
+
+***libclang***:
+
+`libclang` can be enabled also with `--all` or `--clang-completer`. As with
+`clangd`, YCM will try and download a version of `libclang` that is suitable for
+your environemnt, but again if your environemnt can't be supported, you can
+build or acquire `libclang` for yourself and specify it when building, as:
+
+```
+$ EXTRA_CMAKE_ARGS='-DPATH_TO_LLVM_ROOT=/path/to/your/llvm' ./install.py --clang-compelter --system-libclang
+```
+
+Please note that if using custom `clangd` or `libclang` it _must_ match the
+version that YCM requires. Currently YCM requires ***clang 13.0.0***.
+
+#### Compile flags
 
 In order to perform semantic analysis such as code completion, `GoTo` and
 diagnostics, YouCompleteMe uses `clangd`, which makes use of
@@ -3529,7 +3588,7 @@ Please note: The YCM maintainers do not specifically endorse nor necessarily hav
 
 ### 关于版本
 
-- ycm_core  核心版本: 45 (22 October 2021) 静态编译
+- ycm_core  核心版本: 45 (22 December 2021) 静态编译
 - libclang  版本: 13.0.0 (1 October 2021) [Clang][Clang]
 - Python    支持: 3.10.0 (4 October 2021) [Python][python-win-download]
 
@@ -3647,7 +3706,7 @@ endif
 [vim-win-download]: https://github.com/vim/vim-win32-installer/releases
 [python-win-download]: https://www.python.org/downloads/windows/
 [visual-studio-download]: https://visualstudio.microsoft.com/thank-you-downloading-visual-studio/?sku=BuildTools&rel=16
-[mono-install-macos]: https://www.mono-project.com/docs/getting-started/install/mac/
+[mono-install-macos]: https://www.mono-project.com/download/stable/
 [mono-install-linux]: https://www.mono-project.com/download/stable/#download-lin
 [go-install]: https://golang.org/doc/install
 [npm-install]: https://docs.npmjs.com/getting-started/installing-node#1-install-nodejs--npm

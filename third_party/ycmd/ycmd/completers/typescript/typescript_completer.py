@@ -63,7 +63,7 @@ class DeferredResponse:
 
   def result( self ):
     self._event.wait( timeout = self._timeout )
-    if not self._event.isSet():
+    if not self._event.is_set():
       raise RuntimeError( 'Response Timeout' )
     message = self._message
     if not message[ 'success' ]:
@@ -206,6 +206,10 @@ class TypeScriptCompleter( Completer ):
     # https://github.com/Microsoft/TypeScript/blob/8a93b489454fdcbdf544edef05f73a913449be1d/src/server/server.ts#L136
     environ = os.environ.copy()
     environ[ 'TSS_LOG' ] = tsserver_log
+
+    # TSServer runs out of memory on larger projects. This is the value that
+    # VSCode uses.
+    environ[ 'NODE_OPTIONS' ] = '--max_old_space_size=3072'
 
     LOGGER.info( 'TSServer log file: %s', self._logfile )
 
