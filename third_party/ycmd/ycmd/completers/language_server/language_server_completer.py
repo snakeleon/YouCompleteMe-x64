@@ -808,7 +808,7 @@ class TCPSingleStreamConnection( LanguageServerConnection ):
 
 
   def WriteData( self, data ):
-    assert self._connection_event.isSet()
+    assert self._connection_event.is_set()
     assert self._client_socket
 
     total_sent = 0
@@ -825,7 +825,7 @@ class TCPSingleStreamConnection( LanguageServerConnection ):
 
 
   def ReadData( self, size=-1 ):
-    assert self._connection_event.isSet()
+    assert self._connection_event.is_set()
     assert self._client_socket
 
     chunks = []
@@ -1913,7 +1913,7 @@ class LanguageServerCompleter( Completer ):
         uri = lsp.FilePathToUri( lsp.UriToFilePath( params[ 'uri' ] ) )
       except lsp.InvalidUriException:
         # Ignore diagnostics for URIs we don't recognise
-        LOGGER.exception( 'Ignoring diagnostics for unrecognized URI' )
+        LOGGER.debug( f'Ignoring diagnostics for unrecognized URI: { uri }' )
         return
       with self._latest_diagnostics_mutex:
         self._latest_diagnostics[ uri ] = params[ 'diagnostics' ]
