@@ -247,7 +247,7 @@ though we do our best to signal where we know them.
 
 - Install YCM plugin via [Vundle][]
 - Install CMake, MacVim and Python 3; Note that the pre-installed *macOS system*
-  vim is not supported (due to it having broken Python intetgration).
+  vim is not supported (due to it having broken Python integration).
 
 ```
 $ brew install cmake python go nodejs
@@ -260,7 +260,7 @@ $ brew install cmake python go nodejs
 
 ```
 $ brew install java
-$ sudo ln -sfn /usr/local/opt/openjdk/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk.jdk
+$ sudo ln -sfn $(brew --prefix java)/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk.jdk
 ```
 
 - Pre-installed macOS *system* Vim does not support Python 3. So you need to
@@ -272,6 +272,7 @@ $ sudo ln -sfn /usr/local/opt/openjdk/libexec/openjdk.jdk /Library/Java/JavaVirt
   ```
   brew install vim
   ```
+
   - Option 2: Installing [MacVim][]
 
   ```
@@ -287,11 +288,11 @@ $ sudo ln -sfn /usr/local/opt/openjdk/libexec/openjdk.jdk /Library/Java/JavaVirt
     python3 install.py --all
     ```
 
-  - If you have troubles with finding system frameworks or C++ stanard library,
+  - If you have troubles with finding system frameworks or C++ standard library,
     try using the homebrew llvm:
 
     ```
-    brea install llvm
+    brew install llvm
     cd ~/.vim/bundle/YouCompleteMe
     python3 install.py --system-libclang --all
     ```
@@ -1000,7 +1001,7 @@ Supported architectures are:
 ***clangd***:
 
 Typically, clangd is installed by the YCM installer (either with `--all` or with
-`--clangd-completer`). This downlaods a pre-built `clangd` binary for your
+`--clangd-completer`). This downloads a pre-built `clangd` binary for your
 architecture. If your OS or architecture is not supported or too old, you can
 install a compatible `clangd` and use [`g:ycm_clangd_binary_path`]() to point to
 it.
@@ -1009,7 +1010,7 @@ it.
 
 `libclang` can be enabled also with `--all` or `--clang-completer`. As with
 `clangd`, YCM will try and download a version of `libclang` that is suitable for
-your environemnt, but again if your environemnt can't be supported, you can
+your environment, but again if your environment can't be supported, you can
 build or acquire `libclang` for yourself and specify it when building, as:
 
 ```
@@ -1462,6 +1463,7 @@ project. Ensure the file exists at the root of your project.
 
 To get diagnostics in JavaScript, set the `checkJs` option to `true` in your
 `jsconfig.json` file:
+
 ```json
 {
     "compilerOptions": {
@@ -1554,7 +1556,6 @@ Some servers request settings from arbitrary 'sections' of configuration. There
 is no concept of configuration sections in vim, so you can specify an additional
 `config_sections` dictionary which maps section to a dictionary of config
 required by the server. For example:
-
 
 ```python
 def Settings( **kwargs ):
@@ -1682,10 +1683,10 @@ You can also style the line that has the warning/error with these groups:
 Note that the line highlighting groups only work when the
 [`g:ycm_enable_diagnostic_signs`](#the-gycm_enable_diagnostic_signs-option)
 option is set. If you want highlighted lines but no signs in the Vim gutter,
-set the `signcolumn` option to `off` in your vimrc:
+set the `signcolumn` option to `no` in your vimrc:
 
 ```viml
-set signcolumn=off
+set signcolumn=no
 ```
 
 The syntax groups used to highlight regions of text with errors/warnings:
@@ -1954,6 +1955,15 @@ Provides a list of symbols in current document, in the quickfix list. See also
 
 Supported in filetypes: `c, cpp, objc, objcpp, cuda, go, java, rust`
 
+#### The `GoToCallers` and `GoToCallees` subcommands
+
+Populate the quickfix list with the callers, or callees respectively, of the
+function associated with the current cursor position. The semantics of this
+differ depending on the filetype and language server.
+
+Only supported for LSP servers which provide the `callHierarchyProvider`
+capability.
+
 ### Semantic Information Commands
 
 These commands are useful for finding static information about the code, such
@@ -2186,6 +2196,7 @@ Get the number of YCM Diagnostic errors. If no errors are present, this function
 returns 0.
 
 For example:
+
 ```viml
   call youcompleteme#GetErrorCount()
 ```
@@ -2201,6 +2212,7 @@ Get the number of YCM Diagnostic warnings. If no warnings are present, this
 function returns 0.
 
 For example:
+
 ```viml
   call youcompleteme#GetWarningCount()
 ```
@@ -2302,6 +2314,7 @@ opened to the bottom of the current window and its height is set to fit all
 entries. This behavior can be overridden by using the `YcmLocationOpened`
 autocommand which is triggered while the cursor is in the location list window.
 For instance:
+
 ```viml
 function! s:CustomizeYcmLocationWindow()
   " Move the window to the top of the screen.
@@ -2323,6 +2336,7 @@ is opened to full width at the bottom of the screen and its height is set to fit
 all entries. This behavior can be overridden by using the `YcmQuickFixOpened`
 autocommand which is triggered while the cursor is in the quickfix window. For
 instance:
+
 ```viml
 function! s:CustomizeYcmQuickFixWindow()
   " Move the window to the top of the screen.
@@ -2587,6 +2601,7 @@ being filetype strings (like `python`, `cpp`, etc.) and values being unimportant
 
 The `*` key is special and matches all filetypes. Use this key if you want to
 completely disable filepath completion:
+
 ```viml
 let g:ycm_filepath_blacklist = {'*': 1}
 ```
@@ -3358,12 +3373,14 @@ To customize the way a new window is split, prefix the `GoTo*` command with one
 of the following modifiers: `:aboveleft`, `:belowright`, `:botright`,
 `:leftabove`, `:rightbelow`, `:topleft`, and `:vertical`. For instance, to
 split vertically to the right of the current window, run the command:
+
 ```viml
 :rightbelow vertical YcmCompleter GoTo
 ```
 
 To open in a new tab page, use the `:tab` modifier with the `'split'` or
 `'split-or-existing-window'` options e.g.:
+
 ```viml
 :tab YcmCompleter GoTo
 ```
@@ -3588,9 +3605,9 @@ Please note: The YCM maintainers do not specifically endorse nor necessarily hav
 
 ### 关于版本
 
-- ycm_core  核心版本: 45 (22 December 2021) 静态编译
-- libclang  版本: 13.0.0 (1 October 2021) [Clang][Clang]
-- Python    支持: 3.10.0 (4 October 2021) [Python][python-win-download]
+- ycm_core  核心版本: 45 (03 March 2022) 静态编译
+- libclang  版本: 13.0.1 (02 February 2022) [Clang][Clang]
+- Python    支持: 3.10.2 (14 January 2022) [Python][python-win-download]
 
 
 支持操作系统:
