@@ -48,6 +48,7 @@ Contents
     - [Completion String Ranking](#completion-string-ranking)
     - [General Semantic Completion](#general-semantic-completion)
     - [Signature Help](#signature-help)
+    - [Semantic Highlighting](#semantic-highlighting)
     - [C-family Semantic Completion](#c-family-semantic-completion)
     - [Java Semantic Completion](#java-semantic-completion)
     - [C# Semantic Completion](#c-semantic-completion)
@@ -737,6 +738,7 @@ Quick Feature Summary
 * Reference finding (`GoToReferences`)
 * Renaming symbols (`RefactorRename <new name>`)
 * Code formatting (`Format`)
+* Semantic highlighting
 
 ### C♯
 
@@ -812,6 +814,7 @@ Quick Feature Summary
 * Renaming symbols (`RefactorRename <new name>`)
 * Code formatting (`Format`)
 * Management of `rust-analyzer` server instance
+* Semantic highlighting
 
 ### Java
 
@@ -834,6 +837,7 @@ Quick Feature Summary
 * Detection of java projects
 * Execute custom server command (`ExecuteCommand <args>`)
 * Management of `jdt.ls` server instance
+* Semantic highlighting
 
 User Guide
 ----------
@@ -962,6 +966,74 @@ _NOTE_: No default mapping is provided because insert mappings are very
 difficult to create without breaking or overriding some existing functionality.
 Ctrl-l is not a suggestion, just an example.
 
+### Semantic highlighting
+
+**NOTE**: This feature is highly experimental and offered in the hope that it is
+useful. It shall not be considered stable; if you find issues with it, feel free
+to report them however.
+
+Semantic highlighting is the process where the buffer text is coloured according
+to the underlying semantic type of the word, rather than classic syntax
+highlighting based on regular expressions. This can be powerful additional data
+that we can process very quickly.
+
+This feature is only supported in Vim.
+
+For example, here is a function with classic highlighting:
+
+![highliting-classic](https://user-images.githubusercontent.com/10584846/173137003-a265e8b0-84db-4993-98f0-03ee81b9de94.png)
+
+And here is the same function with semantic highlighting:
+
+![highliting-semantic](https://user-images.githubusercontent.com/10584846/173137012-7547de0b-145f-45fa-ace3-18943acd2141.png)
+
+As you can see, the function calls, macros, etc. are correctly identified.
+
+This can be enabled globally with `let g:ycm_enable_semantic_highlighting=1` or
+per buffer, by setting `b:ycm_enable_semantic_highlighting`.
+
+#### Customising the highlight groups
+
+YCM uses text properties (see `:help text-prop-intro`) for semantic
+highlighting. In order to customise the coloring, you can define the text
+properties that are used.
+
+If you define a text property named `YCM_HL_<token type>`, then it will be used
+in place of the defaults. The `<token type>` is defined as the Language Server
+Protocol semantic token type, defined in the [LSP Spec](https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/#textDocument_semanticTokens).
+
+Some servers also use custom values. In this case, YCM prints a warning
+including the token type name that you can customise.
+
+For example, to render `parameter` tokens using the `Normal` highlight group,
+you can do this:
+
+```viml
+call prop_type_add( 'YCM_HL_parameter', { 'highlight': 'Normal' } )
+```
+
+More generally, this pattern can be useful for customising the groups:
+
+```viml
+let MY_YCM_HIGHLIGHT_GROUP = {
+      \   'typeParameter': 'PreProc',
+      \   'parameter': 'Normal',
+      \   'variable': 'Normal',
+      \   'property': 'Normal',
+      \   'enumMember': 'Normal',
+      \   'event': 'Special',
+      \   'member': 'Normal',
+      \   'method': 'Normal',
+      \   'class': 'Special',
+      \   'namespace': 'Special',
+      \ }
+
+for tokenType in keys( MY_YCM_HIGHLIGHT_GROUP )
+  call prop_type_add( 'YCM_HL_' . tokenType,
+                    \ { 'highlight': MY_YCM_HIGHLIGHT_GROUP[ tokenType ] } )
+endfor
+```
+
 ### General Semantic Completion
 
 You can use Ctrl+Space to trigger the completion suggestions anywhere, even
@@ -1027,7 +1099,7 @@ your environment, but again if your environment can't be supported, you can
 build or acquire `libclang` for yourself and specify it when building, as:
 
 ```
-$ EXTRA_CMAKE_ARGS='-DPATH_TO_LLVM_ROOT=/path/to/your/llvm' ./install.py --clang-compelter --system-libclang
+$ EXTRA_CMAKE_ARGS='-DPATH_TO_LLVM_ROOT=/path/to/your/llvm' ./install.py --clang-completer --system-libclang
 ```
 
 Please note that if using custom `clangd` or `libclang` it _must_ match the
@@ -1805,6 +1877,12 @@ _Options_ section for details.
 
 This command shows the full diagnostic text when the user's cursor is on the
 line with the diagnostic.
+
+An options argument can be passed. If the argument is `popup` the diagnostic
+text will be displayed in a popup at cursor position.
+
+If you prefer the detailed diagnostic to always be shown in a popup, then
+`let g:ycm_show_detailed_diag_in_popup=1`.
 
 ### The `:YcmDebugInfo` command
 
@@ -3212,10 +3290,24 @@ the user's cursor is on the line with the diagnostic. It basically calls
 
 Setting this option to an empty string will make sure no mapping is created.
 
+If you prefer the detailed diagnostic to be shown in a popup, then
+`let g:ycm_show_detailed_diag_in_popup=1`.
+
 Default: `<leader>d`
 
 ```viml
 let g:ycm_key_detailed_diagnostics = '<leader>d'
+```
+
+### The `g:ycm_show_detailed_diag_in_popup` option
+
+Makes `:YcmShowDetailedDiagnostic` always show in a popup rather than echoing to
+the command line.
+
+Default: 0
+
+```viml
+let g:ycm_show_detailed_diag_in_popup = 0
 ```
 
 ### The `g:ycm_global_ycm_extra_conf` option
@@ -3615,9 +3707,9 @@ Please note: The YCM maintainers do not specifically endorse nor necessarily hav
 
 ### 关于版本
 
-- ycm_core  核心版本: 45 (03 March 2022) 静态编译
-- libclang  版本: 13.0.1 (02 February 2022) [Clang][Clang]
-- Python    支持: 3.10.2 (14 January 2022) [Python][python-win-download]
+- ycm_core  核心版本: 45 (05 August 2022) 静态编译
+- libclang  版本: 14.0.6 (25 June 2022) [Clang][Clang]
+- Python    支持: 3.10.6 (02 August 2022) [Python][python-win-download]
 
 
 支持操作系统:
