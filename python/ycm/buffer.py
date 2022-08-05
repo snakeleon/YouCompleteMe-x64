@@ -18,6 +18,7 @@
 from ycm import vimsupport
 from ycm.client.event_notification import EventNotification
 from ycm.diagnostic_interface import DiagnosticInterface
+from ycm.semantic_highlighting import SemanticHighlighting
 
 
 # Emulates Vim buffer
@@ -35,6 +36,8 @@ class Buffer:
     self._diag_interface = DiagnosticInterface( bufnr, user_options )
     self._open_loclist_on_ycm_diags = user_options[
                                         'open_loclist_on_ycm_diags' ]
+    self._semantic_highlighting = SemanticHighlighting( bufnr,
+                                                        user_options )
     self.UpdateFromFileTypes( filetypes )
 
 
@@ -123,10 +126,26 @@ class Buffer:
     return self._diag_interface.RefreshDiagnosticsUI()
 
 
+  def DiagnosticsForLine( self, line_number ):
+    return self._diag_interface.DiagnosticsForLine( line_number )
+
+
   def UpdateFromFileTypes( self, filetypes ):
     self._filetypes = filetypes
     # We will set this to true if we ever receive any diagnostics asyncronously.
     self._async_diags = False
+
+
+  def SendSemanticTokensRequest( self ):
+    self._semantic_highlighting.SendRequest()
+
+
+  def SemanticTokensRequestReady( self ):
+    return self._semantic_highlighting.IsResponseReady()
+
+
+  def UpdateSemanticTokens( self ):
+    return self._semantic_highlighting.Update()
 
 
   def _ChangedTick( self ):

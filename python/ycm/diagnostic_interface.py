@@ -80,6 +80,10 @@ class DiagnosticInterface:
       self._UpdateLocationLists( open_on_edit )
 
 
+  def DiagnosticsForLine( self, line_number ):
+    return self._line_to_diags[ line_number ]
+
+
   def _ApplyDiagnosticFilter( self, diags ):
     filetypes = vimsupport.GetBufferFiletypes( self._bufnr )
     diag_filter = self._diag_filter.SubsetForTypes( filetypes )
@@ -139,6 +143,9 @@ class DiagnosticInterface:
             diag ):
           global YCM_VIM_PROPERTY_ID
 
+          # FIXME: This remove() gambit probably never works because the IDs are
+          # almost certain to not match
+          # Perhaps we should have AddTextProperty return the ID?
           diag_prop = vimsupport.DiagnosticProperty(
               YCM_VIM_PROPERTY_ID,
               name,
