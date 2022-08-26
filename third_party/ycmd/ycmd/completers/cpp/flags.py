@@ -34,8 +34,8 @@ ycm_core = ImportCore()
 # checks prefixes).
 INCLUDE_FLAGS = [ '-isystem', '-I', '-iquote', '-isysroot', '--sysroot',
                   '-gcc-toolchain', '-include-pch', '-include', '-iframework',
-                  '-F', '-imacros', '-idirafter', '-B' ]
-INCLUDE_FLAGS_WIN_STYLE = [ '/I' ]
+                  '-F', '-imacros', '-idirafter', '-B', '-imsvc' ]
+INCLUDE_FLAGS_WIN_STYLE = [ '/I', '-imsvc' ]
 PATH_FLAGS =  [ '--sysroot=' ] + INCLUDE_FLAGS
 
 # We need to remove --fcolor-diagnostics because it will cause shell escape
@@ -54,7 +54,8 @@ FILE_FLAGS_TO_SKIP = { '-MF',
                        '-MT',
                        '-MQ',
                        '-o',
-                       '--serialize-diagnostics' }
+                       '--serialize-diagnostics',
+                       '--' }
 
 # Use a regex to correctly detect c++/c language for both versioned and
 # non-versioned compiler executable names suffixes

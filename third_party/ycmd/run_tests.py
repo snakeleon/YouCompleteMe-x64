@@ -199,7 +199,7 @@ def BuildYcmdLibs( args ):
       if key in args.completers:
         build_cmd.extend( COMPLETERS[ key ][ 'build' ] )
 
-    if args.msvc:
+    if args.msvc and platform.system() == 'Windows':
       build_cmd.extend( [ '--msvc', str( args.msvc ) ] )
 
     if args.coverage:
@@ -354,8 +354,9 @@ def SetUpJavaCompleter():
   CACHE = p.join( LOMBOR_DIR, 'cache' )
 
   jar_name = f'lombok-{ LOMBOK_VERSION }.jar'
-  url = f'https://projectlombok.org/downloads/{ jar_name }'
-
+  url = (
+    f'https://github.com/ycm-core/llvm/releases/download/14.0.5/{ jar_name }'
+  )
   file_name = p.join( CACHE, jar_name )
 
   if not p.exists( CACHE ):
