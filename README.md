@@ -3820,9 +3820,9 @@ Please note: The YCM maintainers do not specifically endorse nor necessarily hav
 
 ### 关于版本
 
-- ycm_core  核心版本: 45 (05 August 2022) 静态编译
-- libclang  版本: 14.0.6 (25 June 2022) [Clang][Clang]
-- Python    支持: 3.10.6 (02 August 2022) [Python][python-win-download]
+- ycm_core  核心版本: 46 (28 September 2022) 静态编译
+- libclang  版本: 15.0.1 (20 September 2022) [Clang][Clang]
+- Python    支持: 3.10.7 (06 September 2022) [Python][python-win-download]
 
 
 支持操作系统:
