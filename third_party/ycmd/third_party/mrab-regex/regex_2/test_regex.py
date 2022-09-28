@@ -4072,6 +4072,48 @@ thing
         self.assertEqual(bool(regex.compile('(?#)')), True)
         self.assertEqual(bool(regex.compile('(?x)(?#)')), True)
 
+        # Git issue 394: Unexpected behaviour in fuzzy matching with limited character set with IGNORECASE flag
+        self.assertEqual(regex.findall(r'(\d+){i<=2:[ab]}', '123X4Y5'),
+          ['123', '4', '5'])
+        self.assertEqual(regex.findall(r'(?i)(\d+){i<=2:[ab]}', '123X4Y5'),
+          ['123', '4', '5'])
+
+        # Git issue 403: Fuzzy matching with wrong distance (unnecessary substitutions)
+        self.assertEqual(regex.match(r'^(test){e<=5}$', 'terstin',
+          flags=regex.B).fuzzy_counts, (0, 3, 0))
+
+        # Git issue 408: regex fails with a quantified backreference but succeeds with repeated backref
+        self.assertEqual(bool(regex.match(r"(?:(x*)\1\1\1)*x$", "x" * 5)), True)
+        self.assertEqual(bool(regex.match(r"(?:(x*)\1{3})*x$", "x" * 5)), True)
+
+        # Git issue 415: Fuzzy character restrictions don't apply to insertions at "right edge"
+        self.assertEqual(regex.match(r't(?:es){s<=1:\d}t', 'te5t').group(),
+          'te5t')
+        self.assertEqual(regex.match(r't(?:es){s<=1:\d}t', 'tezt'), None)
+        self.assertEqual(regex.match(r't(?:es){i<=1:\d}t', 'tes5t').group(),
+          'tes5t')
+        self.assertEqual(regex.match(r't(?:es){i<=1:\d}t', 'teszt'), None)
+        self.assertEqual(regex.match(r't(?:es){i<=1:\d}t',
+          'tes5t').fuzzy_changes, ([], [3], []))
+        self.assertEqual(regex.match(r't(es){i<=1,0<e<=1}t', 'tes5t').group(),
+          'tes5t')
+        self.assertEqual(regex.match(r't(?:es){i<=1,0<e<=1:\d}t',
+          'tes5t').fuzzy_changes, ([], [3], []))
+
+        # Git issue 421: Fatal Python error: Segmentation fault
+        self.assertEqual(regex.compile("(\d+ week|\d+ days)").split("7 days"), ['', '7 days', ''])
+        self.assertEqual(regex.compile("(\d+ week|\d+ days)").split("10 days"), ['', '10 days', ''])
+
+        self.assertEqual(regex.compile("[ ]* Name[ ]*\* ").search("  Name *"), None)
+
+        self.assertEqual(regex.compile('a|\\.*pb\\.py').search('.geojs'), None)
+
+        p = regex.compile('(?<=(?:\\A|\\W|_))(\\d+ decades? ago|\\d+ minutes ago|\\d+ seconds ago|in \\d+ decades?|\\d+ months ago|in \\d+ minutes|\\d+ minute ago|in \\d+ seconds|\\d+ second ago|\\d+ years ago|in \\d+ months|\\d+ month ago|\\d+ weeks ago|\\d+ hours ago|in \\d+ minute|in \\d+ second|in \\d+ years|\\d+ year ago|in \\d+ month|in \\d+ weeks|\\d+ week ago|\\d+ days ago|in \\d+ hours|\\d+ hour ago|in \\d+ year|in \\d+ week|in \\d+ days|\\d+ day ago|in \\d+ hour|\\d+ min ago|\\d+ sec ago|\\d+ yr ago|\\d+ mo ago|\\d+ wk ago|in \\d+ day|\\d+ hr ago|in \\d+ min|in \\d+ sec|in \\d+ yr|in \\d+ mo|in \\d+ wk|in \\d+ hr)(?=(?:\\Z|\\W|_))', flags=regex.I | regex.V0)
+        self.assertEqual(p.search('1 month ago').group(), '1 month ago')
+        self.assertEqual(p.search('9 hours 1 minute ago').group(), '1 minute ago')
+        self.assertEqual(p.search('10 months 1 hour ago').group(), '1 hour ago')
+        self.assertEqual(p.search('1 month 10 hours ago').group(), '10 hours ago')
+
     def test_fuzzy_ext(self):
         self.assertEqual(bool(regex.fullmatch(r'(?r)(?:a){e<=1:[a-z]}', 'e')),
           True)

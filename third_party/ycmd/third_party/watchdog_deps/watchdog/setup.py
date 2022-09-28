@@ -78,7 +78,7 @@ if is_macos or os.getenv('FORCE_MACOS_MACHINE', '0') == '1':
     ]
 
 extras_require = {
-    'watchmedo': ['PyYAML>=3.10', 'argh>=0.24.1'],
+    'watchmedo': ['PyYAML>=3.10'],
 }
 
 with open('README.rst', encoding='utf-8') as f:
@@ -91,10 +91,11 @@ setup(name="watchdog",
       version=version.VERSION_STRING,
       description="Filesystem events monitoring",
       long_description=readme + '\n\n' + changelog,
+      long_description_content_type="text/x-rst",
       author="Yesudeep Mangalapilly",
       author_email="yesudeep@gmail.com",
       license="Apache License 2.0",
-      url="http://github.com/gorakhargosh/watchdog",
+      url="https://github.com/gorakhargosh/watchdog",
       keywords=' '.join([
           'python',
           'filesystem',

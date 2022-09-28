@@ -8,6 +8,11 @@ Note
 
 The re module's behaviour with zero-width matches changed in Python 3.7, and this module will follow that behaviour when compiled for Python 3.7.
 
+PyPy
+----
+
+This module is targeted at CPython. It expects that all codepoints are the same width, so it won't behave properly with PyPy outside U+0000..U+007F because PyPy stores strings as UTF-8.
+
 Old vs new behaviour
 --------------------
 
@@ -129,7 +134,7 @@ The regex module releases the GIL during matching on instances of the built-in (
 Unicode
 -------
 
-This module supports Unicode 13.0.0.
+This module supports Unicode 14.0.0.
 
 Full Unicode case-folding is supported.
 

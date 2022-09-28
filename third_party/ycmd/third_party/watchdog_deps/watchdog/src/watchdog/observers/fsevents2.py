@@ -17,7 +17,7 @@
 """
 :module: watchdog.observers.fsevents2
 :synopsis: FSEvents based emitter implementation.
-:platforms: Mac OS X
+:platforms: macOS
 """
 
 import os
@@ -183,7 +183,7 @@ class FSEventsEmitter(EventEmitter):
     """
 
     def __init__(self, event_queue, watch, timeout=DEFAULT_EMITTER_TIMEOUT):
-        EventEmitter.__init__(self, event_queue, watch, timeout)
+        super().__init__(event_queue, watch, timeout)
         self._fsevents = FSEventsQueue(watch.path)
         self._fsevents.start()
 
@@ -205,7 +205,7 @@ class FSEventsEmitter(EventEmitter):
                 # Internal moves appears to always be consecutive in the same
                 # buffer and have IDs differ by exactly one (while others
                 # don't) making it possible to pair up the two events coming
-                # from a singe move operation. (None of this is documented!)
+                # from a single move operation. (None of this is documented!)
                 # Otherwise, guess whether file was moved in or out.
                 # TODO: handle id wrapping
                 if (i + 1 < len(events) and events[i + 1].is_renamed
@@ -225,7 +225,7 @@ class FSEventsEmitter(EventEmitter):
                     self.queue_event(DirModifiedEvent(os.path.dirname(event.path)))
                 # TODO: generate events for tree
 
-            elif event.is_modified or event.is_inode_meta_mod or event.is_xattr_mod :
+            elif event.is_modified or event.is_inode_meta_mod or event.is_xattr_mod:
                 cls = DirModifiedEvent if event.is_directory else FileModifiedEvent
                 self.queue_event(cls(event.path))
 
@@ -243,4 +243,4 @@ class FSEventsEmitter(EventEmitter):
 
 class FSEventsObserver2(BaseObserver):
     def __init__(self, timeout=DEFAULT_OBSERVER_TIMEOUT):
-        BaseObserver.__init__(self, emitter_class=FSEventsEmitter, timeout=timeout)
+        super().__init__(emitter_class=FSEventsEmitter, timeout=timeout)

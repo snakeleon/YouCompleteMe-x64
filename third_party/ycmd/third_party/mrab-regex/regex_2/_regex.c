@@ -6388,13 +6388,13 @@ Py_LOCAL_INLINE(BOOL) build_fast_tables_rev(RE_State* state, RE_Node* node,
 
 /* Performs a string search. */
 Py_LOCAL_INLINE(Py_ssize_t) string_search(RE_State* state, RE_Node* node,
-  Py_ssize_t text_pos, Py_ssize_t limit, BOOL* is_partial) {
+  Py_ssize_t text_pos, Py_ssize_t limit, BOOL try_fast, BOOL* is_partial) {
     Py_ssize_t found_pos;
 
     *is_partial = FALSE;
 
     /* Has the node been initialised for fast searching, if necessary? */
-    if (!(node->status & RE_STATUS_FAST_INIT)) {
+    if (try_fast && !(node->status & RE_STATUS_FAST_INIT)) {
         /* Ideally the pattern should immutable and shareable across threads.
          * Internally, however, it isn't. For safety we need to hold the GIL.
          */
@@ -6409,7 +6409,7 @@ Py_LOCAL_INLINE(Py_ssize_t) string_search(RE_State* state, RE_Node* node,
         release_GIL(state);
     }
 
-    if (node->string.bad_character_offset) {
+    if (try_fast && node->string.bad_character_offset) {
         /* Start with a fast search. This will find the string if it's complete
          * (i.e. not truncated).
          */
@@ -6576,13 +6576,13 @@ Py_LOCAL_INLINE(Py_ssize_t) string_search_fld_rev(RE_State* state, RE_Node*
 
 /* Performs a string search, ignoring case. */
 Py_LOCAL_INLINE(Py_ssize_t) string_search_ign(RE_State* state, RE_Node* node,
-  Py_ssize_t text_pos, Py_ssize_t limit, BOOL* is_partial) {
+  Py_ssize_t text_pos, Py_ssize_t limit, BOOL try_fast, BOOL* is_partial) {
     Py_ssize_t found_pos;
 
     *is_partial = FALSE;
 
     /* Has the node been initialised for fast searching, if necessary? */
-    if (!(node->status & RE_STATUS_FAST_INIT)) {
+    if (try_fast && !(node->status & RE_STATUS_FAST_INIT)) {
         /* Ideally the pattern should immutable and shareable across threads.
          * Internally, however, it isn't. For safety we need to hold the GIL.
          */
@@ -6597,7 +6597,7 @@ Py_LOCAL_INLINE(Py_ssize_t) string_search_ign(RE_State* state, RE_Node* node,
         release_GIL(state);
     }
 
-    if (node->string.bad_character_offset) {
+    if (try_fast && node->string.bad_character_offset) {
         /* Start with a fast search. This will find the string if it's complete
          * (i.e. not truncated).
          */
@@ -6617,13 +6617,14 @@ Py_LOCAL_INLINE(Py_ssize_t) string_search_ign(RE_State* state, RE_Node* node,
 
 /* Performs a string search, backwards, ignoring case. */
 Py_LOCAL_INLINE(Py_ssize_t) string_search_ign_rev(RE_State* state, RE_Node*
-  node, Py_ssize_t text_pos, Py_ssize_t limit, BOOL* is_partial) {
+  node, Py_ssize_t text_pos, Py_ssize_t limit, BOOL try_fast, BOOL* is_partial)
+  {
     Py_ssize_t found_pos;
 
     *is_partial = FALSE;
 
     /* Has the node been initialised for fast searching, if necessary? */
-    if (!(node->status & RE_STATUS_FAST_INIT)) {
+    if (try_fast && !(node->status & RE_STATUS_FAST_INIT)) {
         /* Ideally the pattern should immutable and shareable across threads.
          * Internally, however, it isn't. For safety we need to hold the GIL.
          */
@@ -6638,7 +6639,7 @@ Py_LOCAL_INLINE(Py_ssize_t) string_search_ign_rev(RE_State* state, RE_Node*
         release_GIL(state);
     }
 
-    if (node->string.bad_character_offset) {
+    if (try_fast && node->string.bad_character_offset) {
         /* Start with a fast search. This will find the string if it's complete
          * (i.e. not truncated).
          */
@@ -6658,13 +6659,13 @@ Py_LOCAL_INLINE(Py_ssize_t) string_search_ign_rev(RE_State* state, RE_Node*
 
 /* Performs a string search, backwards. */
 Py_LOCAL_INLINE(Py_ssize_t) string_search_rev(RE_State* state, RE_Node* node,
-  Py_ssize_t text_pos, Py_ssize_t limit, BOOL* is_partial) {
+  Py_ssize_t text_pos, Py_ssize_t limit, BOOL try_fast, BOOL* is_partial) {
     Py_ssize_t found_pos;
 
     *is_partial = FALSE;
 
     /* Has the node been initialised for fast searching, if necessary? */
-    if (!(node->status & RE_STATUS_FAST_INIT)) {
+    if (try_fast && !(node->status & RE_STATUS_FAST_INIT)) {
         /* Ideally the pattern should immutable and shareable across threads.
          * Internally, however, it isn't. For safety we need to hold the GIL.
          */
@@ -6679,7 +6680,7 @@ Py_LOCAL_INLINE(Py_ssize_t) string_search_rev(RE_State* state, RE_Node* node,
         release_GIL(state);
     }
 
-    if (node->string.bad_character_offset) {
+    if (try_fast && node->string.bad_character_offset) {
         /* Start with a fast search. This will find the string if it's complete
          * (i.e. not truncated).
          */
@@ -8077,7 +8078,8 @@ Py_LOCAL_INLINE(Py_ssize_t) search_start_STRING(RE_State* state, RE_Node* node,
     if ((node->status & RE_STATUS_REQUIRED) && text_pos == state->req_pos)
         return text_pos;
 
-    return string_search(state, node, text_pos, state->slice_end, is_partial);
+    return string_search(state, node, text_pos, state->slice_end, TRUE,
+      is_partial);
 }
 
 /* Searches for a string, ignoring case. */
@@ -8116,7 +8118,7 @@ Py_LOCAL_INLINE(Py_ssize_t) search_start_STRING_IGN(RE_State* state, RE_Node*
     if ((node->status & RE_STATUS_REQUIRED) && text_pos == state->req_pos)
         return text_pos;
 
-    return string_search_ign(state, node, text_pos, state->slice_end,
+    return string_search_ign(state, node, text_pos, state->slice_end, TRUE,
       is_partial);
 }
 
@@ -8129,7 +8131,7 @@ Py_LOCAL_INLINE(Py_ssize_t) search_start_STRING_IGN_REV(RE_State* state,
         return text_pos;
 
     return string_search_ign_rev(state, node, text_pos, state->slice_start,
-      is_partial);
+      TRUE, is_partial);
 }
 
 /* Searches for a string, backwards. */
@@ -8140,7 +8142,7 @@ Py_LOCAL_INLINE(Py_ssize_t) search_start_STRING_REV(RE_State* state, RE_Node*
     if ((node->status & RE_STATUS_REQUIRED) && text_pos == state->req_pos)
         return text_pos;
 
-    return string_search_rev(state, node, text_pos, state->slice_start,
+    return string_search_rev(state, node, text_pos, state->slice_start, TRUE,
       is_partial);
 }
 
@@ -9466,11 +9468,13 @@ too_wide:
     return NULL;
 }
 
+/* Calculates the total number of errors. */
 Py_LOCAL_INLINE(size_t) total_errors(size_t* fuzzy_counts) {
     return fuzzy_counts[RE_FUZZY_DEL] + fuzzy_counts[RE_FUZZY_INS] +
       fuzzy_counts[RE_FUZZY_SUB];
 }
 
+/* Calculates the total cost of the errors. */
 Py_LOCAL_INLINE(size_t) total_cost(size_t* fuzzy_counts, RE_Node* fuzzy_node) {
     RE_CODE* values;
 
@@ -9589,7 +9593,7 @@ Py_LOCAL_INLINE(int) check_fuzzy_partial(RE_State* state, Py_ssize_t text_pos)
     return RE_ERROR_FAILURE;
 }
 
-/* Records a change in a fuzzy change. */
+/* Records a fuzzy change. */
 Py_LOCAL_INLINE(BOOL) record_fuzzy(RE_State* state, RE_UINT8 fuzzy_type,
   Py_ssize_t text_pos) {
     RE_FuzzyChangesList* change_list;
@@ -9764,6 +9768,9 @@ Py_LOCAL_INLINE(BOOL) fuzzy_ext_match(RE_State* state, RE_Node* fuzzy_node,
   Py_ssize_t pos) {
     RE_Node* test_node;
 
+    if (!fuzzy_node)
+        return TRUE;
+
     test_node = fuzzy_node->nonstring.next_2.node;
     if (!test_node)
         return TRUE;
@@ -9822,6 +9829,13 @@ Py_LOCAL_INLINE(BOOL) fuzzy_ext_match(RE_State* state, RE_Node* fuzzy_node,
     case RE_OP_SET_SYM_DIFF:
     case RE_OP_SET_UNION:
         return pos < state->slice_end && matches_SET(state->encoding,
+          state->locale_info, test_node, state->char_at(state->text, pos)) ==
+          test_node->match;
+    case RE_OP_SET_DIFF_IGN:
+    case RE_OP_SET_INTER_IGN:
+    case RE_OP_SET_SYM_DIFF_IGN:
+    case RE_OP_SET_UNION_IGN:
+        return pos < state->slice_end && matches_SET_IGN(state->encoding,
           state->locale_info, test_node, state->char_at(state->text, pos)) ==
           test_node->match;
     }
@@ -9935,6 +9949,8 @@ Py_LOCAL_INLINE(int) next_fuzzy_match_item(RE_State* state, RE_FuzzyData* data,
     if (!this_error_permitted(state, data->fuzzy_type))
         return RE_ERROR_FAILURE;
 
+    data->new_text_pos = state->text_pos;
+
     switch (data->fuzzy_type) {
     case RE_FUZZY_DEL:
         /* Could a character at text_pos have been deleted? */
@@ -9945,6 +9961,7 @@ Py_LOCAL_INLINE(int) next_fuzzy_match_item(RE_State* state, RE_FuzzyData* data,
             data->new_string_pos += step;
         else
             data->new_node = data->new_node->next_1.node;
+
         return RE_ERROR_SUCCESS;
     case RE_FUZZY_INS:
         /* Could the character at text_pos have been inserted? */
@@ -9961,16 +9978,18 @@ Py_LOCAL_INLINE(int) next_fuzzy_match_item(RE_State* state, RE_FuzzyData* data,
                 return RE_ERROR_FAILURE;
 
             data->new_text_pos = new_pos;
+
             return RE_ERROR_SUCCESS;
         }
 
-        return check_fuzzy_partial(state, new_pos);
+        return check_fuzzy_partial(state, data->new_text_pos);
     case RE_FUZZY_SUB:
         /* Could the character at text_pos have been substituted? */
         if (step == 0)
             return RE_ERROR_FAILURE;
 
         new_pos = data->new_text_pos + step;
+
         if (state->slice_start <= new_pos && new_pos <= state->slice_end) {
             if (!fuzzy_ext_match(state, state->fuzzy_node, data->new_text_pos))
                 return RE_ERROR_FAILURE;
@@ -9992,8 +10011,8 @@ Py_LOCAL_INLINE(int) next_fuzzy_match_item(RE_State* state, RE_FuzzyData* data,
 }
 
 /* Tries a fuzzy match of an item of width 0 or 1. */
-Py_LOCAL_INLINE(int) fuzzy_match_item(RE_State* state, BOOL search, Py_ssize_t*
-  text_pos, RE_Node** node, RE_INT8 step) {
+Py_LOCAL_INLINE(int) fuzzy_match_item(RE_State* state, BOOL search, RE_Node**
+  node, RE_INT8 step) {
     size_t* fuzzy_counts;
     RE_FuzzyData data;
     TRACE(("<<fuzzy_match_item>>\n"))
@@ -10005,7 +10024,6 @@ Py_LOCAL_INLINE(int) fuzzy_match_item(RE_State* state, BOOL search, Py_ssize_t*
         return RE_ERROR_FAILURE;
     }
 
-    data.new_text_pos = *text_pos;
     data.new_node = *node;
 
     if (step == 0) {
@@ -10022,8 +10040,7 @@ Py_LOCAL_INLINE(int) fuzzy_match_item(RE_State* state, BOOL search, Py_ssize_t*
     /* Permit insertion except initially when searching (it's better just to
      * start searching one character later).
      */
-    data.permit_insertion = !search || data.new_text_pos !=
-      state->search_anchor;
+    data.permit_insertion = !search || state->text_pos != state->search_anchor;
 
     for (data.fuzzy_type = 0; data.fuzzy_type < RE_FUZZY_COUNT;
       data.fuzzy_type++) {
@@ -10045,7 +10062,7 @@ found:
         return RE_ERROR_MEMORY;
     if (!push_int8(state, &state->bstack, step))
         return RE_ERROR_MEMORY;
-    if (!push_ssize(state, &state->bstack, *text_pos))
+    if (!push_ssize(state, &state->bstack, state->text_pos))
         return RE_ERROR_MEMORY;
     if (!push_uint8(state, &state->bstack, data.fuzzy_type))
         return RE_ERROR_MEMORY;
@@ -10061,7 +10078,7 @@ found:
     ++fuzzy_counts[data.fuzzy_type];
     ++state->capture_change;
 
-    *text_pos = data.new_text_pos;
+    state->text_pos = data.new_text_pos;
     *node = data.new_node;
 
     TRACE(("    fuzzy_counts is (%zd, %zd, %zd)\n", fuzzy_counts[0],
@@ -10072,9 +10089,8 @@ found:
 
 /* Retries a fuzzy match of a item of width 0 or 1. */
 Py_LOCAL_INLINE(int) retry_fuzzy_match_item(RE_State* state, RE_UINT8 op, BOOL
-  search, Py_ssize_t* text_pos, RE_Node** node, BOOL advance) {
+  search, RE_Node** node, BOOL advance) {
     size_t* fuzzy_counts;
-    Py_ssize_t curr_text_pos;
     RE_FuzzyData data;
     RE_INT8 step;
     RE_Node* curr_node;
@@ -10088,14 +10104,13 @@ Py_LOCAL_INLINE(int) retry_fuzzy_match_item(RE_State* state, RE_UINT8 op, BOOL
 
     if (!pop_uint8(state, &state->bstack, &data.fuzzy_type))
         return RE_ERROR_MEMORY;
-    if (!pop_ssize(state, &state->bstack, &curr_text_pos))
+    if (!pop_ssize(state, &state->bstack, &state->text_pos))
         return RE_ERROR_MEMORY;
     if (!pop_int8(state, &state->bstack, &step))
         return RE_ERROR_MEMORY;
     if (!pop_pointer(state, &state->bstack, (void*)&curr_node))
         return RE_ERROR_MEMORY;
 
-    data.new_text_pos = curr_text_pos;
     data.new_node = curr_node;
     data.step = step;
 
@@ -10107,8 +10122,7 @@ Py_LOCAL_INLINE(int) retry_fuzzy_match_item(RE_State* state, RE_UINT8 op, BOOL
     /* Permit insertion except initially when searching (it's better just to
      * start searching one character later).
      */
-    data.permit_insertion = !search || data.new_text_pos !=
-      state->search_anchor;
+    data.permit_insertion = !search || state->text_pos != state->search_anchor;
 
     step = advance ? data.step : 0;
 
@@ -10132,7 +10146,7 @@ found:
         return RE_ERROR_MEMORY;
     if (!push_int8(state, &state->bstack, step))
         return RE_ERROR_MEMORY;
-    if (!push_ssize(state, &state->bstack, curr_text_pos))
+    if (!push_ssize(state, &state->bstack, state->text_pos))
         return RE_ERROR_MEMORY;
     if (!push_uint8(state, &state->bstack, data.fuzzy_type))
         return RE_ERROR_MEMORY;
@@ -10148,7 +10162,7 @@ found:
     ++fuzzy_counts[data.fuzzy_type];
     ++state->capture_change;
 
-    *text_pos = data.new_text_pos;
+    state->text_pos = data.new_text_pos;
     *node = data.new_node;
 
     TRACE(("    fuzzy_counts is (%zd, %zd, %zd)\n", fuzzy_counts[0],
@@ -10158,19 +10172,18 @@ found:
 }
 
 /* Tries a fuzzy insertion of characters, initially 0, after a string. */
-Py_LOCAL_INLINE(int) fuzzy_insert(RE_State* state, Py_ssize_t text_pos, int
-  step, RE_Node* node) {
+Py_LOCAL_INLINE(int) fuzzy_insert(RE_State* state, int step, RE_Node* node) {
     Py_ssize_t limit;
 
     limit = step > 0 ? state->slice_end : state->slice_start;
 
-    if (text_pos == limit || !insertion_permitted(state, state->fuzzy_node,
-      state->fuzzy_counts))
+    if (state->text_pos == limit || !insertion_permitted(state,
+      state->fuzzy_node, state->fuzzy_counts))
         return RE_ERROR_SUCCESS;
 
     if (!push_int8(state, &state->bstack, (RE_INT8)step))
         return RE_ERROR_MEMORY;
-    if (!push_ssize(state, &state->bstack, text_pos))
+    if (!push_ssize(state, &state->bstack, state->text_pos))
         return RE_ERROR_MEMORY;
     if (!push_ssize(state, &state->bstack, 0))
         return RE_ERROR_MEMORY;
@@ -10185,11 +10198,9 @@ Py_LOCAL_INLINE(int) fuzzy_insert(RE_State* state, Py_ssize_t text_pos, int
 }
 
 /* Retries a fuzzy insertion of characters after a string. */
-Py_LOCAL_INLINE(int) retry_fuzzy_insert(RE_State* state, Py_ssize_t *text_pos,
-  RE_Node** node) {
+Py_LOCAL_INLINE(int) retry_fuzzy_insert(RE_State* state, RE_Node** node) {
     RE_Node* curr_node;
     Py_ssize_t count;
-    Py_ssize_t curr_text_pos;
     RE_INT8 step;
     Py_ssize_t limit;
 
@@ -10199,15 +10210,16 @@ Py_LOCAL_INLINE(int) retry_fuzzy_insert(RE_State* state, Py_ssize_t *text_pos,
         return RE_ERROR_MEMORY;
     if (!pop_ssize(state, &state->bstack, &count))
         return RE_ERROR_MEMORY;
-    if (!pop_ssize(state, &state->bstack, &curr_text_pos))
+    if (!pop_ssize(state, &state->bstack, &state->text_pos))
         return RE_ERROR_MEMORY;
     if (!pop_int8(state, &state->bstack, &step))
         return RE_ERROR_MEMORY;
 
     limit = step > 0 ? state->slice_end : state->slice_start;
 
-    if (curr_text_pos == limit || !insertion_permitted(state,
-      state->fuzzy_node, state->fuzzy_counts)) {
+    if (state->text_pos == limit || !insertion_permitted(state,
+      state->fuzzy_node, state->fuzzy_counts) || !fuzzy_ext_match(state,
+      curr_node->nonstring.next_2.node, state->text_pos)) {
         while (count > 0) {
             unrecord_fuzzy(state);
             --state->fuzzy_counts[RE_FUZZY_INS];
@@ -10217,12 +10229,12 @@ Py_LOCAL_INLINE(int) retry_fuzzy_insert(RE_State* state, Py_ssize_t *text_pos,
         return RE_ERROR_FAILURE;
     }
 
-    curr_text_pos += step;
+    state->text_pos += step;
     ++count;
 
     if (!push_int8(state, &state->bstack, step))
         return RE_ERROR_MEMORY;
-    if (!push_ssize(state, &state->bstack, curr_text_pos))
+    if (!push_ssize(state, &state->bstack, state->text_pos))
         return RE_ERROR_MEMORY;
     if (!push_ssize(state, &state->bstack, count))
         return RE_ERROR_MEMORY;
@@ -10233,21 +10245,20 @@ Py_LOCAL_INLINE(int) retry_fuzzy_insert(RE_State* state, Py_ssize_t *text_pos,
 
     /* bstack: step text_pos count node FUZZY_INSERT */
 
-    if (!record_fuzzy(state, RE_FUZZY_INS, curr_text_pos - step))
+    if (!record_fuzzy(state, RE_FUZZY_INS, state->text_pos - step))
         return RE_ERROR_MEMORY;
 
     ++state->fuzzy_counts[RE_FUZZY_INS];
     ++state->capture_change;
 
-    *text_pos = curr_text_pos;
     *node = curr_node;
 
     return RE_ERROR_SUCCESS;
 }
 
 /* Tries a fuzzy match of a string. */
-Py_LOCAL_INLINE(int) fuzzy_match_string(RE_State* state, BOOL search,
-  Py_ssize_t* text_pos, RE_Node* node, Py_ssize_t* string_pos, RE_INT8 step) {
+Py_LOCAL_INLINE(int) fuzzy_match_string(RE_State* state, BOOL search, RE_Node*
+  node, Py_ssize_t* string_pos, RE_INT8 step) {
     size_t* fuzzy_counts;
     RE_FuzzyData data;
     TRACE(("<<fuzzy_match_string>>\n"))
@@ -10259,15 +10270,13 @@ Py_LOCAL_INLINE(int) fuzzy_match_string(RE_State* state, BOOL search,
         return RE_ERROR_FAILURE;
     }
 
-    data.new_text_pos = *text_pos;
     data.new_string_pos = *string_pos;
     data.step = step;
 
     /* Permit insertion except initially when searching (it's better just to
      * start searching one character later).
      */
-    data.permit_insertion = !search || data.new_text_pos !=
-      state->search_anchor;
+    data.permit_insertion = !search || state->text_pos != state->search_anchor;
 
     for (data.fuzzy_type = 0; data.fuzzy_type < RE_FUZZY_COUNT;
       data.fuzzy_type++) {
@@ -10291,7 +10300,7 @@ found:
         return RE_ERROR_MEMORY;
     if (!push_ssize(state, &state->bstack, *string_pos))
         return RE_ERROR_MEMORY;
-    if (!push_ssize(state, &state->bstack, *text_pos))
+    if (!push_ssize(state, &state->bstack, state->text_pos))
         return RE_ERROR_MEMORY;
     if (!push_uint8(state, &state->bstack, data.fuzzy_type))
         return RE_ERROR_MEMORY;
@@ -10300,14 +10309,13 @@ found:
 
     /* bstack: node step string_pos text_pos fuzzy_type op */
 
-    if (!record_fuzzy(state, data.fuzzy_type, data.fuzzy_type == RE_FUZZY_DEL ?
-      data.new_text_pos : data.new_text_pos - data.step))
+    if (!record_fuzzy(state, data.fuzzy_type, state->text_pos))
         return RE_ERROR_MEMORY;
 
     ++fuzzy_counts[data.fuzzy_type];
     ++state->capture_change;
 
-    *text_pos = data.new_text_pos;
+    state->text_pos = data.new_text_pos;
     *string_pos = data.new_string_pos;
 
     TRACE(("    fuzzy_counts is (%zd, %zd, %zd)\n", fuzzy_counts[0],
@@ -10318,11 +10326,9 @@ found:
 
 /* Retries a fuzzy match of a string. */
 Py_LOCAL_INLINE(int) retry_fuzzy_match_string(RE_State* state, RE_UINT8 op,
-  BOOL search, Py_ssize_t* text_pos, RE_Node** node, Py_ssize_t* string_pos) {
+  BOOL search, RE_Node** node, Py_ssize_t* string_pos) {
     size_t* fuzzy_counts;
     RE_FuzzyData data;
-    Py_ssize_t curr_text_pos;
-    Py_ssize_t curr_string_pos;
     RE_Node* new_node;
     TRACE(("<<retry_fuzzy_match_string>>\n"))
 
@@ -10334,25 +10340,23 @@ Py_LOCAL_INLINE(int) retry_fuzzy_match_string(RE_State* state, RE_UINT8 op,
 
     if (!pop_uint8(state, &state->bstack, &data.fuzzy_type))
         return RE_ERROR_MEMORY;
-    if (!pop_ssize(state, &state->bstack, &curr_text_pos))
+    if (!pop_ssize(state, &state->bstack, &state->text_pos))
         return RE_ERROR_MEMORY;
-    if (!pop_ssize(state, &state->bstack, &curr_string_pos))
+    if (!pop_ssize(state, &state->bstack, string_pos))
         return RE_ERROR_MEMORY;
     if (!pop_int8(state, &state->bstack, &data.step))
         return RE_ERROR_MEMORY;
     if (!pop_pointer(state, &state->bstack, (void*)&new_node))
         return RE_ERROR_MEMORY;
 
-    data.new_text_pos = curr_text_pos;
-    data.new_string_pos = curr_string_pos;
+    data.new_string_pos = *string_pos;
 
     --fuzzy_counts[data.fuzzy_type];
 
     /* Permit insertion except initially when searching (it's better just to
      * start searching one character later).
      */
-    data.permit_insertion = !search || data.new_text_pos !=
-      state->search_anchor;
+    data.permit_insertion = !search || state->text_pos != state->search_anchor;
 
     for (++data.fuzzy_type; data.fuzzy_type < RE_FUZZY_COUNT;
       data.fuzzy_type++) {
@@ -10374,17 +10378,16 @@ found:
         return RE_ERROR_MEMORY;
     if (!push_int8(state, &state->bstack, data.step))
         return RE_ERROR_MEMORY;
-    if (!push_ssize(state, &state->bstack, curr_string_pos))
+    if (!push_ssize(state, &state->bstack, *string_pos))
         return RE_ERROR_MEMORY;
-    if (!push_ssize(state, &state->bstack, curr_text_pos))
+    if (!push_ssize(state, &state->bstack, state->text_pos))
         return RE_ERROR_MEMORY;
     if (!push_uint8(state, &state->bstack, data.fuzzy_type))
         return RE_ERROR_MEMORY;
     if (!push_uint8(state, &state->bstack, op))
         return RE_ERROR_MEMORY;
 
-    if (!record_fuzzy(state, data.fuzzy_type, data.fuzzy_type == RE_FUZZY_DEL ?
-      data.new_text_pos : data.new_text_pos - data.step))
+    if (!record_fuzzy(state, data.fuzzy_type, state->text_pos))
         return RE_ERROR_MEMORY;
 
     /* bstack: node step string_pos text_pos fuzzy_type op */
@@ -10392,7 +10395,7 @@ found:
     ++fuzzy_counts[data.fuzzy_type];
     ++state->capture_change;
 
-    *text_pos = data.new_text_pos;
+    state->text_pos = data.new_text_pos;
     *node = new_node;
     *string_pos = data.new_string_pos;
 
@@ -10407,43 +10410,51 @@ Py_LOCAL_INLINE(int) next_fuzzy_match_string_fld(RE_State* state, RE_FuzzyData*
   data) {
     int new_pos;
 
-    if (this_error_permitted(state, data->fuzzy_type)) {
-        switch (data->fuzzy_type) {
-        case RE_FUZZY_DEL:
-            /* Could a character at text_pos have been deleted? */
-            data->new_string_pos += data->step;
-            return RE_ERROR_SUCCESS;
-        case RE_FUZZY_INS:
-            /* Could the character at text_pos have been inserted? */
-            if (!data->permit_insertion)
+    if (!this_error_permitted(state, data->fuzzy_type))
+        return RE_ERROR_FAILURE;
+
+    data->new_text_pos = state->text_pos;
+
+    switch (data->fuzzy_type) {
+    case RE_FUZZY_DEL:
+        /* Could a character at text_pos have been deleted? */
+        data->new_string_pos += data->step;
+
+        return RE_ERROR_SUCCESS;
+    case RE_FUZZY_INS:
+        /* Could the character at text_pos have been inserted? */
+        if (!data->permit_insertion)
+            return RE_ERROR_FAILURE;
+
+        new_pos = data->new_folded_pos + data->step;
+
+        if (0 <= new_pos && new_pos <= data->folded_len) {
+            if (!fuzzy_ext_match(state, state->fuzzy_node,
+              data->new_string_pos))
                 return RE_ERROR_FAILURE;
 
-            new_pos = data->new_folded_pos + data->step;
-            if (0 <= new_pos && new_pos <= data->folded_len) {
-                if (!fuzzy_ext_match(state, state->fuzzy_node,
-                  data->new_string_pos))
-                    return RE_ERROR_FAILURE;
+            data->new_folded_pos = new_pos;
 
-                data->new_folded_pos = new_pos;
-                return RE_ERROR_SUCCESS;
-            }
-
-            return check_fuzzy_partial(state, new_pos);
-        case RE_FUZZY_SUB:
-            /* Could the character at text_pos have been substituted? */
-            new_pos = data->new_folded_pos + data->step;
-            if (0 <= new_pos && new_pos <= data->folded_len) {
-                if (!fuzzy_ext_match(state, state->fuzzy_node,
-                  data->new_string_pos))
-                    return RE_ERROR_FAILURE;
-
-                data->new_folded_pos = new_pos;
-                data->new_string_pos += data->step;
-                return RE_ERROR_SUCCESS;
-            }
-
-            return check_fuzzy_partial(state, new_pos);
+            return RE_ERROR_SUCCESS;
         }
+
+        return check_fuzzy_partial(state, new_pos);
+    case RE_FUZZY_SUB:
+        /* Could the character at text_pos have been substituted? */
+        new_pos = data->new_folded_pos + data->step;
+
+        if (0 <= new_pos && new_pos <= data->folded_len) {
+            if (!fuzzy_ext_match(state, state->fuzzy_node,
+              data->new_string_pos))
+                return RE_ERROR_FAILURE;
+
+            data->new_folded_pos = new_pos;
+            data->new_string_pos += data->step;
+
+            return RE_ERROR_SUCCESS;
+        }
+
+        return check_fuzzy_partial(state, new_pos);
     }
 
     return RE_ERROR_FAILURE;
@@ -10451,18 +10462,19 @@ Py_LOCAL_INLINE(int) next_fuzzy_match_string_fld(RE_State* state, RE_FuzzyData*
 
 /* Tries a fuzzy match of a string, ignoring case. */
 Py_LOCAL_INLINE(int) fuzzy_match_string_fld(RE_State* state, BOOL search,
-  Py_ssize_t* text_pos, RE_Node* node, Py_ssize_t* string_pos, int* folded_pos,
-  int folded_len, RE_INT8 step) {
+  RE_Node* node, Py_ssize_t* string_pos, int* folded_pos, int folded_len,
+  RE_INT8 step) {
     size_t* fuzzy_counts;
-    Py_ssize_t new_text_pos;
     RE_FuzzyData data;
+    TRACE(("<<fuzzy_match_string_fld>>\n"))
 
     fuzzy_counts = state->fuzzy_counts;
 
-    if (!any_error_permitted(state))
+    if (!any_error_permitted(state)) {
+        TRACE(("    return RE_ERROR_FAILURE\n"))
         return RE_ERROR_FAILURE;
+    }
 
-    new_text_pos = *text_pos;
     data.new_string_pos = *string_pos;
     data.new_folded_pos = *folded_pos;
     data.folded_len = folded_len;
@@ -10471,7 +10483,8 @@ Py_LOCAL_INLINE(int) fuzzy_match_string_fld(RE_State* state, BOOL search,
     /* Permit insertion except initially when searching (it's better just to
      * start searching one character later).
      */
-    data.permit_insertion = !search || new_text_pos != state->search_anchor;
+    data.permit_insertion = !search || state->text_pos != state->search_anchor;
+
     if (step > 0) {
         if (data.new_folded_pos != 0)
             data.permit_insertion = RE_ERROR_SUCCESS;
@@ -10492,6 +10505,7 @@ Py_LOCAL_INLINE(int) fuzzy_match_string_fld(RE_State* state, BOOL search,
             goto found;
     }
 
+    TRACE(("    return RE_ERROR_FAILURE\n"))
     return RE_ERROR_FAILURE;
 
 found:
@@ -10505,7 +10519,7 @@ found:
         return RE_ERROR_MEMORY;
     if (!push_int(state, &state->bstack, folded_len))
         return RE_ERROR_MEMORY;
-    if (!push_ssize(state, &state->bstack, new_text_pos))
+    if (!push_ssize(state, &state->bstack, state->text_pos))
         return RE_ERROR_MEMORY;
     if (!push_uint8(state, &state->bstack, data.fuzzy_type))
         return RE_ERROR_MEMORY;
@@ -10516,30 +10530,30 @@ found:
      * op
      */
 
-    if (!record_fuzzy(state, data.fuzzy_type, data.fuzzy_type == RE_FUZZY_DEL ?
-      new_text_pos : new_text_pos - data.step))
+    if (!record_fuzzy(state, data.fuzzy_type, state->text_pos))
         return RE_ERROR_MEMORY;
 
     ++fuzzy_counts[data.fuzzy_type];
     ++state->capture_change;
 
-    *text_pos = new_text_pos;
+    state->text_pos = data.new_text_pos;
     *string_pos = data.new_string_pos;
     *folded_pos = data.new_folded_pos;
 
+    TRACE(("    fuzzy_counts is (%zd, %zd, %zd)\n", fuzzy_counts[0],
+      fuzzy_counts[1], fuzzy_counts[2]))
+    TRACE(("    return RE_ERROR_SUCCESS\n"))
     return RE_ERROR_SUCCESS;
 }
 
 /* Retries a fuzzy match of a string, ignoring case. */
 Py_LOCAL_INLINE(int) retry_fuzzy_match_string_fld(RE_State* state, RE_UINT8 op,
-  BOOL search, Py_ssize_t* text_pos, RE_Node** node, Py_ssize_t* string_pos,
-  int* folded_pos) {
+  BOOL search, RE_Node** node, Py_ssize_t* string_pos, int* folded_pos) {
     size_t* fuzzy_counts;
     RE_FuzzyData data;
-    Py_ssize_t new_text_pos;
     int curr_folded_pos;
-    Py_ssize_t curr_string_pos;
     RE_Node* new_node;
+    TRACE(("<<retry_fuzzy_match_string_fld>>\n"))
 
     fuzzy_counts = state->fuzzy_counts;
 
@@ -10550,20 +10564,20 @@ Py_LOCAL_INLINE(int) retry_fuzzy_match_string_fld(RE_State* state, RE_UINT8 op,
 
     if (!pop_uint8(state, &state->bstack, &data.fuzzy_type))
         return RE_ERROR_MEMORY;
-    if (!pop_ssize(state, &state->bstack, &new_text_pos))
+    if (!pop_ssize(state, &state->bstack, &state->text_pos))
         return RE_ERROR_MEMORY;
     if (!pop_int(state, &state->bstack, &data.folded_len))
         return RE_ERROR_MEMORY;
     if (!pop_int(state, &state->bstack, &curr_folded_pos))
         return RE_ERROR_MEMORY;
-    if (!pop_ssize(state, &state->bstack, &curr_string_pos))
+    if (!pop_ssize(state, &state->bstack, string_pos))
         return RE_ERROR_MEMORY;
     if (!pop_int8(state, &state->bstack, &data.step))
         return RE_ERROR_MEMORY;
     if (!pop_pointer(state, &state->bstack, (void*)&new_node))
         return RE_ERROR_MEMORY;
 
-    data.new_string_pos = curr_string_pos;
+    data.new_string_pos = *string_pos;
     data.new_folded_pos = curr_folded_pos;
 
     --fuzzy_counts[data.fuzzy_type];
@@ -10571,7 +10585,8 @@ Py_LOCAL_INLINE(int) retry_fuzzy_match_string_fld(RE_State* state, RE_UINT8 op,
     /* Permit insertion except initially when searching (it's better just to
      * start searching one character later).
      */
-    data.permit_insertion = !search || new_text_pos != state->search_anchor;
+    data.permit_insertion = !search || state->text_pos != state->search_anchor;
+
     if (data.step > 0) {
         if (data.new_folded_pos != 0)
             data.permit_insertion = RE_ERROR_SUCCESS;
@@ -10592,6 +10607,7 @@ Py_LOCAL_INLINE(int) retry_fuzzy_match_string_fld(RE_State* state, RE_UINT8 op,
             goto found;
     }
 
+    TRACE(("    return RE_ERROR_FAILURE\n"))
     return RE_ERROR_FAILURE;
 
 found:
@@ -10599,35 +10615,37 @@ found:
         return RE_ERROR_MEMORY;
     if (!push_int8(state, &state->bstack, data.step))
         return RE_ERROR_MEMORY;
-    if (!push_ssize(state, &state->bstack, curr_string_pos))
+    if (!push_ssize(state, &state->bstack, *string_pos))
         return RE_ERROR_MEMORY;
     if (!push_int(state, &state->bstack, curr_folded_pos))
         return RE_ERROR_MEMORY;
     if (!push_int(state, &state->bstack, data.folded_len))
         return RE_ERROR_MEMORY;
-    if (!push_ssize(state, &state->bstack, new_text_pos))
+    if (!push_ssize(state, &state->bstack, state->text_pos))
         return RE_ERROR_MEMORY;
     if (!push_uint8(state, &state->bstack, data.fuzzy_type))
         return RE_ERROR_MEMORY;
     if (!push_uint8(state, &state->bstack, op))
         return RE_ERROR_MEMORY;
 
+    if (!record_fuzzy(state, data.fuzzy_type, state->text_pos))
+        return RE_ERROR_MEMORY;
+
     /* bstack: node step string_pos folded_pos folded_len text_pos fuzzy_type
      * op
      */
 
-    if (!record_fuzzy(state, data.fuzzy_type, data.fuzzy_type == RE_FUZZY_DEL ?
-      new_text_pos : new_text_pos - data.step))
-        return RE_ERROR_MEMORY;
-
     ++fuzzy_counts[data.fuzzy_type];
     ++state->capture_change;
 
-    *text_pos = new_text_pos;
+    state->text_pos = data.new_text_pos;
     *node = new_node;
     *string_pos = data.new_string_pos;
     *folded_pos = data.new_folded_pos;
 
+    TRACE(("    fuzzy_counts is (%zd, %zd, %zd)\n", fuzzy_counts[0],
+      fuzzy_counts[1], fuzzy_counts[2]))
+    TRACE(("    return RE_ERROR_SUCCESS\n"))
     return RE_ERROR_SUCCESS;
 }
 
@@ -10636,43 +10654,51 @@ Py_LOCAL_INLINE(int) next_fuzzy_match_group_fld(RE_State* state, RE_FuzzyData*
   data) {
     int new_pos;
 
-    if (this_error_permitted(state, data->fuzzy_type)) {
-        switch (data->fuzzy_type) {
-        case RE_FUZZY_DEL:
-            /* Could a character at text_pos have been deleted? */
-            data->new_gfolded_pos += data->step;
-            return RE_ERROR_SUCCESS;
-        case RE_FUZZY_INS:
-            /* Could the character at text_pos have been inserted? */
-            if (!data->permit_insertion)
+    if (!this_error_permitted(state, data->fuzzy_type))
+        return RE_ERROR_FAILURE;
+
+    data->new_text_pos = state->text_pos;
+
+    switch (data->fuzzy_type) {
+    case RE_FUZZY_DEL:
+        /* Could a character at text_pos have been deleted? */
+        data->new_gfolded_pos += data->step;
+
+        return RE_ERROR_SUCCESS;
+    case RE_FUZZY_INS:
+        /* Could the character at text_pos have been inserted? */
+        if (!data->permit_insertion)
+            return RE_ERROR_FAILURE;
+
+        new_pos = data->new_folded_pos + data->step;
+
+        if (0 <= new_pos && new_pos <= data->folded_len) {
+            if (!fuzzy_ext_match_group_fld(state, state->fuzzy_node,
+              data->new_folded_pos))
                 return RE_ERROR_FAILURE;
 
-            new_pos = data->new_folded_pos + data->step;
-            if (0 <= new_pos && new_pos <= data->folded_len) {
-                if (!fuzzy_ext_match_group_fld(state, state->fuzzy_node,
-                  data->new_folded_pos))
-                    return RE_ERROR_FAILURE;
+            data->new_folded_pos = new_pos;
 
-                data->new_folded_pos = new_pos;
-                return RE_ERROR_SUCCESS;
-            }
-
-            return check_fuzzy_partial(state, new_pos);
-        case RE_FUZZY_SUB:
-            /* Could the character at text_pos have been substituted? */
-            new_pos = data->new_folded_pos + data->step;
-            if (0 <= new_pos && new_pos <= data->folded_len) {
-                if (!fuzzy_ext_match_group_fld(state, state->fuzzy_node,
-                  data->new_folded_pos))
-                    return RE_ERROR_FAILURE;
-
-                data->new_folded_pos = new_pos;
-                data->new_gfolded_pos += data->step;
-                return RE_ERROR_SUCCESS;
-            }
-
-            return check_fuzzy_partial(state, new_pos);
+            return RE_ERROR_SUCCESS;
         }
+
+        return check_fuzzy_partial(state, new_pos);
+    case RE_FUZZY_SUB:
+        /* Could the character at text_pos have been substituted? */
+        new_pos = data->new_folded_pos + data->step;
+
+        if (0 <= new_pos && new_pos <= data->folded_len) {
+            if (!fuzzy_ext_match_group_fld(state, state->fuzzy_node,
+              data->new_folded_pos))
+                return RE_ERROR_FAILURE;
+
+            data->new_folded_pos = new_pos;
+            data->new_gfolded_pos += data->step;
+
+            return RE_ERROR_SUCCESS;
+        }
+
+        return check_fuzzy_partial(state, new_pos);
     }
 
     return RE_ERROR_FAILURE;
@@ -10680,19 +10706,20 @@ Py_LOCAL_INLINE(int) next_fuzzy_match_group_fld(RE_State* state, RE_FuzzyData*
 
 /* Tries a fuzzy match of a group reference, ignoring case. */
 Py_LOCAL_INLINE(int) fuzzy_match_group_fld(RE_State* state, BOOL search,
-  Py_ssize_t* text_pos, RE_Node* node, int* folded_pos, int folded_len,
-  Py_ssize_t* group_pos, int* gfolded_pos, int gfolded_len, RE_INT8 step) {
+  RE_Node* node, int* folded_pos, int folded_len, Py_ssize_t* group_pos, int*
+  gfolded_pos, int gfolded_len, RE_INT8 step) {
     size_t* fuzzy_counts;
-    Py_ssize_t new_text_pos;
     RE_FuzzyData data;
     Py_ssize_t new_group_pos;
+    TRACE(("<<fuzzy_match_group_fld>>\n"))
 
     fuzzy_counts = state->fuzzy_counts;
 
-    if (!any_error_permitted(state))
+    if (!any_error_permitted(state)) {
+        TRACE(("    return RE_ERROR_FAILURE\n"))
         return RE_ERROR_FAILURE;
+    }
 
-    new_text_pos = *text_pos;
     data.new_folded_pos = *folded_pos;
     data.folded_len = folded_len;
     new_group_pos = *group_pos;
@@ -10702,7 +10729,8 @@ Py_LOCAL_INLINE(int) fuzzy_match_group_fld(RE_State* state, BOOL search,
     /* Permit insertion except initially when searching (it's better just to
      * start searching one character later).
      */
-    data.permit_insertion = !search || new_text_pos != state->search_anchor;
+    data.permit_insertion = !search || state->text_pos != state->search_anchor;
+
     if (data.step > 0) {
         if (data.new_folded_pos != 0)
             data.permit_insertion = RE_ERROR_SUCCESS;
@@ -10723,6 +10751,7 @@ Py_LOCAL_INLINE(int) fuzzy_match_group_fld(RE_State* state, BOOL search,
             goto found;
     }
 
+    TRACE(("    return RE_ERROR_FAILURE\n"))
     return RE_ERROR_FAILURE;
 
 found:
@@ -10740,7 +10769,7 @@ found:
         return RE_ERROR_MEMORY;
     if (!push_int(state, &state->bstack, folded_len))
         return RE_ERROR_MEMORY;
-    if (!push_ssize(state, &state->bstack, new_text_pos))
+    if (!push_ssize(state, &state->bstack, state->text_pos))
         return RE_ERROR_MEMORY;
     if (!push_uint8(state, &state->bstack, data.fuzzy_type))
         return RE_ERROR_MEMORY;
@@ -10751,33 +10780,35 @@ found:
      * folded_len text_pos fuzzy_type op
      */
 
-    if (!record_fuzzy(state, data.fuzzy_type, data.fuzzy_type == RE_FUZZY_DEL ?
-      new_text_pos : new_text_pos - data.step))
+    if (!record_fuzzy(state, data.fuzzy_type, state->text_pos))
         return RE_ERROR_MEMORY;
 
     ++fuzzy_counts[data.fuzzy_type];
     ++state->capture_change;
 
-    *text_pos = new_text_pos;
+    state->text_pos = data.new_text_pos;
     *group_pos = new_group_pos;
     *folded_pos = data.new_folded_pos;
     *gfolded_pos = data.new_gfolded_pos;
 
+    TRACE(("    fuzzy_counts is (%zd, %zd, %zd)\n", fuzzy_counts[0],
+      fuzzy_counts[1], fuzzy_counts[2]))
+    TRACE(("    return RE_ERROR_SUCCESS\n"))
     return RE_ERROR_SUCCESS;
 }
 
 /* Retries a fuzzy match of a group reference, ignoring case. */
 Py_LOCAL_INLINE(int) retry_fuzzy_match_group_fld(RE_State* state, RE_UINT8 op,
-  BOOL search, Py_ssize_t* text_pos, RE_Node** node, int* folded_pos,
-  Py_ssize_t* group_pos, int* gfolded_pos) {
+  BOOL search, RE_Node** node, int* folded_pos, Py_ssize_t* group_pos, int*
+  gfolded_pos) {
     size_t* fuzzy_counts;
     RE_FuzzyData data;
-    Py_ssize_t new_text_pos;
     int new_folded_pos;
     Py_ssize_t new_group_pos;
     int gfolded_len;
     int new_gfolded_pos;
     RE_Node* new_node;
+    TRACE(("<<retry_fuzzy_match_group_fld>>\n"))
 
     fuzzy_counts = state->fuzzy_counts;
 
@@ -10789,7 +10820,7 @@ Py_LOCAL_INLINE(int) retry_fuzzy_match_group_fld(RE_State* state, RE_UINT8 op,
 
     if (!pop_uint8(state, &state->bstack, &data.fuzzy_type))
         return RE_ERROR_MEMORY;
-    if (!pop_ssize(state, &state->bstack, &new_text_pos))
+    if (!pop_ssize(state, &state->bstack, &state->text_pos))
         return RE_ERROR_MEMORY;
     if (!pop_int(state, &state->bstack, &data.folded_len))
         return RE_ERROR_MEMORY;
@@ -10814,8 +10845,8 @@ Py_LOCAL_INLINE(int) retry_fuzzy_match_group_fld(RE_State* state, RE_UINT8 op,
     /* Permit insertion except initially when searching (it's better just to
      * start searching one character later).
      */
-    data.permit_insertion = !search || new_text_pos != state->search_anchor ||
-      data.new_folded_pos != data.folded_len;
+    data.permit_insertion = !search || state->text_pos != state->search_anchor
+      || data.new_folded_pos != data.folded_len;
 
     for (++data.fuzzy_type; data.fuzzy_type < RE_FUZZY_COUNT;
       data.fuzzy_type++) {
@@ -10829,6 +10860,7 @@ Py_LOCAL_INLINE(int) retry_fuzzy_match_group_fld(RE_State* state, RE_UINT8 op,
             goto found;
     }
 
+    TRACE(("    return RE_ERROR_FAILURE\n"))
     return RE_ERROR_FAILURE;
 
 found:
@@ -10846,30 +10878,32 @@ found:
         return RE_ERROR_MEMORY;
     if (!push_int(state, &state->bstack, data.folded_len))
         return RE_ERROR_MEMORY;
-    if (!push_ssize(state, &state->bstack, new_text_pos))
+    if (!push_ssize(state, &state->bstack, state->text_pos))
         return RE_ERROR_MEMORY;
     if (!push_uint8(state, &state->bstack, data.fuzzy_type))
         return RE_ERROR_MEMORY;
     if (!push_uint8(state, &state->bstack, op))
         return RE_ERROR_MEMORY;
 
+    if (!record_fuzzy(state, data.fuzzy_type, state->text_pos))
+        return RE_ERROR_MEMORY;
+
     /* bstack: node step gfolded_pos gfolded_len group_pos folded_pos
      * folded_len text_pos fuzzy_type op
      */
 
-    if (!record_fuzzy(state, data.fuzzy_type, data.fuzzy_type == RE_FUZZY_DEL ?
-      new_text_pos : new_text_pos - data.step))
-        return RE_ERROR_MEMORY;
-
     ++fuzzy_counts[data.fuzzy_type];
     ++state->capture_change;
 
-    *text_pos = new_text_pos;
+    state->text_pos = data.new_text_pos;
     *node = new_node;
     *group_pos = new_group_pos;
     *folded_pos = data.new_folded_pos;
     *gfolded_pos = data.new_gfolded_pos;
 
+    TRACE(("    fuzzy_counts is (%zd, %zd, %zd)\n", fuzzy_counts[0],
+      fuzzy_counts[1], fuzzy_counts[2]))
+    TRACE(("    return RE_ERROR_SUCCESS\n"))
     return RE_ERROR_SUCCESS;
 }
 
@@ -10907,7 +10941,7 @@ Py_LOCAL_INLINE(Py_ssize_t) locate_required_string(RE_State* state, BOOL
         if (state->req_pos < 0 || state->text_pos > state->req_pos)
             /* First time or already passed it. */
             found_pos = string_search(state, pattern->req_string,
-              state->text_pos, limit, &is_partial);
+              state->text_pos, limit, TRUE, &is_partial);
         else {
             found_pos = state->req_pos;
             end_pos = state->req_end;
@@ -11040,7 +11074,7 @@ Py_LOCAL_INLINE(Py_ssize_t) locate_required_string(RE_State* state, BOOL
         if (state->req_pos < 0 || state->text_pos > state->req_pos)
             /* First time or already passed it. */
             found_pos = string_search_ign(state, pattern->req_string,
-              state->text_pos, limit, &is_partial);
+              state->text_pos, limit, TRUE, &is_partial);
         else {
             found_pos = state->req_pos;
             end_pos = state->req_end;
@@ -11085,7 +11119,7 @@ Py_LOCAL_INLINE(Py_ssize_t) locate_required_string(RE_State* state, BOOL
         if (state->req_pos < 0 || state->text_pos < state->req_pos)
             /* First time or already passed it. */
             found_pos = string_search_ign_rev(state, pattern->req_string,
-              state->text_pos, limit, &is_partial);
+              state->text_pos, limit, TRUE, &is_partial);
         else {
             found_pos = state->req_pos;
             end_pos = state->req_end;
@@ -11130,7 +11164,7 @@ Py_LOCAL_INLINE(Py_ssize_t) locate_required_string(RE_State* state, BOOL
         if (state->req_pos < 0 || state->text_pos < state->req_pos)
             /* First time or already passed it. */
             found_pos = string_search_rev(state, pattern->req_string,
-              state->text_pos, limit, &is_partial);
+              state->text_pos, limit, TRUE, &is_partial);
         else {
             found_pos = state->req_pos;
             end_pos = state->req_end;
@@ -11661,8 +11695,7 @@ advance:
                 ++state->text_pos;
                 node = node->next_1.node;
             } else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 1);
+                status = fuzzy_match_item(state, search, &node, 1);
                 if (status < 0)
                     return status;
 
@@ -11682,8 +11715,7 @@ advance:
                 ++state->text_pos;
                 node = node->next_1.node;
             } else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 1);
+                status = fuzzy_match_item(state, search, &node, 1);
                 if (status < 0)
                     return status;
 
@@ -11703,8 +11735,7 @@ advance:
                 --state->text_pos;
                 node = node->next_1.node;
             } else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, -1);
+                status = fuzzy_match_item(state, search, &node, -1);
                 if (status < 0)
                     return status;
 
@@ -11724,8 +11755,7 @@ advance:
                 --state->text_pos;
                 node = node->next_1.node;
             } else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, -1);
+                status = fuzzy_match_item(state, search, &node, -1);
                 if (status < 0)
                     return status;
 
@@ -11745,8 +11775,7 @@ advance:
                 ++state->text_pos;
                 node = node->next_1.node;
             } else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 1);
+                status = fuzzy_match_item(state, search, &node, 1);
                 if (status < 0)
                     return status;
 
@@ -11766,8 +11795,7 @@ advance:
                 --state->text_pos;
                 node = node->next_1.node;
             } else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, -1);
+                status = fuzzy_match_item(state, search, &node, -1);
                 if (status < 0)
                     return status;
 
@@ -11809,8 +11837,7 @@ advance:
             if (status == RE_ERROR_SUCCESS)
                 node = node->next_1.node;
             else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 0);
+                status = fuzzy_match_item(state, search, &node, 0);
                 if (status < 0)
                     return status;
 
@@ -11877,8 +11904,7 @@ advance:
                 state->text_pos += node->step;
                 node = node->next_1.node;
             } else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 1);
+                status = fuzzy_match_item(state, search, &node, 1);
                 if (status < 0)
                     return status;
 
@@ -11901,8 +11927,7 @@ advance:
                 state->text_pos += node->step;
                 node = node->next_1.node;
             } else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 1);
+                status = fuzzy_match_item(state, search, &node, 1);
                 if (status < 0)
                     return status;
 
@@ -11924,8 +11949,7 @@ advance:
                 state->text_pos += node->step;
                 node = node->next_1.node;
             } else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, -1);
+                status = fuzzy_match_item(state, search, &node, -1);
                 if (status < 0)
                     return status;
 
@@ -11947,8 +11971,7 @@ advance:
                 state->text_pos += node->step;
                 node = node->next_1.node;
             } else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, -1);
+                status = fuzzy_match_item(state, search, &node, -1);
                 if (status < 0)
                     return status;
 
@@ -12009,8 +12032,7 @@ advance:
             if (status == RE_ERROR_SUCCESS)
                 node = node->next_1.node;
             else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 0);
+                status = fuzzy_match_item(state, search, &node, 0);
                 if (status < 0)
                     return status;
 
@@ -12030,8 +12052,7 @@ advance:
             if (status == RE_ERROR_SUCCESS)
                 node = node->next_1.node;
             else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 0);
+                status = fuzzy_match_item(state, search, &node, 0);
                 if (status < 0)
                     return status;
 
@@ -12051,8 +12072,7 @@ advance:
             if (status == RE_ERROR_SUCCESS)
                 node = node->next_1.node;
             else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 0);
+                status = fuzzy_match_item(state, search, &node, 0);
                 if (status < 0)
                     return status;
 
@@ -12248,6 +12268,8 @@ advance:
 
             /* Save the inner fuzzy info. */
             if (!push_fuzzy_counts(state, &state->bstack, state->fuzzy_counts))
+                return RE_ERROR_MEMORY;
+            if (!push_ssize(state, &state->bstack, 0))
                 return RE_ERROR_MEMORY;
             if (!push_pointer(state, &state->bstack, state->fuzzy_node))
                 return RE_ERROR_MEMORY;
@@ -12769,8 +12791,7 @@ advance:
             if (status == RE_ERROR_SUCCESS)
                 node = node->next_1.node;
             else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 0);
+                status = fuzzy_match_item(state, search, &node, 0);
                 if (status < 0)
                     return status;
 
@@ -12789,8 +12810,7 @@ advance:
             if (status == RE_ERROR_SUCCESS)
                 node = node->next_1.node;
             else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 0);
+                status = fuzzy_match_item(state, search, &node, 0);
                 if (status < 0)
                     return status;
 
@@ -12809,8 +12829,7 @@ advance:
             if (status == RE_ERROR_SUCCESS)
                 node = node->next_1.node;
             else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 0);
+                status = fuzzy_match_item(state, search, &node, 0);
                 if (status < 0)
                     return status;
 
@@ -12830,8 +12849,7 @@ advance:
             if (status == RE_ERROR_SUCCESS)
                 node = node->next_1.node;
             else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 0);
+                status = fuzzy_match_item(state, search, &node, 0);
                 if (status < 0)
                     return status;
 
@@ -12851,8 +12869,7 @@ advance:
             if (status == RE_ERROR_SUCCESS)
                 node = node->next_1.node;
             else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 0);
+                status = fuzzy_match_item(state, search, &node, 0);
                 if (status < 0)
                     return status;
 
@@ -12871,8 +12888,7 @@ advance:
             if (status == RE_ERROR_SUCCESS)
                 node = node->next_1.node;
             else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 0);
+                status = fuzzy_match_item(state, search, &node, 0);
                 if (status < 0)
                     return status;
 
@@ -12918,8 +12934,7 @@ advance:
             if (status == RE_ERROR_SUCCESS)
                 node = node->next_1.node;
             else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 0);
+                status = fuzzy_match_item(state, search, &node, 0);
                 if (status < 0)
                     return status;
 
@@ -13566,8 +13581,7 @@ advance:
                 state->text_pos += node->step;
                 node = node->next_1.node;
             } else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 1);
+                status = fuzzy_match_item(state, search, &node, 1);
                 if (status < 0)
                     return status;
 
@@ -13590,8 +13604,7 @@ advance:
                 state->text_pos += node->step;
                 node = node->next_1.node;
             } else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 1);
+                status = fuzzy_match_item(state, search, &node, 1);
                 if (status < 0)
                     return status;
 
@@ -13613,8 +13626,7 @@ advance:
                 state->text_pos += node->step;
                 node = node->next_1.node;
             } else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, -1);
+                status = fuzzy_match_item(state, search, &node, -1);
                 if (status < 0)
                     return status;
 
@@ -13636,8 +13648,7 @@ advance:
                 state->text_pos += node->step;
                 node = node->next_1.node;
             } else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, -1);
+                status = fuzzy_match_item(state, search, &node, -1);
                 if (status < 0)
                     return status;
 
@@ -13680,8 +13691,7 @@ advance:
                 state->text_pos += node->step;
                 node = node->next_1.node;
             } else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 1);
+                status = fuzzy_match_item(state, search, &node, 1);
                 if (status < 0)
                     return status;
 
@@ -13704,8 +13714,7 @@ advance:
                 state->text_pos += node->step;
                 node = node->next_1.node;
             } else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 1);
+                status = fuzzy_match_item(state, search, &node, 1);
                 if (status < 0)
                     return status;
 
@@ -13727,8 +13736,7 @@ advance:
                 state->text_pos += node->step;
                 node = node->next_1.node;
             } else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, -1);
+                status = fuzzy_match_item(state, search, &node, -1);
                 if (status < 0)
                     return status;
 
@@ -13750,8 +13758,7 @@ advance:
                 state->text_pos += node->step;
                 node = node->next_1.node;
             } else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, -1);
+                status = fuzzy_match_item(state, search, &node, -1);
                 if (status < 0)
                     return status;
 
@@ -13795,8 +13802,8 @@ advance:
                     ++string_pos;
                     ++state->text_pos;
                 } else if (node->status & RE_STATUS_FUZZY) {
-                    status = fuzzy_match_string(state, search,
-                      &state->text_pos, node, &string_pos, 1);
+                    status = fuzzy_match_string(state, search, node,
+                      &string_pos, 1);
                     if (status < 0)
                         return status;
 
@@ -13886,9 +13893,9 @@ advance:
                     ++folded_pos;
                     ++gfolded_pos;
                 } else if (node->status & RE_STATUS_FUZZY) {
-                    status = fuzzy_match_group_fld(state, search,
-                      &state->text_pos, node, &folded_pos, folded_len,
-                      &string_pos, &gfolded_pos, gfolded_len, 1);
+                    status = fuzzy_match_group_fld(state, search, node,
+                      &folded_pos, folded_len, &string_pos, &gfolded_pos,
+                      gfolded_len, 1);
                     if (status < 0)
                         return status;
 
@@ -13987,9 +13994,9 @@ advance:
                     --folded_pos;
                     --gfolded_pos;
                 } else if (node->status & RE_STATUS_FUZZY) {
-                    status = fuzzy_match_group_fld(state, search,
-                      &state->text_pos, node, &folded_pos, folded_len,
-                      &string_pos, &gfolded_pos, gfolded_len, -1);
+                    status = fuzzy_match_group_fld(state, search, node,
+                      &folded_pos, folded_len, &string_pos, &gfolded_pos,
+                      gfolded_len, -1);
                     if (status < 0)
                         return status;
 
@@ -14053,8 +14060,8 @@ advance:
                     ++string_pos;
                     ++state->text_pos;
                 } else if (node->status & RE_STATUS_FUZZY) {
-                    status = fuzzy_match_string(state, search,
-                      &state->text_pos, node, &string_pos, 1);
+                    status = fuzzy_match_string(state, search, node,
+                      &string_pos, 1);
                     if (status < 0)
                         return status;
 
@@ -14110,8 +14117,8 @@ advance:
                     --string_pos;
                     --state->text_pos;
                 } else if (node->status & RE_STATUS_FUZZY) {
-                    status = fuzzy_match_string(state, search,
-                      &state->text_pos, node, &string_pos, -1);
+                    status = fuzzy_match_string(state, search, node,
+                      &string_pos, -1);
                     if (status < 0)
                         return status;
 
@@ -14166,8 +14173,8 @@ advance:
                     --string_pos;
                     --state->text_pos;
                 } else if (node->status & RE_STATUS_FUZZY) {
-                    status = fuzzy_match_string(state, search,
-                      &state->text_pos, node, &string_pos, -1);
+                    status = fuzzy_match_string(state, search, node,
+                      &string_pos, -1);
                     if (status < 0)
                         return status;
 
@@ -14193,8 +14200,7 @@ advance:
             if (state->text_pos == state->search_anchor)
                 node = node->next_1.node;
             else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 0);
+                status = fuzzy_match_item(state, search, &node, 0);
                 if (status < 0)
                     return status;
 
@@ -14219,8 +14225,7 @@ advance:
                 state->text_pos += node->step;
                 node = node->next_1.node;
             } else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 1);
+                status = fuzzy_match_item(state, search, &node, 1);
                 if (status < 0)
                     return status;
 
@@ -14245,8 +14250,7 @@ advance:
                 state->text_pos += node->step;
                 node = node->next_1.node;
             } else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 1);
+                status = fuzzy_match_item(state, search, &node, 1);
                 if (status < 0)
                     return status;
 
@@ -14270,8 +14274,7 @@ advance:
                 state->text_pos += node->step;
                 node = node->next_1.node;
             } else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, -1);
+                status = fuzzy_match_item(state, search, &node, -1);
                 if (status < 0)
                     return status;
 
@@ -14295,8 +14298,7 @@ advance:
                 state->text_pos += node->step;
                 node = node->next_1.node;
             } else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, -1);
+                status = fuzzy_match_item(state, search, &node, -1);
                 if (status < 0)
                     return status;
 
@@ -14414,8 +14416,7 @@ advance:
             if (status == RE_ERROR_SUCCESS)
                 node = node->next_1.node;
             else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 0);
+                status = fuzzy_match_item(state, search, &node, 0);
                 if (status < 0)
                     return status;
 
@@ -14434,8 +14435,7 @@ advance:
             if (status == RE_ERROR_SUCCESS)
                 node = node->next_1.node;
             else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 0);
+                status = fuzzy_match_item(state, search, &node, 0);
                 if (status < 0)
                     return status;
 
@@ -14454,8 +14454,7 @@ advance:
             if (status == RE_ERROR_SUCCESS)
                 node = node->next_1.node;
             else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 0);
+                status = fuzzy_match_item(state, search, &node, 0);
                 if (status < 0)
                     return status;
 
@@ -14474,8 +14473,7 @@ advance:
             if (status == RE_ERROR_SUCCESS)
                 node = node->next_1.node;
             else if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_match_item(state, search, &state->text_pos,
-                  &node, 0);
+                status = fuzzy_match_item(state, search, &node, 0);
                 if (status < 0)
                     return status;
 
@@ -14513,8 +14511,8 @@ advance:
                         ++string_pos;
                         ++state->text_pos;
                     } else if (node->status & RE_STATUS_FUZZY) {
-                        status = fuzzy_match_string(state, search,
-                          &state->text_pos, node, &string_pos, 1);
+                        status = fuzzy_match_string(state, search, node,
+                          &string_pos, 1);
                         if (status < 0)
                             return status;
 
@@ -14530,8 +14528,7 @@ advance:
             }
 
             if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_insert(state, state->text_pos, 1,
-                  node->next_1.node);
+                status = fuzzy_insert(state, 1, node->next_1.node);
                 if (status < 0)
                     return status;
             }
@@ -14603,9 +14600,8 @@ advance:
                         if (folded_pos >= folded_len)
                             ++state->text_pos;
                     } else if (node->status & RE_STATUS_FUZZY) {
-                        status = fuzzy_match_string_fld(state, search,
-                          &state->text_pos, node, &string_pos, &folded_pos,
-                          folded_len, 1);
+                        status = fuzzy_match_string_fld(state, search, node,
+                          &string_pos, &folded_pos, folded_len, 1);
                         if (status < 0)
                             return status;
 
@@ -14624,9 +14620,8 @@ advance:
 
                 if (node->status & RE_STATUS_FUZZY) {
                     while (folded_pos < folded_len) {
-                        status = fuzzy_match_string_fld(state, search,
-                          &state->text_pos, node, &string_pos, &folded_pos,
-                          folded_len, 1);
+                        status = fuzzy_match_string_fld(state, search, node,
+                          &string_pos, &folded_pos, folded_len, 1);
                         if (status < 0)
                             return status;
 
@@ -14712,9 +14707,8 @@ advance:
                         if (folded_pos <= 0)
                             --state->text_pos;
                     } else if (node->status & RE_STATUS_FUZZY) {
-                        status = fuzzy_match_string_fld(state, search,
-                          &state->text_pos, node, &string_pos, &folded_pos,
-                          folded_len, -1);
+                        status = fuzzy_match_string_fld(state, search, node,
+                          &string_pos, &folded_pos, folded_len, -1);
                         if (status < 0)
                             return status;
 
@@ -14733,9 +14727,8 @@ advance:
 
                 if (node->status & RE_STATUS_FUZZY) {
                     while (folded_pos > 0) {
-                        status = fuzzy_match_string_fld(state, search,
-                          &state->text_pos, node, &string_pos, &folded_pos,
-                          folded_len, -1);
+                        status = fuzzy_match_string_fld(state, search, node,
+                          &string_pos, &folded_pos, folded_len, -1);
                         if (status < 0)
                             return status;
 
@@ -14788,8 +14781,8 @@ advance:
                         ++string_pos;
                         ++state->text_pos;
                     } else if (node->status & RE_STATUS_FUZZY) {
-                        status = fuzzy_match_string(state, search,
-                          &state->text_pos, node, &string_pos, 1);
+                        status = fuzzy_match_string(state, search, node,
+                          &string_pos, 1);
                         if (status < 0)
                             return status;
 
@@ -14805,8 +14798,7 @@ advance:
             }
 
             if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_insert(state, state->text_pos, 1,
-                  node->next_1.node);
+                status = fuzzy_insert(state, 1, node->next_1.node);
                 if (status < 0)
                     return status;
             }
@@ -14846,8 +14838,8 @@ advance:
                         --string_pos;
                         --state->text_pos;
                     } else if (node->status & RE_STATUS_FUZZY) {
-                        status = fuzzy_match_string(state, search,
-                          &state->text_pos, node, &string_pos, -1);
+                        status = fuzzy_match_string(state, search, node,
+                          &string_pos, -1);
                         if (status < 0)
                             return status;
 
@@ -14863,8 +14855,7 @@ advance:
             }
 
             if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_insert(state, state->text_pos, -1,
-                  node->next_1.node);
+                status = fuzzy_insert(state, -1, node->next_1.node);
                 if (status < 0)
                     return status;
             }
@@ -14904,8 +14895,8 @@ advance:
                         --string_pos;
                         --state->text_pos;
                     } else if (node->status & RE_STATUS_FUZZY) {
-                        status = fuzzy_match_string(state, search,
-                          &state->text_pos, node, &string_pos, -1);
+                        status = fuzzy_match_string(state, search, node,
+                          &string_pos, -1);
                         if (status < 0)
                             return status;
 
@@ -14921,8 +14912,7 @@ advance:
             }
 
             if (node->status & RE_STATUS_FUZZY) {
-                status = fuzzy_insert(state, state->text_pos, -1,
-                  node->next_1.node);
+                status = fuzzy_insert(state, -1, node->next_1.node);
                 if (status < 0)
                     return status;
             }
@@ -15019,8 +15009,7 @@ backtrack:
         case RE_OP_SET_UNION_REV: /* Set union, backwards. */
             TRACE(("%s\n", re_op_text[op]))
 
-            status = retry_fuzzy_match_item(state, op, search,
-              &state->text_pos, &node, TRUE);
+            status = retry_fuzzy_match_item(state, op, search, &node, TRUE);
             if (status < 0)
                 return status;
 
@@ -15121,8 +15110,7 @@ backtrack:
         case RE_OP_START_OF_WORD: /* At the start of a word. */
             TRACE(("%s\n", re_op_text[op]))
 
-            status = retry_fuzzy_match_item(state, op, search,
-              &state->text_pos, &node, FALSE);
+            status = retry_fuzzy_match_item(state, op, search, &node, FALSE);
             if (status < 0)
                 return status;
 
@@ -15267,6 +15255,7 @@ backtrack:
         {
             RE_Node* inner_node;
             size_t inner_counts[RE_FUZZY_COUNT];
+            size_t insertions;
             TRACE(("%s\n", re_op_text[op]))
 
             /* sstack: -
@@ -15280,6 +15269,8 @@ backtrack:
                 return RE_ERROR_MEMORY;
             if (!pop_pointer(state, &state->bstack, (void*)&inner_node))
                 return RE_ERROR_MEMORY;
+            if (!pop_size(state, &state->bstack, &insertions))
+                return RE_ERROR_MEMORY;
             if (!pop_fuzzy_counts(state, &state->bstack, inner_counts))
                 return RE_ERROR_MEMORY;
 
@@ -15289,7 +15280,9 @@ backtrack:
              */
 
             if (insertion_permitted(state, inner_node, inner_counts) &&
-              fuzzy_ext_match(state, inner_node, state->text_pos)) {
+              total_errors(state->fuzzy_counts) + total_errors(inner_counts) <
+              state->max_errors && fuzzy_ext_match(state, inner_node,
+              state->text_pos)) {
                 RE_INT8 step;
                 Py_ssize_t limit;
 
@@ -15312,6 +15305,8 @@ backtrack:
                     /* Save the inner fuzzy info. */
                     if (!push_fuzzy_counts(state, &state->bstack,
                       inner_counts))
+                        return RE_ERROR_MEMORY;
+                    if (!push_size(state, &state->bstack, insertions + 1))
                         return RE_ERROR_MEMORY;
                     if (!push_pointer(state, &state->bstack, inner_node))
                         return RE_ERROR_MEMORY;
@@ -15351,6 +15346,12 @@ backtrack:
              *
              * bstack: -
              */
+
+            inner_counts[RE_FUZZY_INS] -= insertions;
+            while (insertions > 0) {
+                unrecord_fuzzy(state);
+                --insertions;
+            }
 
             /* Restore the inner fuzzy info. */
             Py_MEMCPY(state->fuzzy_counts, inner_counts,
@@ -15531,7 +15532,7 @@ backtrack:
         case RE_OP_FUZZY_INSERT:
             TRACE(("%s\n", re_op_text[op]))
 
-            status = retry_fuzzy_insert(state, &state->text_pos, &node);
+            status = retry_fuzzy_insert(state, &node);
             if (status < 0)
                 return status;
 
@@ -15774,7 +15775,7 @@ backtrack:
                             break;
 
                         found = string_search_rev(state, test, pos + length,
-                          limit, &is_partial);
+                          limit, FALSE, &is_partial);
                         if (is_partial)
                             return RE_ERROR_PARTIAL;
 
@@ -15910,7 +15911,7 @@ backtrack:
                             break;
 
                         found = string_search_ign_rev(state, test, pos +
-                          length, limit, &is_partial);
+                          length, limit, FALSE, &is_partial);
                         if (is_partial)
                             return RE_ERROR_PARTIAL;
 
@@ -15948,7 +15949,7 @@ backtrack:
                             break;
 
                         found = string_search_ign(state, test, pos - length,
-                          limit, &is_partial);
+                          limit, FALSE, &is_partial);
                         if (is_partial)
                             return RE_ERROR_PARTIAL;
 
@@ -15986,7 +15987,7 @@ backtrack:
                             break;
 
                         found = string_search(state, test, pos - length, limit,
-                          &is_partial);
+                          FALSE, &is_partial);
                         if (is_partial)
                             return RE_ERROR_PARTIAL;
 
@@ -16441,7 +16442,7 @@ backtrack:
 
                         /* Look for the tail string. */
                         found = string_search(state, test, pos + 1, limit +
-                          length, &is_partial);
+                          length, TRUE, &is_partial);
                         if (is_partial)
                             return RE_ERROR_PARTIAL;
 
@@ -16619,7 +16620,7 @@ backtrack:
 
                         /* Look for the tail string. */
                         found = string_search_ign(state, test, pos + 1, limit +
-                          length, &is_partial);
+                          length, TRUE, &is_partial);
                         if (is_partial)
                             return RE_ERROR_PARTIAL;
 
@@ -16679,7 +16680,7 @@ backtrack:
 
                         /* Look for the tail string. */
                         found = string_search_ign_rev(state, test, pos - 1,
-                          limit - length, &is_partial);
+                          limit - length, TRUE, &is_partial);
                         if (is_partial)
                             return RE_ERROR_PARTIAL;
 
@@ -16739,7 +16740,7 @@ backtrack:
 
                         /* Look for the tail string. */
                         found = string_search_rev(state, test, pos - 1, limit -
-                          length, &is_partial);
+                          length, TRUE, &is_partial);
                         if (is_partial)
                             return RE_ERROR_PARTIAL;
 
@@ -17033,8 +17034,8 @@ backtrack:
         {
             TRACE(("%s\n", re_op_text[op]))
 
-            status = retry_fuzzy_match_string(state, op, search,
-              &state->text_pos, &node, &string_pos);
+            status = retry_fuzzy_match_string(state, op, search, &node,
+              &string_pos);
             if (status < 0)
                 return status;
 
@@ -17049,8 +17050,8 @@ backtrack:
         {
             TRACE(("%s\n", re_op_text[op]))
 
-            status = retry_fuzzy_match_group_fld(state, op, search,
-              &state->text_pos, &node, &folded_pos, &string_pos, &gfolded_pos);
+            status = retry_fuzzy_match_group_fld(state, op, search, &node,
+              &folded_pos, &string_pos, &gfolded_pos);
             if (status < 0)
                 return status;
 
@@ -17119,8 +17120,8 @@ backtrack:
         {
             TRACE(("%s\n", re_op_text[op]))
 
-            status = retry_fuzzy_match_string_fld(state, op, search,
-              &state->text_pos, &node, &string_pos, &folded_pos);
+            status = retry_fuzzy_match_string_fld(state, op, search, &node,
+              &string_pos, &folded_pos);
             if (status < 0)
                 return status;
 
@@ -17292,8 +17293,7 @@ Py_LOCAL_INLINE(void) init_best_list(RE_BestList* best_list) {
 }
 
 /* Finalises the list of best matches found so far. */
-Py_LOCAL_INLINE(void) fini_best_list(RE_State* state, RE_BestList*
-  best_list) {
+Py_LOCAL_INLINE(void) fini_best_list(RE_State* state, RE_BestList* best_list) {
     safe_dealloc(state, best_list->entries);
     best_list->capacity = 0;
     best_list->count = 0;
@@ -17429,11 +17429,6 @@ Py_LOCAL_INLINE(int) do_best_fuzzy_match(RE_State* state, BOOL search) {
         }
 
         start_pos = state->match_pos;
-
-        /* Should we keep searching? */
-        if (!search)
-            break;
-
         state->max_errors = fewest_errors - 1;
     }
 
@@ -22131,7 +22126,7 @@ PyDoc_STRVAR(pattern_subfn_doc,
     of pattern with the replacement format.");
 
 PyDoc_STRVAR(pattern_split_doc,
-    "split(string, string, maxsplit=0, concurrent=None) --> list.\n\
+    "split(string, maxsplit=0, concurrent=None) --> list.\n\
     Split string by the occurrences of pattern.");
 
 PyDoc_STRVAR(pattern_splititer_doc,
@@ -23217,7 +23212,6 @@ Py_LOCAL_INLINE(BOOL) mark_named_groups(PatternObject* pattern) {
 Py_LOCAL_INLINE(BOOL) can_test_past(RE_Node* node) {
     switch (node->op) {
     case RE_OP_END_GROUP:
-    case RE_OP_END_LAZY_REPEAT:
     case RE_OP_START_GROUP:
         return TRUE;
     case RE_OP_GREEDY_REPEAT:
@@ -23717,7 +23711,8 @@ Py_LOCAL_INLINE(int) build_FUZZY(RE_CompileArgs* args) {
     RE_Node* test_node;
     int status;
 
-    /* codes: FUZZY, flags, constraints, ..., end or:    FUZZY_EXT, flags,
+    /* codes: FUZZY, flags, constraints, ..., end
+     * or:    FUZZY_EXT, flags,
      * constraints, ... next ..., end.
      */
     is_ext = args->code[0] == RE_OP_FUZZY_EXT;
@@ -23792,8 +23787,13 @@ Py_LOCAL_INLINE(int) build_FUZZY(RE_CompileArgs* args) {
     /* Append the fuzzy sequence. */
     add_node(args->end, start_node);
     add_node(start_node, subargs.start);
-    if (test_node)
+    if (test_node) {
         add_node(start_node, test_node);
+        /* The END_FUZZY node needs access to the charset, if any, in case of
+           fuzzy insertion at the end.
+        */
+        end_node->nonstring.next_2.node = start_node;
+    }
     add_node(subargs.end, end_node);
     args->end = end_node;
     args->all_atomic = FALSE;
@@ -24768,14 +24768,11 @@ Py_LOCAL_INLINE(int) build_REPEAT(RE_CompileArgs* args) {
         /* Extract the minimum number of repeats out of a repeat if it contains
          * a repeat.
          */
-        BOOL extracted_min;
         size_t index;
         RE_Node* repeat_node;
         RE_CompileArgs subargs;
 
-        extracted_min = FALSE;
-
-        if (min_count > 0 && contains_repeat(args->code, args->end_code)) {
+        if (min_count > 0) {
             RE_CODE done_count;
 
             for (done_count = 0; done_count < min_count; done_count++) {
@@ -24806,8 +24803,8 @@ Py_LOCAL_INLINE(int) build_REPEAT(RE_CompileArgs* args) {
                 max_count -= done_count;
         }
 
-        /* We've extract the minimum number of repeats. Are there any left? */
-        if (extracted_min && max_count == 0) {
+        /* We've extracted the minimum number of repeats. Are there any left? */
+        if (min_count > 0 && max_count == 0) {
             /* All done. */
             args->code = subargs.code;
             ++args->code;

@@ -210,14 +210,14 @@ static void NativeEventDealloc(NativeEventObject *self) {
 }
 
 static PyGetSetDef NativeEventProperties[] = {
-    {"flags", NativeEventTypeFlags, NULL, "The raw mask of flags as returend by FSEvents", NULL},
+    {"flags", NativeEventTypeFlags, NULL, "The raw mask of flags as returned by FSEvents", NULL},
     {"path", NativeEventTypePath, NULL, "The path for which this event was generated", NULL},
     {"inode", NativeEventTypeInode, NULL, "The inode for which this event was generated", NULL},
     {"event_id", NativeEventTypeID, NULL, "The id of the generated event", NULL},
     {"is_coalesced", NativeEventTypeIsCoalesced, NULL, "True if multiple ambiguous changes to the monitored path happened", NULL},
     {"must_scan_subdirs", NativeEventTypeIsMustScanSubDirs, NULL, "True if application must rescan all subdirectories", NULL},
-    {"is_user_dropped", NativeEventTypeIsUserDropped, NULL, "True if a failure during event buffering occured", NULL},
-    {"is_kernel_dropped", NativeEventTypeIsKernelDropped, NULL, "True if a failure during event buffering occured", NULL},
+    {"is_user_dropped", NativeEventTypeIsUserDropped, NULL, "True if a failure during event buffering occurred", NULL},
+    {"is_kernel_dropped", NativeEventTypeIsKernelDropped, NULL, "True if a failure during event buffering occurred", NULL},
     {"is_event_ids_wrapped", NativeEventTypeIsEventIdsWrapped, NULL, "True if event_id wrapped around", NULL},
     {"is_history_done", NativeEventTypeIsHistoryDone, NULL, "True if all historical events are done", NULL},
     {"is_root_changed", NativeEventTypeIsRootChanged, NULL, "True if a change to one of the directories along the path to one of the directories you watch occurred", NULL},
@@ -634,11 +634,17 @@ watchdog_add_watch(PyObject *self, PyObject *args)
                                           &python_callback, &paths_to_watch));
 
     /* Watch must not already be scheduled. */
-    G_RETURN_NULL_IF(PyDict_Contains(watch_to_stream, watch) == 1);
+    if(PyDict_Contains(watch_to_stream, watch) == 1) {
+        PyErr_Format(PyExc_RuntimeError, "Cannot add watch %S - it is already scheduled", watch);
+        return NULL;
+    }
 
     /* Create an instance of the callback information structure. */
     stream_callback_info_ref = PyMem_New(StreamCallbackInfo, 1);
-    G_RETURN_NULL_IF_NULL(stream_callback_info_ref);
+    if(stream_callback_info_ref == NULL) {
+        PyErr_SetString(PyExc_SystemError, "Failed allocating stream callback info");
+        return NULL;
+    }
 
     /* Create an FSEvent stream and
      * Save the stream reference to the global watch-to-stream dictionary. */
@@ -689,6 +695,9 @@ watchdog_add_watch(PyObject *self, PyObject *args)
     {
         FSEventStreamInvalidate(stream_ref);
         FSEventStreamRelease(stream_ref);
+        // There's no documentation on _why_ this might fail - "it ought to always succeed". But if it fails the
+        // documentation says to "fall back to performing recursive scans of the directories [...] as appropriate".
+        PyErr_SetString(PyExc_SystemError, "Cannot start fsevents stream. Use a kqueue or polling observer instead.");
         return NULL;
     }
 
@@ -775,17 +784,20 @@ static PyObject *
 watchdog_remove_watch(PyObject *self, PyObject *watch)
 {
     UNUSED(self);
-    PyObject *value = PyDict_GetItem(watch_to_stream, watch);
+    PyObject *streamref_capsule = PyDict_GetItem(watch_to_stream, watch);
+    if (!streamref_capsule) {
+        // A watch might have been removed explicitly before, in which case we can simply early out.
+        Py_RETURN_NONE;
+    }
     PyDict_DelItem(watch_to_stream, watch);
 
-    FSEventStreamRef stream_ref = PyCapsule_GetPointer(value, NULL);
+    FSEventStreamRef stream_ref = PyCapsule_GetPointer(streamref_capsule, NULL);
 
     FSEventStreamStop(stream_ref);
     FSEventStreamInvalidate(stream_ref);
     FSEventStreamRelease(stream_ref);
 
-    Py_INCREF(Py_None);
-    return Py_None;
+    Py_RETURN_NONE;
 }
 
 PyDoc_STRVAR(watchdog_stop__doc__,

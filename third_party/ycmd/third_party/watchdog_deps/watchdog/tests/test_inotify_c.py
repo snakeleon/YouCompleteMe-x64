@@ -1,4 +1,3 @@
-
 import pytest
 from watchdog.utils import platform
 
@@ -10,13 +9,15 @@ import ctypes
 import errno
 import logging
 import os
+import struct
 from functools import partial
 from queue import Queue
+from unittest.mock import patch
 
 from watchdog.events import DirCreatedEvent, DirDeletedEvent, DirModifiedEvent
 from watchdog.observers.api import ObservedWatch
 from watchdog.observers.inotify import InotifyFullEmitter, InotifyEmitter
-from watchdog.observers.inotify_c import Inotify
+from watchdog.observers.inotify_c import Inotify, InotifyConstants, InotifyEvent
 
 from .shell import mkdtemp, rm
 
@@ -46,34 +47,41 @@ def watching(path=None, use_full_emitter=False):
 
 def teardown_function(function):
     rm(p(''), recursive=True)
-    try:
+    with contextlib.suppress(NameError):
         assert not emitter.is_alive()
-    except NameError:
-        pass
 
 
-def test_late_double_deletion(monkeypatch):
+def struct_inotify(wd, mask, cookie=0, length=0, name=b""):
+    assert len(name) <= length
+    struct_format = (
+        "="  # (native endianness, standard sizes)
+        "i"  # int      wd
+        "i"  # uint32_t mask
+        "i"  # uint32_t cookie
+        "i"  # uint32_t len
+        "%ds" % (length,)  # char[] name
+    )
+    return struct.pack(struct_format, wd, mask, cookie, length, name)
+
+
+def test_late_double_deletion():
     inotify_fd = type(str("FD"), (object,), {})()  # Empty object
     inotify_fd.last = 0
     inotify_fd.wds = []
 
+    const = InotifyConstants()
+
     # CREATE DELETE CREATE DELETE DELETE_SELF IGNORE DELETE_SELF IGNORE
     inotify_fd.buf = (
-        # IN_CREATE|IS_DIR (wd = 1, path = subdir1)
-        b"\x01\x00\x00\x00\x00\x01\x00\x40\x00\x00\x00\x00\x10\x00\x00\x00"
-        b"\x73\x75\x62\x64\x69\x72\x31\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-        # IN_DELETE|IS_DIR (wd = 1, path = subdir1)
-        b"\x01\x00\x00\x00\x00\x02\x00\x40\x00\x00\x00\x00\x10\x00\x00\x00"
-        b"\x73\x75\x62\x64\x69\x72\x31\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+        struct_inotify(wd=1, mask=const.IN_CREATE | const.IN_ISDIR,
+                       length=16, name=b"subdir1")
+        + struct_inotify(wd=1, mask=const.IN_DELETE | const.IN_ISDIR,
+                         length=16, name=b"subdir1")
     ) * 2 + (
-        # IN_DELETE_SELF (wd = 2)
-        b"\x02\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-        # IN_IGNORE (wd = 2)
-        b"\x02\x00\x00\x00\x00\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-        # IN_DELETE_SELF (wd = 3)
-        b"\x03\x00\x00\x00\x00\x04\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
-        # IN_IGNORE (wd = 3)
-        b"\x03\x00\x00\x00\x00\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+        struct_inotify(wd=2, mask=const.IN_DELETE_SELF)
+        + struct_inotify(wd=2, mask=const.IN_IGNORED)
+        + struct_inotify(wd=3, mask=const.IN_DELETE_SELF)
+        + struct_inotify(wd=3, mask=const.IN_IGNORED)
     )
 
     os_read_bkp = os.read
@@ -106,13 +114,13 @@ def test_late_double_deletion(monkeypatch):
 
     # Mocks the API!
     from watchdog.observers import inotify_c
-    monkeypatch.setattr(os, "read", fakeread)
-    monkeypatch.setattr(os, "close", fakeclose)
-    monkeypatch.setattr(inotify_c, "inotify_init", inotify_init)
-    monkeypatch.setattr(inotify_c, "inotify_add_watch", inotify_add_watch)
-    monkeypatch.setattr(inotify_c, "inotify_rm_watch", inotify_rm_watch)
+    mock1 = patch.object(os, "read", new=fakeread)
+    mock2 = patch.object(os, "close", new=fakeclose)
+    mock3 = patch.object(inotify_c, "inotify_init", new=inotify_init)
+    mock4 = patch.object(inotify_c, "inotify_add_watch", new=inotify_add_watch)
+    mock5 = patch.object(inotify_c, "inotify_rm_watch", new=inotify_rm_watch)
 
-    with watching(p('')):
+    with mock1, mock2, mock3, mock4, mock5, watching(p('')):
         # Watchdog Events
         for evt_cls in [DirCreatedEvent, DirDeletedEvent] * 2:
             event = event_queue.get(timeout=5)[0]
@@ -127,32 +135,18 @@ def test_late_double_deletion(monkeypatch):
     assert inotify_fd.wds == [2, 3]  # Only 1 is removed explicitly
 
 
-def test_raise_error(monkeypatch):
-    func = Inotify._raise_error
-
-    monkeypatch.setattr(ctypes, "get_errno", lambda: errno.ENOSPC)
-    with pytest.raises(OSError) as exc:
-        func()
-    assert exc.value.errno == errno.ENOSPC
-    assert "inotify watch limit reached" in str(exc.value)
-
-    monkeypatch.setattr(ctypes, "get_errno", lambda: errno.EMFILE)
-    with pytest.raises(OSError) as exc:
-        func()
-    assert exc.value.errno == errno.EMFILE
-    assert "inotify instance limit reached" in str(exc.value)
-
-    monkeypatch.setattr(ctypes, "get_errno", lambda: errno.ENOENT)
-    with pytest.raises(OSError) as exc:
-        func()
-    assert exc.value.errno == errno.ENOENT
-    assert "No such file or directory" in str(exc.value)
-
-    monkeypatch.setattr(ctypes, "get_errno", lambda: -1)
-    with pytest.raises(OSError) as exc:
-        func()
-    assert exc.value.errno == -1
-    assert "Unknown error -1" in str(exc.value)
+@pytest.mark.parametrize("error, pattern", [
+    (errno.ENOSPC, "inotify watch limit reached"),
+    (errno.EMFILE, "inotify instance limit reached"),
+    (errno.ENOENT, "No such file or directory"),
+    (-1, "Unknown error -1"),
+])
+def test_raise_error(error, pattern):
+    with patch.object(ctypes, "get_errno", new=lambda: error):
+        with pytest.raises(OSError) as exc:
+            Inotify._raise_error()
+    assert exc.value.errno == error
+    assert pattern in str(exc.value)
 
 
 def test_non_ascii_path():
@@ -177,3 +171,18 @@ def test_watch_file():
         os.remove(path)
         event, _ = event_queue.get(timeout=5)
         assert repr(event)
+
+
+def test_event_equality():
+    wd_parent_dir = 42
+    filename = "file.ext"
+    full_path = p(filename)
+    event1 = InotifyEvent(
+        wd_parent_dir, InotifyConstants.IN_CREATE, 0, filename, full_path)
+    event2 = InotifyEvent(
+        wd_parent_dir, InotifyConstants.IN_CREATE, 0, filename, full_path)
+    event3 = InotifyEvent(
+        wd_parent_dir, InotifyConstants.IN_ACCESS, 0, filename, full_path)
+    assert event1 == event2
+    assert event1 != event3
+    assert event2 != event3

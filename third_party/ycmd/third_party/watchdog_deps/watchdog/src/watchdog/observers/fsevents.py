@@ -20,7 +20,7 @@
 :synopsis: FSEvents based emitter implementation.
 :author: yesudeep@google.com (Yesudeep Mangalapilly)
 :author: contact@tiger-222.fr (Mickaël Schoentgen)
-:platforms: Mac OS X
+:platforms: macOS
 """
 
 import time
@@ -57,7 +57,7 @@ logger = logging.getLogger('fsevents')
 class FSEventsEmitter(EventEmitter):
 
     """
-    Mac OS X FSEvents Emitter class.
+    macOS FSEvents Emitter class.
 
     :param event_queue:
         The event queue to fill with events.
@@ -78,22 +78,44 @@ class FSEventsEmitter(EventEmitter):
     """
 
     def __init__(self, event_queue, watch, timeout=DEFAULT_EMITTER_TIMEOUT, suppress_history=False):
-        EventEmitter.__init__(self, event_queue, watch, timeout)
+        super().__init__(event_queue, watch, timeout)
         self._fs_view = set()
         self.suppress_history = suppress_history
         self._start_time = 0.0
         self._starting_state = None
         self._lock = threading.Lock()
+        self._absolute_watch_path = os.path.realpath(os.path.abspath(os.path.expanduser(self.watch.path)))
 
     def on_thread_stop(self):
-        if self.watch:
-            _fsevents.remove_watch(self.watch)
-            _fsevents.stop(self)
-            self._watch = None
+        _fsevents.remove_watch(self.watch)
+        _fsevents.stop(self)
 
     def queue_event(self, event):
-        logger.info("queue_event %s", event)
-        EventEmitter.queue_event(self, event)
+        # fsevents defaults to be recursive, so if the watch was meant to be non-recursive then we need to drop
+        # all the events here which do not have a src_path / dest_path that matches the watched path
+        if self._watch.is_recursive:
+            logger.debug("queue_event %s", event)
+            EventEmitter.queue_event(self, event)
+        else:
+            if not self._is_recursive_event(event):
+                logger.debug("queue_event %s", event)
+                EventEmitter.queue_event(self, event)
+            else:
+                logger.debug("drop event %s", event)
+
+    def _is_recursive_event(self, event):
+        src_path = event.src_path if event.is_directory else os.path.dirname(event.src_path)
+        if src_path == self._absolute_watch_path:
+            return False
+
+        if isinstance(event, (FileMovedEvent, DirMovedEvent)):
+            # when moving something into the watch path we must always take the dirname,
+            # otherwise we miss out on `DirMovedEvent`s
+            dest_path = os.path.dirname(event.dest_path)
+            if dest_path == self._absolute_watch_path:
+                return False
+
+        return True
 
     def _queue_created_event(self, event, src_path, dirname):
         cls = DirCreatedEvent if event.is_directory else FileCreatedEvent
@@ -133,6 +155,11 @@ class FSEventsEmitter(EventEmitter):
             before_start = False
 
         return in_history or before_start
+
+    @staticmethod
+    def _is_meta_mod(event):
+        """Returns True if the event indicates a change in metadata."""
+        return event.is_inode_meta_mod or event.is_xattr_mod or event.is_owner_change
 
     def queue_events(self, timeout, events):
 
@@ -187,7 +214,7 @@ class FSEventsEmitter(EventEmitter):
 
                 self._fs_view.add(event.inode)
 
-                if event.is_modified or event.is_inode_meta_mod or event.is_xattr_mod:
+                if event.is_modified or self._is_meta_mod(event):
                     self._queue_modified_event(event, src_path, src_dirname)
 
                 self._queue_deleted_event(event, src_path, src_dirname)
@@ -200,7 +227,7 @@ class FSEventsEmitter(EventEmitter):
 
                 self._fs_view.add(event.inode)
 
-                if event.is_modified or event.is_inode_meta_mod or event.is_xattr_mod:
+                if event.is_modified or self._is_meta_mod(event):
                     self._queue_modified_event(event, src_path, src_dirname)
 
                 if event.is_renamed:
@@ -225,7 +252,7 @@ class FSEventsEmitter(EventEmitter):
 
                         events.remove(dst_event)
 
-                        if dst_event.is_modified or dst_event.is_inode_meta_mod or dst_event.is_xattr_mod:
+                        if dst_event.is_modified or self._is_meta_mod(dst_event):
                             self._queue_modified_event(dst_event, dst_path, dst_dirname)
 
                         if dst_event.is_removed:
@@ -264,23 +291,28 @@ class FSEventsEmitter(EventEmitter):
 
                 self._fs_view.clear()
 
-    def run(self):
+    def events_callback(self, paths, inodes, flags, ids):
+        """Callback passed to FSEventStreamCreate(), it will receive all
+        FS events and queue them.
+        """
+        cls = _fsevents.NativeEvent
         try:
-            def callback(paths, inodes, flags, ids, emitter=self):
-                try:
-                    with emitter._lock:
-                        events = [
-                            _fsevents.NativeEvent(path, inode, event_flags, event_id)
-                            for path, inode, event_flags, event_id in zip(paths, inodes, flags, ids)
-                        ]
-                        emitter.queue_events(emitter.timeout, events)
-                except Exception:
-                    logger.exception("Unhandled exception in fsevents callback")
+            events = [
+                cls(path, inode, event_flags, event_id)
+                for path, inode, event_flags, event_id in zip(
+                    paths, inodes, flags, ids
+                )
+            ]
+            with self._lock:
+                self.queue_events(self.timeout, events)
+        except Exception:
+            logger.exception("Unhandled exception in fsevents callback")
 
-            self.pathnames = [self.watch.path]
-            self._start_time = time.monotonic()
-
-            _fsevents.add_watch(self, self.watch, callback, self.pathnames)
+    def run(self):
+        self.pathnames = [self.watch.path]
+        self._start_time = time.monotonic()
+        try:
+            _fsevents.add_watch(self, self.watch, self.events_callback, self.pathnames)
             _fsevents.read_events(self)
         except Exception:
             logger.exception("Unhandled exception in FSEventsEmitter")
@@ -305,8 +337,7 @@ class FSEventsEmitter(EventEmitter):
 class FSEventsObserver(BaseObserver):
 
     def __init__(self, timeout=DEFAULT_OBSERVER_TIMEOUT):
-        BaseObserver.__init__(self, emitter_class=FSEventsEmitter,
-                              timeout=timeout)
+        super().__init__(emitter_class=FSEventsEmitter, timeout=timeout)
 
     def schedule(self, event_handler, path, recursive=False):
         # Fix for issue #26: Trace/BPT error when given a unicode path

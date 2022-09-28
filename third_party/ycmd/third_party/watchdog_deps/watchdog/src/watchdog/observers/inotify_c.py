@@ -25,39 +25,7 @@ from functools import reduce
 from ctypes import c_int, c_char_p, c_uint32
 from watchdog.utils import UnsupportedLibc
 
-
-def _load_libc():
-    libc_path = None
-    try:
-        libc_path = ctypes.util.find_library('c')
-    except (OSError, RuntimeError):
-        # Note: find_library will on some platforms raise these undocumented
-        # errors, e.g.on android OSError "No usable temporary directory found"
-        # will be raised.
-        pass
-
-    if libc_path is not None:
-        return ctypes.CDLL(libc_path)
-
-    # Fallbacks
-    try:
-        return ctypes.CDLL('libc.so')
-    except OSError:
-        pass
-
-    try:
-        return ctypes.CDLL('libc.so.6')
-    except OSError:
-        pass
-
-    # uClibc
-    try:
-        return ctypes.CDLL('libc.so.0')
-    except OSError as err:
-        raise err
-
-
-libc = _load_libc()
+libc = ctypes.CDLL(None)
 
 if not hasattr(libc, 'inotify_init') or \
         not hasattr(libc, 'inotify_add_watch') or \
@@ -318,6 +286,8 @@ class Inotify:
             except OSError as e:
                 if e.errno == errno.EINTR:
                     continue
+                elif e.errno == errno.EBADF:
+                    return []
                 else:
                     raise
             break
@@ -355,7 +325,6 @@ class Inotify:
                     path = self._path_for_wd.pop(wd)
                     if self._wd_for_path[path] == wd:
                         del self._wd_for_path[path]
-                    continue
 
                 event_list.append(inotify_event)
 
@@ -573,7 +542,7 @@ class InotifyEvent:
         return self.key == inotify_event.key
 
     def __ne__(self, inotify_event):
-        return self.key == inotify_event.key
+        return self.key != inotify_event.key
 
     def __hash__(self):
         return hash(self.key)

@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import os
+import stat
 import time
 import pytest
 import logging
@@ -142,7 +143,7 @@ def test_close():
     assert os.path.normpath(event.src_path) == os.path.normpath(p(''))
     assert isinstance(event, DirModifiedEvent)
 
-    # After read-only, only IN_CLOSE_NOWRITE is emitted but not catched for now #747
+    # After read-only, only IN_CLOSE_NOWRITE is emitted but not caught for now #747
     open(p('a'), 'r').close()
 
     assert event_queue.empty()
@@ -193,6 +194,21 @@ def test_modify():
         event = event_queue.get(timeout=5)[0]
         assert event.src_path == p('a')
         assert isinstance(event, FileClosedEvent)
+
+
+@pytest.mark.flaky(max_runs=5, min_passes=1, rerun_filter=rerun_filter)
+def test_chmod():
+    mkfile(p('a'))
+    start_watching()
+
+    # Note: We use S_IREAD here because chmod on Windows only
+    # allows setting the read-only flag.
+    os.chmod(p('a'), stat.S_IREAD)
+
+    expect_event(FileModifiedEvent(p('a')))
+
+    # Reset permissions to allow cleanup.
+    os.chmod(p('a'), stat.S_IWRITE)
 
 
 @pytest.mark.flaky(max_runs=5, min_passes=1, rerun_filter=rerun_filter)
@@ -339,6 +355,7 @@ def test_separate_consecutive_moves():
 
 
 @pytest.mark.flaky(max_runs=5, min_passes=1, rerun_filter=rerun_filter)
+@pytest.mark.skipif(platform.is_bsd(), reason="BSD create another set of events for this test")
 def test_delete_self():
     mkdir(p('dir1'))
     start_watching(p('dir1'))
@@ -359,7 +376,7 @@ def test_fast_subdirectory_creation_deletion():
     for _ in range(times):
         mkdir(sub_dir)
         rm(sub_dir, True)
-        time.sleep(0.01)  # required for macOS emitter to catch up with us
+        time.sleep(0.1)  # required for macOS emitter to catch up with us
     count = {DirCreatedEvent: 0,
              DirModifiedEvent: 0,
              DirDeletedEvent: 0}
@@ -419,7 +436,6 @@ def test_recursive_on():
 
 
 @pytest.mark.flaky(max_runs=5, min_passes=1, rerun_filter=rerun_filter)
-@pytest.mark.skipif(platform.is_darwin(), reason="macOS watches are always recursive")
 def test_recursive_off():
     mkdir(p('dir1'))
     start_watching(recursive=False)
@@ -427,6 +443,34 @@ def test_recursive_off():
 
     with pytest.raises(Empty):
         event_queue.get(timeout=5)
+
+    mkfile(p('b'))
+    expect_event(FileCreatedEvent(p('b')))
+    if not platform.is_windows():
+        expect_event(DirModifiedEvent(p()))
+
+        if platform.is_linux():
+            expect_event(FileClosedEvent(p('b')))
+
+    # currently limiting these additional events to macOS only, see https://github.com/gorakhargosh/watchdog/pull/779
+    if platform.is_darwin():
+        mkdir(p('dir1', 'dir2'))
+        with pytest.raises(Empty):
+            event_queue.get(timeout=5)
+        mkfile(p('dir1', 'dir2', 'somefile'))
+        with pytest.raises(Empty):
+            event_queue.get(timeout=5)
+
+        mkdir(p('dir3'))
+        expect_event(DirModifiedEvent(p()))  # the contents of the parent directory changed
+
+        mv(p('dir1', 'dir2', 'somefile'), p('somefile'))
+        expect_event(FileMovedEvent(p('dir1', 'dir2', 'somefile'), p('somefile')))
+        expect_event(DirModifiedEvent(p()))
+
+        mv(p('dir1', 'dir2'), p('dir2'))
+        expect_event(DirMovedEvent(p('dir1', 'dir2'), p('dir2')))
+        expect_event(DirModifiedEvent(p()))
 
 
 @pytest.mark.skipif(platform.is_windows(),
@@ -599,6 +643,7 @@ def test_move_nested_subdirectories_on_windows():
 
 
 @pytest.mark.flaky(max_runs=5, min_passes=1, rerun_filter=rerun_filter)
+@pytest.mark.skipif(platform.is_bsd(), reason="BSD create another set of events for this test")
 def test_file_lifecyle():
     start_watching()
 

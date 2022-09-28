@@ -12,6 +12,10 @@ import time
 from functools import partial
 from os import mkdir, rmdir
 from queue import Queue
+from random import random
+from threading import Thread
+from time import sleep
+from unittest.mock import patch
 
 import _watchdog_fsevents as _fsevents
 from watchdog.events import FileSystemEventHandler
@@ -42,10 +46,10 @@ def teardown_function(function):
     rm(p(""), recursive=True)
 
 
-def start_watching(path=None, use_full_emitter=False):
+def start_watching(path=None, recursive=True, use_full_emitter=False):
     global emitter
     path = p("") if path is None else path
-    emitter = FSEventsEmitter(event_queue, ObservedWatch(path, recursive=True), suppress_history=True)
+    emitter = FSEventsEmitter(event_queue, ObservedWatch(path, recursive=recursive), suppress_history=True)
     emitter.start()
 
 
@@ -77,6 +81,108 @@ def observer():
 ])
 def test_coalesced_event_check(event, expectation):
     assert event.is_coalesced == expectation
+
+
+def test_add_watch_twice(observer):
+    """ Adding the same watch twice used to result in a null pointer return without an exception.
+
+    See https://github.com/gorakhargosh/watchdog/issues/765
+    """
+
+    a = p("a")
+    mkdir(a)
+    h = FileSystemEventHandler()
+    w = ObservedWatch(a, recursive=False)
+
+    def callback(path, inodes, flags, ids):
+        pass
+
+    _fsevents.add_watch(h, w, callback, [w.path])
+    with pytest.raises(RuntimeError):
+        _fsevents.add_watch(h, w, callback, [w.path])
+    _fsevents.remove_watch(w)
+    rmdir(a)
+
+
+def test_watcher_deletion_while_receiving_events_1(caplog, observer):
+    """
+    When the watcher is stopped while there are events, such exception could happen:
+
+        Traceback (most recent call last):
+            File "observers/fsevents.py", line 327, in events_callback
+            self.queue_events(self.timeout, events)
+            File "observers/fsevents.py", line 187, in queue_events
+            src_path = self._encode_path(event.path)
+            File "observers/fsevents.py", line 352, in _encode_path
+            if isinstance(self.watch.path, bytes):
+        AttributeError: 'NoneType' object has no attribute 'path'
+    """
+    tmpdir = p()
+
+    orig = FSEventsEmitter.events_callback
+
+    def cb(*args):
+        FSEventsEmitter.stop(emitter)
+        orig(*args)
+
+    with caplog.at_level(logging.ERROR), patch.object(FSEventsEmitter, "events_callback", new=cb):
+        start_watching(tmpdir)
+        # Less than 100 is not enough events to trigger the error
+        for n in range(100):
+            touch(p("{}.txt".format(n)))
+        emitter.stop()
+        assert not caplog.records
+
+
+def test_watcher_deletion_while_receiving_events_2(caplog):
+    """Note: that test takes about 20 seconds to complete.
+
+    Quite similar test to prevent another issue
+    when the watcher is stopped while there are events, such exception could happen:
+
+        Traceback (most recent call last):
+            File "observers/fsevents.py", line 327, in events_callback
+              self.queue_events(self.timeout, events)
+            File "observers/fsevents.py", line 235, in queue_events
+              self._queue_created_event(event, src_path, src_dirname)
+            File "observers/fsevents.py", line 132, in _queue_created_event
+              self.queue_event(cls(src_path))
+            File "observers/fsevents.py", line 104, in queue_event
+              if self._watch.is_recursive:
+        AttributeError: 'NoneType' object has no attribute 'is_recursive'
+    """
+
+    def try_to_fail():
+        tmpdir = p()
+        start_watching(tmpdir)
+
+        def create_files():
+            # Less than 2000 is not enough events to trigger the error
+            for n in range(2000):
+                touch(p(str(n) + ".txt"))
+
+        def stop(em):
+            sleep(random())
+            em.stop()
+
+        th1 = Thread(target=create_files)
+        th2 = Thread(target=stop, args=(emitter,))
+
+        try:
+            th1.start()
+            th2.start()
+            th1.join()
+            th2.join()
+        finally:
+            emitter.stop()
+
+    # 20 attempts to make the random failure happen
+    with caplog.at_level(logging.ERROR):
+        for _ in range(20):
+            try_to_fail()
+            sleep(random())
+
+        assert not caplog.records
 
 
 def test_remove_watch_twice():
@@ -122,9 +228,7 @@ E       SystemError: <built-in function stop> returned a result with an error se
     w = observer.schedule(FileSystemEventHandler(), a, recursive=False)
     rmdir(a)
     time.sleep(0.1)
-    with pytest.raises(KeyError):
-        # watch no longer exists!
-        observer.unschedule(w)
+    observer.unschedule(w)
 
 
 def test_converting_cfstring_to_pyunicode():
@@ -144,6 +248,58 @@ def test_converting_cfstring_to_pyunicode():
         emitter.stop()
 
 
+def test_recursive_check_accepts_relative_paths():
+    """See https://github.com/gorakhargosh/watchdog/issues/797
+
+    The test code provided in the defect observes the current working directory
+    using ".". Since the watch path wasn't normalized then that failed.
+    This test emulates the scenario.
+    """
+    from watchdog.events import (
+        PatternMatchingEventHandler,
+        FileCreatedEvent,
+        FileModifiedEvent
+    )
+
+    class TestEventHandler(PatternMatchingEventHandler):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            # the TestEventHandler instance is set to ignore_directories,
+            # as such we won't get a DirModifiedEvent(p()) here.
+            self.expected_events = [
+                FileCreatedEvent(p('foo.json')),
+                FileModifiedEvent(p('foo.json'))
+            ]
+            self.observed_events = set()
+
+        def on_any_event(self, event):
+            self.expected_events.remove(event)
+            self.observed_events.add(event)
+
+        def done(self):
+            return not self.expected_events
+
+    cwd = os.getcwd()
+    os.chdir(p())
+    event_handler = TestEventHandler(patterns=["*.json"], ignore_patterns=[], ignore_directories=True)
+    observer = Observer()
+    observer.schedule(event_handler, ".")
+    observer.start()
+    time.sleep(0.1)
+
+    try:
+        touch(p('foo.json'))
+        timeout_at = time.time() + 5
+        while not event_handler.done() and time.time() < timeout_at:
+            time.sleep(0.1)
+
+        assert event_handler.done()
+    finally:
+        os.chdir(cwd)
+        observer.stop()
+        observer.join()
+
+
 def test_watchdog_recursive():
     """ See https://github.com/gorakhargosh/watchdog/issues/706
     """
@@ -153,7 +309,7 @@ def test_watchdog_recursive():
 
     class Handler(FileSystemEventHandler):
         def __init__(self):
-            FileSystemEventHandler.__init__(self)
+            super().__init__()
             self.changes = []
 
         def on_any_event(self, event):

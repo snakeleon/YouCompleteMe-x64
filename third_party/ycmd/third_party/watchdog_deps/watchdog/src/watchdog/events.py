@@ -414,6 +414,8 @@ class RegexMatchingEventHandler(FileSystemEventHandler):
 
         if regexes is None:
             regexes = [r".*"]
+        elif isinstance(regexes, str):
+            regexes = [regexes]
         if ignore_regexes is None:
             ignore_regexes = []
         if case_sensitive:

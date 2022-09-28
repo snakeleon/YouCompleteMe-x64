@@ -522,16 +522,20 @@ function! s:RedrawFinderPopup() abort
              \ .. result[ 'filetype' ]
 
       if len( path ) > 0
-        let props += [
-              \ { 'col': available_width - len( path ) + 1,
-              \   'length': len( path ) - len( line_num ),
-              \   'type': 'YCM-symbol-file' },
-              \ ]
         if path_includes_line
           let props += [
+                \ { 'col': available_width - len( path ) + 1,
+                \   'length': len( path ) - len( line_num ),
+                \   'type': 'YCM-symbol-file' },
                 \ { 'col': available_width - len( line_num ) + 1,
                 \   'length': len( line_num ),
                 \   'type': 'YCM-symbol-line-num' },
+                \ ]
+        else
+          let props += [
+                \ { 'col': available_width - len( path ) + 1,
+                \   'length': len( path ),
+                \   'type': 'YCM-symbol-file' },
                 \ ]
         endif
       endif
@@ -574,7 +578,8 @@ function! s:RedrawFinderPopup() abort
     " Otherwise, new item is already displayed - don't scroll the window.
 
     if !getwinvar( s:find_symbol_status.id, '&cursorline' )
-      call win_execute( s:find_symbol_status.id, 'set cursorline' )
+      call win_execute( s:find_symbol_status.id,
+                      \ 'set cursorline cursorlineopt&' )
     endif
   else
     call win_execute( s:find_symbol_status.id, 'set nocursorline' )
@@ -773,7 +778,7 @@ function! s:HandleWorkspaceSymbols( filetype, results ) abort
     "
     let results = py3eval(
           \ 'ycm_state.FilterAndSortItems( vim.eval( "results" ),'
-          \ .                              ' "description",'
+          \ .                              ' "key",'
           \ .                              ' vim.eval( "query" ) )' )
   endif
 
@@ -804,7 +809,7 @@ function! s:SearchDocument( query, new_query ) abort
   let response = py3eval(
         \ 'ycm_state.FilterAndSortItems( '
         \ . ' vim.eval( "s:find_symbol_status.raw_results" ),'
-        \ . ' "description",'
+        \ . ' "key",'
         \ . ' vim.eval( "a:query" ) )' )
 
   eval s:HandleSymbolSearchResults( response )

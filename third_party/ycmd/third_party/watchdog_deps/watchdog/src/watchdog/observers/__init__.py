@@ -38,8 +38,8 @@ of :class:`Observer`.  Here is a list of implemented observer classes.:
 Class          Platforms                        Note
 ============== ================================ ==============================
 |Inotify|      Linux 2.6.13+                    ``inotify(7)`` based observer
-|FSEvents|     Mac OS X                         FSEvents based observer
-|Kqueue|       Mac OS X and BSD with kqueue(2)  ``kqueue(2)`` based observer
+|FSEvents|     macOS                            FSEvents based observer
+|Kqueue|       macOS and BSD with kqueue(2)     ``kqueue(2)`` based observer
 |WinApi|       MS Windows                       Windows API-based observer
 |Polling|      Any                              fallback implementation
 ============== ================================ ==============================
@@ -48,7 +48,6 @@ Class          Platforms                        Note
 .. |FSEvents|    replace:: :class:`.fsevents.FSEventsObserver`
 .. |Kqueue|      replace:: :class:`.kqueue.KqueueObserver`
 .. |WinApi|      replace:: :class:`.read_directory_changes.WindowsApiObserver`
-.. |WinApiAsync| replace:: :class:`.read_directory_changes_async.WindowsApiAsyncObserver`
 .. |Polling|     replace:: :class:`.polling.PollingObserver`
 
 """
