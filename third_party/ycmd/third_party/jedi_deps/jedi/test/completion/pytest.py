@@ -1,3 +1,5 @@
+from typing import Generator
+
 import pytest
 from pytest import fixture
 
@@ -63,6 +65,11 @@ def lala(my_fixture):
 #! 15 ['def my_fixture']
 def lala(my_fixture):
     pass
+
+# overriding types of a fixture should be possible
+def test_x(my_yield_fixture: str):
+    #? str()
+    my_yield_fixture
 
 # -----------------
 # completion
@@ -164,3 +171,15 @@ def test_inheritance_fixture(inheritance_fixture, caplog):
 @pytest.fixture
 def caplog(caplog):
     yield caplog
+
+# -----------------
+# Generator with annotation
+# -----------------
+
+@pytest.fixture
+def with_annot() -> Generator[float, None, None]:
+    pass
+
+def test_with_annot(inheritance_fixture, with_annot):
+    #? float()
+    with_annot

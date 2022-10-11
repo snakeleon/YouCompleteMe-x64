@@ -44,6 +44,8 @@ b[int():]
 
 #? list()
 b[:]
+#? int()
+b[:, :-1]
 
 #? 3
 b[:]
@@ -67,6 +69,20 @@ class _StrangeSlice():
 #? slice()
 _StrangeSlice()[1:2]
 
+for x in b[:]:
+    #? int()
+    x
+
+for x in b[:, :-1]:
+    #?
+    x
+
+class Foo:
+    def __getitem__(self, item):
+        return item
+
+#?
+Foo()[:, :-1][0]
 
 # -----------------
 # iterable multiplication
@@ -213,6 +229,20 @@ g1.
 f
 #? str()
 g
+
+# -----------------
+# setitem
+# -----------------
+
+class F:
+    setitem_x = [1,2]
+    setitem_x[0] = 3
+
+#? ['setitem_x']
+F().setitem_x
+#? list()
+F().setitem_x
+
 
 # -----------------
 # dicts

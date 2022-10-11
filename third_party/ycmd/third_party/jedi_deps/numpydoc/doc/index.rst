@@ -15,11 +15,11 @@ Sphinx, and adds the code description directives ``np:function``,
 - PyPI: https://pypi.python.org/pypi/numpydoc/
 
 
-Documentation
-=============
-
 .. toctree::
+    :hidden:
+
     install
     format
-    example
     validation
+    release_notes
+    example

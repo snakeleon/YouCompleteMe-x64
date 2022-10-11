@@ -37,6 +37,17 @@ def test_operator_doc(Script):
     assert len(d.docstring()) > 100
 
 
+@pytest.mark.parametrize(
+    'code, help_part', [
+        ('str', 'Create a new string object'),
+        ('str.strip', 'Return a copy of the string'),
+    ]
+)
+def test_stdlib_doc(Script, code, help_part):
+    h, = Script(code).help()
+    assert help_part in h.docstring(raw=True)
+
+
 def test_lambda(Script):
     d, = Script('lambda x: x').help(column=0)
     assert d.type == 'keyword'
@@ -95,7 +106,7 @@ def test_builtin_docstring(goto_or_help_or_infer):
     d, = goto_or_help_or_infer('open')
 
     doc = d.docstring()
-    assert doc.startswith('open(file: Union[')
+    assert doc.startswith('open(file: ')
     assert 'Open file' in doc
 
 

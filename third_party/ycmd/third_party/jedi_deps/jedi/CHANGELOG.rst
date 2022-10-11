@@ -6,6 +6,13 @@ Changelog
 Unreleased
 ++++++++++
 
+0.18.1 (2021-11-17)
++++++++++++++++++++
+
+- Implict namespaces are now a separate types in ``Name().type``
+- Python 3.10 support
+- Mostly bugfixes
+
 0.18.0 (2020-12-25)
 +++++++++++++++++++
 

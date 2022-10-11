@@ -1,6 +1,7 @@
-"""This is the docstring for the example.py module.  Modules names should
-have short, all-lowercase names.  The module name may have underscores if
-this improves readability.
+"""Docstring for the example.py module.
+
+Modules names should have short, all-lowercase names.  The module name may
+have underscores if this improves readability.
 
 Every module should have a docstring at the very top of the file.  The
 module's docstring may extend over multiple lines.  If your docstring does
@@ -8,7 +9,6 @@ extend over multiple lines, the closing three quotation marks must be on
 a line by itself, preferably preceded by a blank line.
 
 """
-from __future__ import division, absolute_import, print_function
 
 import os  # standard library imports first
 
@@ -34,9 +34,8 @@ import matplotlib.pyplot as plt
 # numpy module itself, unabbreviated.
 
 
-def foo(var1, var2, long_var_name='hi'):
-    r"""A one-line summary that does not use variable names or the
-    function name.
+def foo(var1, var2, *args, long_var_name="hi", only_seldom_used_keyword=0, **kwargs):
+    r"""Summarize the function in one line.
 
     Several sentences providing an extended description. Refer to
     variables using back-ticks, e.g. `var`.
@@ -51,6 +50,8 @@ def foo(var1, var2, long_var_name='hi'):
         The type above can either refer to an actual Python type
         (e.g. ``int``), or describe the type of the variable in more
         detail, e.g. ``(N,) ndarray`` or ``array_like``.
+    *args : iterable
+        Other arguments.
     long_var_name : {'hi', 'ho'}, optional
         Choices in brackets, default first when optional.
 
@@ -66,10 +67,14 @@ def foo(var1, var2, long_var_name='hi'):
 
     Other Parameters
     ----------------
-    only_seldom_used_keywords : type
-        Explanation
-    common_parameters_listed_above : type
-        Explanation
+    only_seldom_used_keyword : int, optional
+        Infrequently used parameters can be described under this optional
+        section to prevent cluttering the Parameters section.
+    **kwargs : dict
+        Other infrequently used keyword arguments. Note that all keyword
+        arguments appearing after the first parameter specified under the
+        Other Parameters section, should also be described under this
+        section.
 
     Raises
     ------
@@ -78,10 +83,10 @@ def foo(var1, var2, long_var_name='hi'):
 
     See Also
     --------
-    otherfunc : relationship (optional)
-    newfunc : Relationship (optional), which could be fairly long, in which
-              case the line wraps here.
-    thirdfunc, fourthfunc, fifthfunc
+    numpy.array : Relationship (optional).
+    numpy.ndarray : Relationship (optional), which could be fairly long, in
+                    which case the line wraps here.
+    numpy.dot, numpy.linalg.norm, numpy.eye
 
     Notes
     -----
@@ -112,12 +117,14 @@ def foo(var1, var2, long_var_name='hi'):
     use the function.
 
     >>> a = [1, 2, 3]
-    >>> print [x + 3 for x in a]
+    >>> print([x + 3 for x in a])
     [4, 5, 6]
-    >>> print "a\n\nb"
+    >>> print("a\nb")
     a
     b
-
     """
-
+    # After closing class docstring, there should be one blank line to
+    # separate following codes (according to PEP257).
+    # But for function, method and module, there should be no blank lines
+    # after closing the docstring.
     pass

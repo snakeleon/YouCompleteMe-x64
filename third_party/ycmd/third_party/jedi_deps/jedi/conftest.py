@@ -100,7 +100,9 @@ def environment(request):
     if request.config.option.interpreter_env or version == 'interpreter':
         return InterpreterEnvironment()
 
-    return get_system_environment(version[0] + '.' + version[1:])
+    if '.' not in version:
+        version = version[0] + '.' + version[1:]
+    return get_system_environment(version)
 
 
 @pytest.fixture(scope='session')
@@ -136,6 +138,11 @@ def goto_or_help_or_infer(request, Script):
 
     do.type = request.param
     return do
+
+
+@pytest.fixture(scope='session', params=['goto', 'complete', 'help'])
+def goto_or_complete(request, Script):
+    return lambda code, *args, **kwargs: getattr(Script(code), request.param)(*args, **kwargs)
 
 
 @pytest.fixture(scope='session')

@@ -599,6 +599,39 @@ def test_dict_getitem(code, types):
     assert [c.name for c in comps] == types
 
 
+@pytest.mark.parametrize('class_is_findable', [False, True])
+@pytest.mark.parametrize(
+    'code, expected', [
+        ('DunderCls()[0]', 'int'),
+        ('dunder[0]', 'int'),
+        ('next(DunderCls())', 'float'),
+        ('next(dunder)', 'float'),
+        ('for x in DunderCls(): x', 'str'),
+        #('for x in dunder: x', 'str'),
+    ]
+)
+def test_dunders(class_is_findable, code, expected):
+    from typing import Iterator
+
+    class DunderCls:
+        def __getitem__(self, key) -> int:
+            pass
+
+        def __iter__(self, key) -> Iterator[str]:
+            pass
+
+        def __next__(self, key) -> float:
+            pass
+
+    if not class_is_findable:
+        DunderCls.__name__ = 'asdf'
+
+    dunder = DunderCls()
+
+    n, = jedi.Interpreter(code, [locals()]).infer()
+    assert n.name == expected
+
+
 def foo():
     raise KeyError
 
@@ -678,3 +711,31 @@ def test_negate():
     assert x.name == 'int'
     value, = x._name.infer()
     assert value.get_safe_value() == -3
+
+
+def test_complete_not_findable_class_source():
+    class TestClass():
+        ta=1
+        ta1=2
+
+    # Simulate the environment where the class is defined in
+    # an interactive session and therefore inspect module
+    # cannot find its source code and raises OSError (Py 3.10+) or TypeError.
+    TestClass.__module__ = "__main__"
+    # There is a pytest __main__ module we have to remove temporarily.
+    module = sys.modules.pop("__main__")
+    try:
+        interpreter = jedi.Interpreter("TestClass.", [locals()])
+        completions = interpreter.complete(column=10, line=1)
+    finally:
+        sys.modules["__main__"] = module
+
+    assert "ta" in [c.name for c in completions]
+    assert "ta1" in [c.name for c in completions]
+
+
+def test_param_infer_default():
+    abs_sig, = jedi.Interpreter('abs(', [{'abs': abs}]).get_signatures()
+    param, = abs_sig.params
+    assert param.name == 'x'
+    assert param.infer_default() == []

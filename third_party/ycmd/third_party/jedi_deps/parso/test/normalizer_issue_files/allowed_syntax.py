@@ -46,6 +46,28 @@ def x(b=a):
     global a
 
 
+def x(*args, c=2, d):
+    pass
+
+
+def x(*, c=2, d):
+    pass
+
+
+def x(a, b=1, *args, c=2, d):
+    pass
+
+
+def x(a, b=1, *, c=2, d):
+    pass
+
+
+lambda *args, c=2, d: (c, d)
+lambda *, c=2, d: (c, d)
+lambda a, b=1, *args, c=2, d: (c, d)
+lambda a, b=1, *, c=2, d: (c, d)
+
+
 *foo, a = (1,)
 *foo[0], a = (1,)
 *[], a = (1,)
@@ -110,6 +132,29 @@ def x():
 
     def y():
         class z():
+            nonlocal a
+
+
+def x(a):
+    def y():
+        nonlocal a
+
+
+def x(a, b):
+    def y():
+        nonlocal b
+        nonlocal a
+
+
+def x(a):
+    def y():
+        def z():
+            nonlocal a
+
+
+def x():
+    def y(a):
+        def z():
             nonlocal a
 
 

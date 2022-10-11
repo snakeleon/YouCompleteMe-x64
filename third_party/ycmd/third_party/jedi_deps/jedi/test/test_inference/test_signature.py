@@ -102,6 +102,25 @@ class X:
         (partialmethod_code + 'X().d(', None),
         (partialmethod_code + 'X.c(', 'func(a, b)'),
         (partialmethod_code + 'X.d(', None),
+
+        ('import contextlib\n@contextlib.contextmanager\ndef f(x): pass\nf(', 'f(x)'),
+
+        # typing lib
+        ('from typing import cast\ncast(', {
+            'cast(typ: object, val: Any) -> Any',
+            'cast(typ: str, val: Any) -> Any',
+            'cast(typ: Type[_T], val: Any) -> _T'}),
+        ('from typing import TypeVar\nTypeVar(',
+         'TypeVar(name: str, *constraints: Type[Any], bound: Union[None, Type[Any], str]=..., '
+         'covariant: bool=..., contravariant: bool=...)'),
+        ('from typing import List\nList(', None),
+        ('from typing import List\nList[int](', None),
+        ('from typing import Tuple\nTuple(', None),
+        ('from typing import Tuple\nTuple[int](', None),
+        ('from typing import Optional\nOptional(', None),
+        ('from typing import Optional\nOptional[int](', None),
+        ('from typing import Any\nAny(', None),
+        ('from typing import NewType\nNewType(', 'NewType(name: str, tp: Type[_T]) -> Type[_T]'),
     ]
 )
 def test_tree_signature(Script, environment, code, expected):
@@ -112,8 +131,10 @@ def test_tree_signature(Script, environment, code, expected):
     if expected is None:
         assert not Script(code).get_signatures()
     else:
-        sig, = Script(code).get_signatures()
-        assert expected == sig.to_string()
+        actual = {sig.to_string() for sig in Script(code).get_signatures()}
+        if not isinstance(expected, set):
+            expected = {expected}
+        assert expected == actual
 
 
 @pytest.mark.parametrize(
@@ -134,7 +155,7 @@ def test_tree_signature(Script, environment, code, expected):
         ('full_redirect(C)', 'z, *, c'),
         ('full_redirect(C())', 'y'),
         ('full_redirect(G)', 't: T'),
-        ('full_redirect(G[str])', 't: T'),
+        ('full_redirect(G[str])', '*args, **kwargs'),
         ('D', 'D(a, z, /)'),
         ('D()', 'D(x, y)'),
         ('D().foo', 'foo(a, *, bar, z, **kwargs)'),
@@ -225,32 +246,40 @@ def test_nested_signatures(Script, environment, combination, expected):
     assert expected == computed
 
 
-def test_pow_signature(Script):
+def test_pow_signature(Script, environment):
     # See github #1357
     sigs = Script('pow(').get_signatures()
     strings = {sig.to_string() for sig in sigs}
-    assert strings == {'pow(x: float, y: float, z: float, /) -> float',
-                       'pow(x: float, y: float, /) -> float',
-                       'pow(x: int, y: int, z: int, /) -> Any',
-                       'pow(x: int, y: int, /) -> Any'}
+    if environment.version_info < (3, 8):
+        assert strings == {'pow(base: _SupportsPow2[_E, _T_co], exp: _E, /) -> _T_co',
+                           'pow(base: _SupportsPow3[_E, _M, _T_co], exp: _E, mod: _M, /) -> _T_co',
+                           'pow(base: float, exp: float, mod: None=..., /) -> float',
+                           'pow(base: int, exp: int, mod: None=..., /) -> Any',
+                           'pow(base: int, exp: int, mod: int, /) -> int'}
+    else:
+        assert strings == {'pow(base: _SupportsPow2[_E, _T_co], exp: _E) -> _T_co',
+                           'pow(base: _SupportsPow3[_E, _M, _T_co], exp: _E, mod: _M) -> _T_co',
+                           'pow(base: float, exp: float, mod: None=...) -> float',
+                           'pow(base: int, exp: int, mod: None=...) -> Any',
+                           'pow(base: int, exp: int, mod: int) -> int'}
 
 
 @pytest.mark.parametrize(
     'code, signature', [
         [dedent('''
+            # identifier:A
             import functools
             def f(x):
                 pass
             def x(f):
                 @functools.wraps(f)
                 def wrapper(*args):
-                    # Have no arguments here, but because of wraps, the signature
-                    # should still be f's.
                     return f(*args)
                 return wrapper
 
             x(f)('''), 'f(x, /)'],
         [dedent('''
+            # identifier:B
             import functools
             def f(x):
                 pass
@@ -263,6 +292,26 @@ def test_pow_signature(Script):
                 return wrapper
 
             x(f)('''), 'f()'],
+        [dedent('''
+            # identifier:C
+            import functools
+            def f(x: int, y: float):
+                pass
+
+            @functools.wraps(f)
+            def wrapper(*args, **kwargs):
+                return f(*args, **kwargs)
+
+            wrapper('''), 'f(x: int, y: float)'],
+        [dedent('''
+            # identifier:D
+            def f(x: int, y: float):
+                pass
+
+            def wrapper(*args, **kwargs):
+                return f(*args, **kwargs)
+
+            wrapper('''), 'wrapper(x: int, y: float)'],
     ]
 )
 def test_wraps_signature(Script, code, signature):

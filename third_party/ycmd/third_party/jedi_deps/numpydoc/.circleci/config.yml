@@ -1,0 +1,56 @@
+version: 2
+jobs:
+  build_docs:
+    docker:
+      - image: "cimg/python:3.10"
+    steps:
+      - checkout
+      - run:
+          name: Update apt-get
+          command: sudo apt-get update
+      - run:
+          name: Install TeX
+          command: sudo apt install dvipng texlive-fonts-recommended texlive-latex-recommended texlive-latex-extra latexmk texlive-xetex
+      - restore_cache:
+          keys:
+            - pip-cache
+      - run:
+          name: Get dependencies and install
+          command: |
+            python3 -m venv venv
+            source venv/bin/activate
+            python -m pip install --upgrade pip wheel setuptools
+            python -m pip install --upgrade -r requirements/doc.txt
+            python -m pip list
+      - save_cache:
+          key: pip-cache
+          paths:
+            - ~/.cache/pip
+      - run:
+          name: Install
+          command: |
+            source venv/bin/activate
+            pip install -e .
+      - run:
+          name: Build docs
+          command: |
+            source venv/bin/activate
+            make -C doc html
+      - store_artifacts:
+          path: doc/_build/html/
+          destination: html
+      - run:
+          name: make tinybuild
+          command: |
+            source venv/bin/activate
+            make -C numpydoc/tests/tinybuild html
+      - store_artifacts:
+          path: numpydoc/tests/tinybuild/_build/html/
+          destination: tinybuild
+
+workflows:
+  version: 2
+
+  default:
+    jobs:
+      - build_docs

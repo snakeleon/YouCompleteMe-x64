@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 |jedi| is mostly being tested by what I would call "integration tests". These
 tests are testing type inference with the public API. This makes a
@@ -104,9 +104,14 @@ import os
 import re
 import sys
 import operator
-from ast import literal_eval
+if sys.version_info < (3, 8):
+    literal_eval = eval
+else:
+    from ast import literal_eval
 from io import StringIO
 from functools import reduce
+from unittest.mock import ANY
+from pathlib import Path
 
 import parso
 from _pytest.outcomes import Skipped
@@ -121,6 +126,7 @@ from jedi.api.environment import get_default_environment, get_system_environment
 from jedi.inference.gradual.conversion import convert_values
 from jedi.inference.analysis import Warning
 
+test_dir = Path(__file__).absolute().parent
 
 TEST_COMPLETIONS = 0
 TEST_INFERENCE = 1
@@ -172,6 +178,7 @@ class IntegrationTestCase(BaseTestCase):
         self.start = start
         self.line = line
         self.path = path
+        self._project = jedi.Project(test_dir)
 
     @property
     def module_name(self):
@@ -187,7 +194,12 @@ class IntegrationTestCase(BaseTestCase):
                                    self.line_nr_test, self.line.rstrip())
 
     def script(self, environment):
-        return jedi.Script(self.source, path=self.path, environment=environment)
+        return jedi.Script(
+            self.source,
+            path=self.path,
+            environment=environment,
+            project=self._project
+        )
 
     def run(self, compare_cb, environment=None):
         testers = {
@@ -209,6 +221,9 @@ class IntegrationTestCase(BaseTestCase):
         # import cProfile; cProfile.run('...')
 
         comp_str = {c.name for c in completions}
+        for r in completions:
+            # Test if this access raises an error
+            assert isinstance(r.type, str)
         return compare_cb(self, comp_str, set(literal_eval(self.correct)))
 
     def run_inference(self, compare_cb, environment):
@@ -244,6 +259,9 @@ class IntegrationTestCase(BaseTestCase):
         should = definition(self.correct, self.start, script.path)
         result = script.infer(self.line_nr, self.column)
         is_str = set(comparison(r) for r in result)
+        for r in result:
+            # Test if this access raises an error
+            assert isinstance(r.type, str)
         return compare_cb(self, is_str, should)
 
     def run_goto(self, compare_cb, environment):
@@ -256,7 +274,7 @@ class IntegrationTestCase(BaseTestCase):
         self.correct = self.correct.strip()
         compare = sorted(
             (('stub:' if r.is_stub() else '')
-             + re.sub(r'^test\.completion\.', '', r.module_name),
+             + re.sub(r'^completion\.', '', r.module_name),
              r.line,
              r.column)
             for r in result
@@ -269,6 +287,8 @@ class IntegrationTestCase(BaseTestCase):
         for pos_tup in positions:
             if type(pos_tup[0]) == str:
                 # this means that there is a module specified
+                if pos_tup[1] == ...:
+                    pos_tup = pos_tup[0], ANY, pos_tup[2]
                 wanted.append(pos_tup)
             else:
                 line = pos_tup[0]

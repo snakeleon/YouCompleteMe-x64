@@ -6,7 +6,7 @@ import sys
 
 import bottle
 from bottle import request, tob, touni, tonat, json_dumps, _e, HTTPError, parse_date
-import tools
+from . import tools
 import wsgiref.util
 import base64
 
@@ -624,7 +624,7 @@ class TestResponse(unittest.TestCase):
         response.delete_cookie('name')
         cookies = [value for name, value in response.headerlist
                    if name.title() == 'Set-Cookie']
-        self.assertTrue('name=;' in cookies[0])
+        self.assertTrue('name=;' in cookies[0] or 'name="";' in cookies[0])
 
     def test_set_header(self):
         response = BaseResponse()

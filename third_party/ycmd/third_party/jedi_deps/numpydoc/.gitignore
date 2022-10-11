@@ -6,5 +6,13 @@
 *.egg-info
 *.swp
 *.swo
+.coverage*
+junit-results.xml
+.pytest_cache
+doc/_build
 build
 dist
+doc/_build
+numpydoc/tests/tinybuild/_build
+numpydoc/tests/tinybuild/generated
+MANIFEST
