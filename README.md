@@ -1173,7 +1173,7 @@ $ EXTRA_CMAKE_ARGS='-DPATH_TO_LLVM_ROOT=/path/to/your/llvm' ./install.py --clang
 ```
 
 Please note that if using custom `clangd` or `libclang` it _must_ match the
-version that YCM requires. Currently YCM requires ***clang 13.0.0***.
+version that YCM requires. Currently YCM requires ***clang 15.0.1***.
 
 #### Compile flags
 
@@ -3820,7 +3820,7 @@ Please note: The YCM maintainers do not specifically endorse nor necessarily hav
 
 ### 关于版本
 
-- ycm_core  核心版本: 46 (28 September 2022) 静态编译
+- ycm_core  核心版本: 47 (11 October 2022) 静态编译
 - libclang  版本: 15.0.1 (20 September 2022) [Clang][Clang]
 - Python    支持: 3.10.7 (06 September 2022) [Python][python-win-download]
 
