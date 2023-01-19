@@ -152,7 +152,7 @@ don't need to save your file or press any keyboard shortcut to trigger this, it
 
 **And that's not all...**
 
-YCM might be the only vim completion engine with the correct Unicode support.
+YCM might be the only Vim completion engine with the correct Unicode support.
 Though we do assume UTF-8 everywhere.
 
 ![YouCompleteMe GIF unicode demo](https://user-images.githubusercontent.com/10026824/34471853-af9cf32a-ef53-11e7-8229-de534058ddc4.gif)
@@ -184,7 +184,7 @@ Below we can see YCM being able to do a few things:
 - Retrieve references across files
 - Go to declaration/definition
 - Expand `auto` in C++
-- Fix some common errors with `FixIt`
+- Fix some common errors, and provide refactorings, with `FixIt`
 - Not shown in the GIF is `GoToImplementation` and `GoToType`
   for servers that support it.
 
@@ -208,18 +208,45 @@ Installation
 
 ### Requirements
 
+| Runtime | Min Version | Recommended Version (full support) | Python |
+|---------|-------------|------------------------------------|--------|
+| Vim     | 8.1.2269    | 9.0.214                            | 3.8    |
+| Neovim  | 0.5         | Vim 9.0.214                        | 3.8    |
+
 #### Supported Vim Versions
 
 Our policy is to support the Vim version that's in the latest LTS of Ubuntu.
 That's currently Ubuntu 20.04 which contains `vim-nox` at `v8.1.2269`.
 
-Vim must have a working Python 3.6 runtime, compiled with `--enable-shared` (or
-`--enable-framework`). You can check with `:py3 import sys; print( sys.version
-)`.
+Vim must have a [working Python 3 runtime](#supported-python-runtime).
 
 For Neovim users, our policy is to require the latest released version.
 Currently, Neovim 0.5.0 is required.  Please note that some features are not
 available in Neovim, and Neovim is not officially supported.
+
+#### Supported Python runtime
+
+YCM has two components: A server and a client. Both the server and client
+require Python 3.8 or later 3.x release.
+
+For the Vim client, Vim must be, compiled with `--enable-shared` (or
+`--enable-framework` on macOS). You can check if this is working with `:py3
+import sys; print( sys.version)`. It should say something like `3.8.2 (...)`.
+
+For Neovim, you must have a python 3.8 runtime and the Neovim python
+extensions. See Neovim's `:help provider-python` for how to set that up.
+
+For the server, you must run the `install.py` script with a python 3.8 (or
+later) runtime. Anaconda etc. are not supported. YCM will remember the runtime
+you used to run `install.py` and will use that when launching the server, so if
+you usually use anaconda, then make sure to use the full path to a real cpython3,
+e.g. `/usr/bin/python3 install.py --all` etc.
+
+Our policy is to support the python3 version that's availble in the latest
+Ubuntu LTS (similar to our Vim version policy). We don't increase the python
+runtime version without a reason, though. Typically, we do this when the current
+python version wer're using goes out of support. At that time we will typically
+pick a version that will be supported for a number of years.
 
 #### Supported Compilers
 
@@ -227,11 +254,11 @@ In order to provide the best possible performance and stability, ycmd has
 updated its code to C++17. This requires a version bump of the minimum
 supported compilers. The new requirements are:
 
-| Compiler | Current Min |
-|-|-|
-| GCC | 8 |
-| Clang | 7 |
-| MSVC | 15.7 (VS 2017) |
+| Compiler | Current Min    |
+|----------|----------------|
+| GCC      | 8              |
+| Clang    | 7              |
+| MSVC     | 15.7 (VS 2017) |
 
 YCM requires CMake 3.13 or greater. If your CMake is too old, you may be able to
 simply `pip install --user cmake` to get a really new version.
@@ -249,7 +276,7 @@ downstream compilers, though we do our best to signal where we know them.
 
 - Install YCM plugin via [Vundle][]
 - Install CMake, MacVim and Python 3; Note that the pre-installed *macOS system*
-  vim is not supported (due to it having broken Python integration).
+  Vim is not supported (due to it having broken Python integration).
 
 ```
 $ brew install cmake python go nodejs
@@ -428,7 +455,7 @@ supported compiler. The latest LTS of Ubuntu is the minimum platform for simple
 installation. For earlier releases or other distributions, you may have to do
 some work to acquire the dependencies.
 
-If your vim version is too old, you may need to [compile Vim from
+If your Vim version is too old, you may need to [compile Vim from
 source][vim-build] (don't worry, it's easy).
 
 Install YouCompleteMe with [Vundle][].
@@ -731,11 +758,13 @@ Quick Feature Summary
 * Signature help
 * Real-time diagnostic display
 * Go to include/declaration/definition (`GoTo`, etc.)
+* Go to alternate file (e.g. associated header `GoToAlternateFile`)
 * Find Symbol (`GoToSymbol`), with interactive search
 * Document outline (`GoToDocumentOutline`), with interactive search
 * View documentation comments for identifiers (`GetDoc`)
 * Type information for identifiers (`GetType`)
 * Automatically fix certain errors (`FixIt`)
+* Perform refactoring (`FixIt`)
 * Reference finding (`GoToReferences`)
 * Renaming symbols (`RefactorRename <new name>`)
 * Code formatting (`Format`)
@@ -753,6 +782,7 @@ Quick Feature Summary
 * View documentation comments for identifiers (`GetDoc`)
 * Type information for identifiers (`GetType`)
 * Automatically fix certain errors (`FixIt`)
+* Perform refactoring (`FixIt`)
 * Management of OmniSharp-Roslyn server instance
 * Renaming symbols (`RefactorRename <new name>`)
 * Code formatting (`Format`)
@@ -778,6 +808,7 @@ Quick Feature Summary
 * Go to implementation (`GoToImplementation`)
 * Document outline (`GoToDocumentOutline`), with interactive search
 * Automatically fix certain errors (`FixIt`)
+* Perform refactoring (`FixIt`)
 * View documentation comments for identifiers (`GetDoc`)
 * Type information for identifiers (`GetType`)
 * Code formatting (`Format`)
@@ -796,7 +827,8 @@ Quick Feature Summary
 * Reference finding (`GoToReferences`)
 * View documentation comments for identifiers (`GetDoc`)
 * Type information for identifiers (`GetType`)
-* Automatically fix certain errors (`FixIt`)
+* Automatically fix certain errors and perform refactoring (`FixIt`)
+* Perform refactoring (`FixIt`)
 * Renaming symbols (`RefactorRename <new name>`)
 * Code formatting (`Format`)
 * Organize imports (`OrganizeImports`)
@@ -813,6 +845,7 @@ Quick Feature Summary
 * Document outline (`GoToDocumentOutline`), with interactive search
 * View documentation comments for identifiers (`GetDoc`)
 * Automatically fix certain errors (`FixIt`)
+* Perform refactoring (`FixIt`)
 * Type information for identifiers (`GetType`)
 * Renaming symbols (`RefactorRename <new name>`)
 * Code formatting (`Format`)
@@ -1040,15 +1073,15 @@ endfor
 
 ## Inlay hints
 
-**NOTE**: Hightly experimental feature, requiring vim 9.0.214 or later (no
-neovim).
+**NOTE**: Highly experimental feature, requiring Vim 9.0.214 or later (not
+supported in NeoVim).
 
 When `g:ycm_enable_inlay_hints` (globally) or `b:ycm_enable_inlay_hints` (for a
 specific buffer) is set to `1`, then YCM will insert inlay hints as supported by
 the language semantic engine.
 
-An inlay hint is text renderd on the screen which is not part of the buffer and
-is often used to mark up the type or name of arguments, perameters, etc. which
+An inlay hint is text rendered on the screen which is not part of the buffer and
+is often used to mark up the type or name of arguments, parameters, etc. which
 help the developer understand the semantics of the code.
 
 Here are some examples:
@@ -1705,7 +1738,7 @@ For each of the LSP server's configuration you should look up the respective
 server's documentation.
 
 Some servers request settings from arbitrary 'sections' of configuration. There
-is no concept of configuration sections in vim, so you can specify an additional
+is no concept of configuration sections in Vim, so you can specify an additional
 `config_sections` dictionary which maps section to a dictionary of config
 required by the server. For example:
 
@@ -1738,7 +1771,7 @@ the _latest_ Eclim installed and configured (this means Eclim `>= 2.2.*` and
 Eclipse `>= 4.2.*`).
 
 After installing Eclim remember to create a new Eclipse project within your
-application by typing `:ProjectCreate <path-to-your-project> -n ruby` inside vim
+application by typing `:ProjectCreate <path-to-your-project> -n ruby` inside Vim
 and don't forget to have `let g:EclimCompletionMethod = 'omnifunc'` in your
 vimrc. This will make YCM and Eclim play nice; YCM will use Eclim's omnifuncs as
 the data source for semantic completions and provide the auto-triggering and
@@ -2027,6 +2060,13 @@ Looks up the current line for a header and jumps to it.
 
 Supported in filetypes: `c, cpp, objc, objcpp, cuda`
 
+#### The `GoToAlternateFile` subcommand
+
+Jump to the associated file, as defined by the language server. Typically this
+will jump you to the associated header file for a c or c++ translation unit.
+
+Supported in filetypes: `c, cpp, objc, objcpp, cuda` (clangd only)
+
 #### The `GoToDeclaration` subcommand
 
 Looks up the symbol under the cursor and jumps to its declaration.
@@ -2227,16 +2267,28 @@ undone, and never saves or writes files to the disk.
 
 #### The `FixIt` subcommand
 
-Where available, attempts to make changes to the buffer to correct diagnostics
-on the current line. Where multiple suggestions are available (such as when
-there are multiple ways to resolve a given warning, or where multiple
-diagnostics are reported for the current line), the options are presented
-and one can be selected.
+Where available, attempts to make changes to the buffer to correct diagnostics,
+or perform refactoring, on the current line or selection. Where multiple
+suggestions are available (such as when there are multiple ways to resolve a
+given warning, or where multiple diagnostics are reported for the current line,
+or multiple refactoring tweaks are available), the options are presented and
+one can be selected.
 
 Completers which provide diagnostics may also provide trivial modifications to
 the source in order to correct the diagnostic. Examples include syntax errors
 such as missing trailing semi-colons, spurious characters, or other errors which
-the semantic engine can deterministically suggest corrections.
+the semantic engine can deterministically suggest corrections. A small demo
+presenting how diagnostics can be fixed with clangd:
+
+![YcmCompleter-FixIt-OnDiagnostic](https://user-images.githubusercontent.com/17928698/206855014-9131a49b-87e8-4ed4-8d91-f2fe7808a0b9.gif)
+
+Completers (LSPs) may also provide refactoring tweaks, which may be available
+even when no diagnostic is presented for the current line. These include
+function extraction, variable extraction, `switch` population, constructor
+generation, ... The tweaks work for a selection as well. Consult your LSP for
+available refactorings. A demonstration of refactoring capabilities with clangd:
+
+![YouCompleter-FixIt-Refactoring](https://user-images.githubusercontent.com/17928698/206855713-3588c8de-d0f5-4725-b65e-bc51110252cc.gif)
 
 If no fix-it is available for the current line, or there is no diagnostic on the
 current line, this command has no effect on the current buffer. If any
@@ -2659,6 +2711,21 @@ If you want to just turn off the identifier completer but keep the semantic
 triggers, you should set `g:ycm_min_num_of_chars_for_completion` to a high
 number like `99`.
 
+When `g:ycm_auto_trigger` is `0`, YCM sets the `completefunc`, so that you can
+manually trigger normal completion using `C-x C-u`.
+
+If you want to map something else to trigger completion, such as `C-d``,
+then you can map it to `<plug>(YCMComplete)`. For example:
+
+```viml
+let g:ycm_auto_trigger = 0
+imap <c-d> <plug>(YCMComplete)
+```
+
+NOTE: It's not possible to map one of the keys in
+`g:ycm_key_list_select_completion` (or similar) to `<plug>(YCMComplete)`. In
+practice that means that you can't use `<Tab>` for this.
+
 Default: `1`
 
 ```viml
@@ -2884,7 +2951,7 @@ When this option is set to 1, YCM will echo the text of the diagnostic present
 on the current line when you move your cursor to that line. If a `FixIt` is
 available for the current diagnostic, then ` (FixIt)` is appended.
 
-If you have a vim that supports virtual text, you can set this option
+If you have a Vim that supports virtual text, you can set this option
 to the string `virtual-text`, and the diagnostic will be displayed inline with
 the text, right aligned in the window and wrapping to the next line if there is
 not enough space, for example:
@@ -2913,7 +2980,7 @@ Valid values:
 
 ```viml
 let g:ycm_echo_current_diagnostic = 1
-" Or, when you have vim supporting virtual text
+" Or, when you have Vim supporting virtual text
 let g:ycm_echo_current_diagnostic = 'virtual-text'
 ```
 
@@ -3373,9 +3440,10 @@ let g:ycm_key_list_stop_completion = ['<C-y>']
 
 This option controls the key mapping used to invoke the completion menu for
 semantic completion. By default, semantic completion is triggered automatically
-after typing `.`, `->` and `::` in insert mode (if semantic completion support
-has been compiled in). This key mapping can be used to trigger semantic
-completion anywhere. Useful for searching for top-level functions and classes.
+after typing characters appropriate for the language, such as `.`, `->`, `::`,
+etc. in insert mode (if semantic completion support has been compiled in). This
+key mapping can be used to trigger semantic completion anywhere. Useful for
+searching for top-level functions and classes.
 
 Console Vim (not Gvim or MacVim) passes `<Nul>` to Vim when the user types
 `<C-Space>` so YCM will make sure that `<Nul>` is used in the map command when
@@ -3747,6 +3815,10 @@ With async diagnostics, LSP servers might send new diagnostics mid-typing.
 If seeing these new diagnostics while typing is not desired, this option can
 be set to 0.
 
+When this option is set to `0`, diagnostic signs, virtual text and highlights
+are cleared when entering insert mode and replaced when leaving insert mode.
+This reduces visual noise while editing.
+
 In addition, this option is recommended when `g:ycm_echo_current_diagnostic` is
 set to `virtual-text` as it prevents updating the virtual text while you are
 typing.
@@ -3786,8 +3858,9 @@ The latest version of the plugin is available at
 
 The author's homepage is <https://val.markovic.io>.
 
-Please do **NOT** go to #vim on freenode for support. Please contact the
-YouCompleteMe maintainers directly using the [contact details](#contact).
+Please do **NOT** go to #vim, reddit, or stack overflow for support. Please
+contact the YouCompleteMe maintainers directly using the [contact
+details](#contact).
 
 License
 -------
@@ -3820,8 +3893,8 @@ Please note: The YCM maintainers do not specifically endorse nor necessarily hav
 
 ### 关于版本
 
-- ycm_core  核心版本: 47 (2 November 2022) 静态编译
-- libclang  版本: 15.0.3 (18 October 2022) [Clang][Clang]
+- ycm_core  核心版本: 47 (20 January 2023) 静态编译
+- libclang  版本: 15.0.9 (30 November 2022) [Clang][Clang]
 - Python    支持: 3.11.0 (24 October 2022) [Python][python-win-download]
 
 
