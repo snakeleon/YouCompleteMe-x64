@@ -83,9 +83,10 @@ CORE_MISSING_MESSAGE = (
 CORE_OUTDATED_MESSAGE = (
   'YCM core library too old; PLEASE RECOMPILE by running the install.py '
   'script. See the documentation for more details.' )
-NO_PYTHON2_SUPPORT_MESSAGE = (
-  'YCM has dropped support for python2. '
-  'You need to recompile it with python3 instead.' )
+PYTHON_TOO_OLD_MESSAGE = (
+  'Your python is too old to run YCM server. '
+  'Please see troubleshooting guide on YCM GitHub wiki.'
+)
 SERVER_IDLE_SUICIDE_SECONDS = 1800  # 30 minutes
 CLIENT_LOGFILE_FORMAT = 'ycm_'
 SERVER_LOGFILE_FORMAT = 'ycmd_{port}_{std}_'
@@ -250,7 +251,8 @@ class YouCompleteMe:
     elif return_code == 7:
       error_message = CORE_OUTDATED_MESSAGE
     elif return_code == 8:
-      error_message = NO_PYTHON2_SUPPORT_MESSAGE
+      # TODO: here we could retry but discard g:ycm_server_python_interpreter
+      error_message = PYTHON_TOO_OLD_MESSAGE
     else:
       error_message = EXIT_CODE_UNEXPECTED_MESSAGE.format( code = return_code,
                                                            logfile = logfile )
@@ -606,9 +608,14 @@ class YouCompleteMe:
     return self._buffers[ bufnr ]
 
 
+  def OnInsertEnter( self ):
+    if not self._user_options[ 'update_diagnostics_in_insert_mode' ]:
+      self.CurrentBuffer().ClearDiagnosticsUI()
+
+
   def OnInsertLeave( self ):
     if ( not self._user_options[ 'update_diagnostics_in_insert_mode' ] and
-         not self.NeedsReparse() ):
+         not self.CurrentBuffer().ParseRequestPending() ):
       self.CurrentBuffer().RefreshDiagnosticsUI()
     SendEventNotificationAsync( 'InsertLeave' )
 

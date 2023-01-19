@@ -1,9 +1,6 @@
 """
-PEP 526 introduced a new way of using type annotations on variables. It was
-introduced in Python 3.6.
+PEP 526 introduced a way of using type annotations on variables.
 """
-# python >= 3.6
-
 import typing
 
 asdf = ''
@@ -47,7 +44,7 @@ class Foo():
     baz: typing.ClassVar[str]
 
 
-#?
+#? int()
 Foo.bar
 #? int()
 Foo().bar
@@ -61,6 +58,7 @@ class VarClass:
     var_instance2: float
     var_class1: typing.ClassVar[str] = 1
     var_class2: typing.ClassVar[bytes]
+    var_class3 = None
 
     def __init__(self):
         #? int()
@@ -73,15 +71,21 @@ class VarClass:
         d.var_class2
         #? []
         d.int
-        #? ['var_class1', 'var_class2', 'var_instance1', 'var_instance2']
+        #? ['var_class1', 'var_class2', 'var_instance1', 'var_instance2', 'var_class3']
         self.var_
 
+class VarClass2(VarClass):
+    var_class3: typing.ClassVar[int]
 
-#? ['var_class1', 'var_class2', 'var_instance1']
+    def __init__(self):
+        #? int()
+        self.var_class3
+
+#? ['var_class1', 'var_class2', 'var_instance1', 'var_class3', 'var_instance2']
 VarClass.var_
 #? int()
 VarClass.var_instance1
-#?
+#? float()
 VarClass.var_instance2
 #? str()
 VarClass.var_class1
@@ -91,7 +95,7 @@ VarClass.var_class2
 VarClass.int
 
 d = VarClass()
-#? ['var_class1', 'var_class2', 'var_instance1', 'var_instance2']
+#? ['var_class1', 'var_class2', 'var_class3', 'var_instance1', 'var_instance2']
 d.var_
 #? int()
 d.var_instance1
