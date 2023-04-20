@@ -12,7 +12,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runs-on: [ ubuntu-20.04, macos-10.15, windows-2019 ]
+        runs-on: [ ubuntu-20.04, macos-12, windows-2019 ]
         python-arch: [ 'x64' ]
         python-version: [ '3.8' ]
         include:
@@ -44,16 +44,21 @@ jobs:
       run: python3 -m pip install -r python/test_requirements.txt
     - name: Run tests
       run: python3 run_tests.py --quiet python/ycm/tests
+    - name: summarise coverage
+      run: coverage xml
     - name: Upload coverage data
-      run: codecov --name "${{ runner.os }}-${{ matrix.python-version }}-${{ matrix.python-arch }}"
+      uses: codecov/codecov-action@v3
+      with:
+        name: "${{ runner.os }}-${{ matrix.python-version }}-${{ matrix.python-arch }}"
 
   vim-tests:
     strategy:
       fail-fast: false
       matrix:
         vim: [ 'new', 'old' ]
+        arch: [ 'x86_64' ]
     runs-on: ubuntu-20.04
-    container: 'youcompleteme/ycm-vim-py3:test'
+    container: 'youcompleteme/ycm-vim-${{ matrix.arch }}-py3:test'
     env:
       COVERAGE: true
       YCM_TEST_STDOUT: true
@@ -79,5 +84,9 @@ jobs:
     - name: Run tests in new vim
       if: matrix.vim == 'new'
       run: ./test/run_vim_tests
+    - name: Combine and summarise coverage
+      run: coverage combine && coverage xml
     - name: Upload coverage data
-      run: codecov --name "vim-tests-${{ matrix.vim }}"
+      uses: codecov/codecov-action@v3
+      with:
+        name: "vim-tests-${{ matrix.vim }}"
