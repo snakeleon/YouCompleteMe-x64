@@ -1935,6 +1935,11 @@ See the [file type feature summary](#quick-feature-summary) for an overview of
 the features available for each file type. See the _YcmCompleter subcommands_
 section for more information on the available subcommands and their usage.
 
+Some commands, like `Format` accept a range, like `:%YcmCompleter Format`.
+
+Some commands like `GetDoc` and the various `GoTo` commands respect modifiers,
+like `:rightbelow YcmCompleter GetDoc`, `:vertical YcmCompleter GoTo`.
+
 YcmCompleter Subcommands
 ------------------------
 
@@ -2150,6 +2155,27 @@ under the cursor. Depending on the file type, this includes things like:
 * Doxygen/javadoc comments,
 * Python docstrings,
 * etc.
+
+The documentation is opened in the preview window, and options like
+`previewheight` are respected. If you would like to customise the height and
+position of this window, we suggest a custom command that:
+
+* Sets `previewheight` temporarily
+* Runs the `GetDoc` command with supplied modifiers
+* Restores `previewheight`.
+
+For example:
+
+```viml
+command -count ShowDocWithSize
+  \ let g:ph=&previewheight
+  \ <bar> set previewheight=<count>
+  \ <bar> <mods> YcmCompleter GetDoc
+  \ <bar> let &previewheight=g:ph
+```
+
+You can then use something like `:botright vertical 80ShowDocWithSize`. Here's an
+example of that: https://asciinema.org/a/hE6Pi1gU6omBShwFna8iwGEe9
 
 Supported in filetypes: `c, cpp, objc, objcpp, cuda, cs, go, java, javascript,
 python, typescript, rust`
@@ -3822,8 +3848,8 @@ Please note: The YCM maintainers do not specifically endorse nor necessarily hav
 ### 关于版本
 
 - ycm_core  核心版本: 47 (April 20, 2023) 静态编译
-- libclang  版本: 16.0.1 (April 05, 2023) [Clang][Clang]
-- Python    支持: 3.11.3 (April 05, 2023) [Python][python-win-download]
+- libclang  版本: 16.0.1 (June 14, 2023) [Clang][Clang]
+- Python    支持: 3.11.4 (June 06, 2023) [Python][python-win-download]
 
 
 支持操作系统:
