@@ -7,22 +7,24 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-20.04, windows-2019]
-        python-version: ["3.10", "3.9", "3.8", "3.7", "3.6"]
-        environment: ['3.8', '3.10', '3.9', '3.7', '3.6', 'interpreter']
+        python-version: ["3.12", "3.11", "3.10", "3.9", "3.8", "3.7", "3.6"]
+        environment: ['3.8', '3.12', '3.11', '3.10', '3.9', '3.7', '3.6', 'interpreter']
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v4
         if: ${{ matrix.environment != 'interpreter' }}
         with:
           python-version: ${{ matrix.environment }}
+          allow-prereleases: true
 
-      - uses: actions/setup-python@v2
+      - uses: actions/setup-python@v4
         with:
           python-version: ${{ matrix.python-version }}
+          allow-prereleases: true
 
       - name: Install dependencies
         run: 'pip install .[testing]'
@@ -36,7 +38,7 @@ jobs:
     runs-on: ubuntu-20.04
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
@@ -46,14 +48,14 @@ jobs:
       - name: Run tests
         run: |
           python -m flake8 jedi setup.py
-          python -m mypy jedi sith.py
+          python -m mypy jedi sith.py setup.py
 
   coverage:
     runs-on: ubuntu-20.04
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 

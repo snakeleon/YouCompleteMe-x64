@@ -1,5 +1,3 @@
-# coding: utf-8
-#
 # Copyright 2011 Yesudeep Mangalapilly <yesudeep@gmail.com>
 # Copyright 2012 Google, Inc & contributors.
 #
@@ -15,15 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import queue
 import threading
 from pathlib import Path
 
-from watchdog.utils import BaseThread
+from watchdog.utils import BaseThread, Protocol
 from watchdog.utils.bricks import SkipRepeatsQueue
 
-DEFAULT_EMITTER_TIMEOUT = 1    # in seconds.
-DEFAULT_OBSERVER_TIMEOUT = 1   # in seconds.
+DEFAULT_EMITTER_TIMEOUT = 1  # in seconds.
+DEFAULT_OBSERVER_TIMEOUT = 1  # in seconds.
 
 
 # Collection classes
@@ -76,8 +76,7 @@ class ObservedWatch:
         return hash(self.key)
 
     def __repr__(self):
-        return "<%s: path=%s, is_recursive=%s>" % (
-            type(self).__name__, self.path, self.is_recursive)
+        return f"<{type(self).__name__}: path={self.path!r}, is_recursive={self.is_recursive}>"
 
 
 # Observer classes
@@ -295,9 +294,9 @@ class BaseObserver(EventDispatcher):
 
             # If we don't have an emitter for this watch already, create it.
             if self._emitter_for_watch.get(watch) is None:
-                emitter = self._emitter_class(event_queue=self.event_queue,
-                                              watch=watch,
-                                              timeout=self.timeout)
+                emitter = self._emitter_class(
+                    event_queue=self.event_queue, watch=watch, timeout=self.timeout
+                )
                 if self.is_alive():
                     emitter.start()
                 self._add_emitter(emitter)
@@ -380,3 +379,8 @@ class BaseObserver(EventDispatcher):
                 if handler in self._handlers.get(watch, []):
                     handler.dispatch(event)
         event_queue.task_done()
+
+
+class BaseObserverSubclassCallable(Protocol):
+    def __call__(self, timeout: float = ...) -> BaseObserver:
+        ...

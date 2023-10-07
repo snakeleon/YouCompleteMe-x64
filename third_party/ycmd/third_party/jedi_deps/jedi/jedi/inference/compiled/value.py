@@ -51,7 +51,6 @@ class CompiledValue(Value):
     def py__call__(self, arguments):
         return_annotation = self.access_handle.get_return_annotation()
         if return_annotation is not None:
-            # TODO the return annotation may also be a string.
             return create_from_access_path(
                 self.inference_state,
                 return_annotation
@@ -163,7 +162,10 @@ class CompiledValue(Value):
     def py__simple_getitem__(self, index):
         with reraise_getitem_errors(IndexError, KeyError, TypeError):
             try:
-                access = self.access_handle.py__simple_getitem__(index)
+                access = self.access_handle.py__simple_getitem__(
+                    index,
+                    safe=not self.inference_state.allow_unsafe_executions
+                )
             except AttributeError:
                 return super().py__simple_getitem__(index)
         if access is None:
@@ -311,11 +313,12 @@ class CompiledModule(CompiledValue):
 
 
 class CompiledName(AbstractNameDefinition):
-    def __init__(self, inference_state, parent_value, name):
+    def __init__(self, inference_state, parent_value, name, is_descriptor):
         self._inference_state = inference_state
         self.parent_context = parent_value.as_context()
         self._parent_value = parent_value
         self.string_name = name
+        self.is_descriptor = is_descriptor
 
     def py__doc__(self):
         return self.infer_compiled_value().py__doc__()
@@ -342,6 +345,11 @@ class CompiledName(AbstractNameDefinition):
 
     @property
     def api_type(self):
+        if self.is_descriptor:
+            # In case of properties we want to avoid executions as much as
+            # possible. Since the api_type can be wrong for other reasons
+            # anyway, we just return instance here.
+            return "instance"
         return self.infer_compiled_value().api_type
 
     def infer(self):
@@ -432,9 +440,10 @@ class CompiledValueFilter(AbstractFilter):
 
     def get(self, name):
         access_handle = self.compiled_value.access_handle
+        safe = not self._inference_state.allow_unsafe_executions
         return self._get(
             name,
-            lambda name, safe: access_handle.is_allowed_getattr(name, safe=safe),
+            lambda name: access_handle.is_allowed_getattr(name, safe=safe),
             lambda name: name in access_handle.dir(),
             check_has_attribute=True
         )
@@ -443,30 +452,34 @@ class CompiledValueFilter(AbstractFilter):
         """
         To remove quite a few access calls we introduced the callback here.
         """
-        if self._inference_state.allow_descriptor_getattr:
-            pass
-
-        has_attribute, is_descriptor = allowed_getattr_callback(
+        has_attribute, is_descriptor, property_return_annotation = allowed_getattr_callback(
             name,
-            safe=not self._inference_state.allow_descriptor_getattr
         )
+        if property_return_annotation is not None:
+            values = create_from_access_path(
+                self._inference_state,
+                property_return_annotation
+            ).execute_annotation()
+            if values:
+                return [CompiledValueName(v, name) for v in values]
+
         if check_has_attribute and not has_attribute:
             return []
 
         if (is_descriptor or not has_attribute) \
-                and not self._inference_state.allow_descriptor_getattr:
+                and not self._inference_state.allow_unsafe_executions:
             return [self._get_cached_name(name, is_empty=True)]
 
         if self.is_instance and not in_dir_callback(name):
             return []
-        return [self._get_cached_name(name)]
+        return [self._get_cached_name(name, is_descriptor=is_descriptor)]
 
     @memoize_method
-    def _get_cached_name(self, name, is_empty=False):
+    def _get_cached_name(self, name, is_empty=False, *, is_descriptor=False):
         if is_empty:
             return EmptyCompiledName(self._inference_state, name)
         else:
-            return self._create_name(name)
+            return self._create_name(name, is_descriptor=is_descriptor)
 
     def values(self):
         from jedi.inference.compiled import builtin_from_name
@@ -480,7 +493,7 @@ class CompiledValueFilter(AbstractFilter):
         for name in dir_infos:
             names += self._get(
                 name,
-                lambda name, safe: dir_infos[name],
+                lambda name: dir_infos[name],
                 lambda name: name in dir_infos,
             )
 
@@ -490,11 +503,12 @@ class CompiledValueFilter(AbstractFilter):
                 names += filter.values()
         return names
 
-    def _create_name(self, name):
+    def _create_name(self, name, is_descriptor):
         return CompiledName(
             self._inference_state,
             self.compiled_value,
-            name
+            name,
+            is_descriptor,
         )
 
     def __repr__(self):

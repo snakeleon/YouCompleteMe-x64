@@ -4,7 +4,7 @@ Using Jedi
 ==========
 
 |jedi| is can be used with a variety of :ref:`plugins <editor-plugins>`,
-`language servers <language-servers>` and other software.
+:ref:`language servers <language-servers>` and other software.
 It is also possible to use |jedi| in the :ref:`Python shell or with IPython
 <repl-completion>`.
 
@@ -16,7 +16,8 @@ Language Servers
 --------------
 
 - `jedi-language-server <https://github.com/pappasam/jedi-language-server>`_
-- `python-language-server <https://github.com/palantir/python-language-server>`_
+- `python-language-server <https://github.com/palantir/python-language-server>`_ (currently unmaintained)
+- `python-lsp-server <https://github.com/python-lsp/python-lsp-server>`_ (fork from python-language-server)
 - `anakin-language-server <https://github.com/muffinmad/anakin-language-server>`_
 
 .. _editor-plugins:
@@ -86,7 +87,7 @@ Gedit
 Eric IDE
 ~~~~~~~~
 
-- `Eric IDE`_ (Available as a plugin)
+- `Eric IDE`_
 
 Web Debugger
 ~~~~~~~~~~~~

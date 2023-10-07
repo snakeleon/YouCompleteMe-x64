@@ -206,6 +206,7 @@ class Script:
             before magic methods and name mangled names that start with ``__``.
         :rtype: list of :class:`.Completion`
         """
+        self._inference_state.reset_recursion_limitations()
         with debug.increase_indent_cm('complete'):
             completion = Completion(
                 self._inference_state, self._get_module_context(), self._code_lines,
@@ -215,6 +216,7 @@ class Script:
 
     @validate_line_column
     def infer(self, line=None, column=None, *, only_stubs=False, prefer_stubs=False):
+        self._inference_state.reset_recursion_limitations()
         """
         Return the definitions of under the cursor. It is basically a wrapper
         around Jedi's type inference.
@@ -260,6 +262,7 @@ class Script:
     @validate_line_column
     def goto(self, line=None, column=None, *, follow_imports=False, follow_builtin_imports=False,
              only_stubs=False, prefer_stubs=False):
+        self._inference_state.reset_recursion_limitations()
         """
         Goes to the name that defined the object under the cursor. Optionally
         you can follow imports.
@@ -365,10 +368,17 @@ class Script:
 
         :rtype: list of :class:`.Name`
         """
+        self._inference_state.reset_recursion_limitations()
         definitions = self.goto(line, column, follow_imports=True)
         if definitions:
             return definitions
         leaf = self._module_node.get_leaf_for_position((line, column))
+
+        if leaf is not None and leaf.end_pos == (line, column) and leaf.type == 'newline':
+            next_ = leaf.get_next_leaf()
+            if next_ is not None and next_.start_pos == leaf.end_pos:
+                leaf = next_
+
         if leaf is not None and leaf.type in ('keyword', 'operator', 'error_leaf'):
             def need_pydoc():
                 if leaf.value in ('(', ')', '[', ']'):
@@ -400,6 +410,7 @@ class Script:
             the current module only.
         :rtype: list of :class:`.Name`
         """
+        self._inference_state.reset_recursion_limitations()
 
         def _references(include_builtins=True, scope='project'):
             if scope not in ('project', 'file'):
@@ -434,6 +445,7 @@ class Script:
 
         :rtype: list of :class:`.Signature`
         """
+        self._inference_state.reset_recursion_limitations()
         pos = line, column
         call_details = helpers.get_signature_details(self._module_node, pos)
         if call_details is None:
@@ -553,6 +565,7 @@ class Script:
         return parso_to_jedi_errors(self._inference_state.grammar, self._module_node)
 
     def _names(self, all_scopes=False, definitions=True, references=False):
+        self._inference_state.reset_recursion_limitations()
         # Set line/column to a random position, because they don't matter.
         module_context = self._get_module_context()
         defs = [
@@ -708,7 +721,6 @@ class Interpreter(Script):
     :param namespaces: A list of namespace dictionaries such as the one
         returned by :func:`globals` and :func:`locals`.
     """
-    _allow_descriptor_getattr_default = True
 
     def __init__(self, code, namespaces, *, project=None, **kwds):
         try:
@@ -729,7 +741,16 @@ class Interpreter(Script):
         super().__init__(code, environment=environment, project=project, **kwds)
 
         self.namespaces = namespaces
-        self._inference_state.allow_descriptor_getattr = self._allow_descriptor_getattr_default
+        self._inference_state.allow_unsafe_executions = \
+            settings.allow_unsafe_interpreter_executions
+        # Dynamic params search is important when we work on functions that are
+        # called by other pieces of code. However for interpreter completions
+        # this is not important at all, because the current code is always new
+        # and will never be called by something.
+        # Also sometimes this logic goes a bit too far like in
+        # https://github.com/ipython/ipython/issues/13866, where it takes
+        # seconds to do a simple completion.
+        self._inference_state.do_dynamic_params_search = False
 
     @cache.memoize_method
     def _get_module_context(self):

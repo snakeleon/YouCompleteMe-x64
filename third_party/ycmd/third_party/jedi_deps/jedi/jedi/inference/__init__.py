@@ -90,7 +90,7 @@ class InferenceState:
         self.compiled_subprocess = environment.get_inference_state_subprocess(self)
         self.grammar = environment.get_grammar()
 
-        self.latest_grammar = parso.load_grammar(version='3.10')
+        self.latest_grammar = parso.load_grammar(version='3.12')
         self.memoize_cache = {}  # for memoize decorators
         self.module_cache = imports.ModuleCache()  # does the job of `sys.modules`.
         self.stub_module_cache = {}  # Dict[Tuple[str, ...], Optional[ModuleValue]]
@@ -99,10 +99,11 @@ class InferenceState:
         self.mixed_cache = {}  # see `inference.compiled.mixed._create()`
         self.analysis = []
         self.dynamic_params_depth = 0
+        self.do_dynamic_params_search = settings.dynamic_params
         self.is_analysis = False
         self.project = project
         self.access_cache = {}
-        self.allow_descriptor_getattr = False
+        self.allow_unsafe_executions = False
         self.flow_analysis_enabled = True
 
         self.reset_recursion_limitations()
@@ -125,7 +126,7 @@ class InferenceState:
     @inference_state_function_cache()
     def builtins_module(self):
         module_name = 'builtins'
-        builtins_module, = self.import_module((module_name,), sys_path=())
+        builtins_module, = self.import_module((module_name,), sys_path=[])
         return builtins_module
 
     @property  # type: ignore[misc]

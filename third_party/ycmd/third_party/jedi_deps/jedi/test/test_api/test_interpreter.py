@@ -8,6 +8,7 @@ import typing
 import pytest
 
 import jedi
+import jedi.settings
 from jedi.inference.compiled import mixed
 from importlib import import_module
 
@@ -101,11 +102,13 @@ def test_side_effect_completion():
     assert foo.name == 'foo'
 
 
-def _assert_interpreter_complete(source, namespace, completions,
-                                 **kwds):
+def _assert_interpreter_complete(source, namespace, completions, *, check_type=False, **kwds):
     script = jedi.Interpreter(source, [namespace], **kwds)
     cs = script.complete()
     actual = [c.name for c in cs]
+    if check_type:
+        for c in cs:
+            c.type
     assert sorted(actual) == sorted(completions)
 
 
@@ -219,7 +222,7 @@ def test__getattr__completions(allow_unsafe_getattr, class_is_findable):
 
 @pytest.fixture(params=[False, True])
 def allow_unsafe_getattr(request, monkeypatch):
-    monkeypatch.setattr(jedi.Interpreter, '_allow_descriptor_getattr_default', request.param)
+    monkeypatch.setattr(jedi.settings, 'allow_unsafe_interpreter_executions', request.param)
     return request.param
 
 
@@ -610,12 +613,12 @@ def test_dict_getitem(code, types):
         #('for x in dunder: x', 'str'),
     ]
 )
-def test_dunders(class_is_findable, code, expected):
+def test_dunders(class_is_findable, code, expected, allow_unsafe_getattr):
     from typing import Iterator
 
     class DunderCls:
         def __getitem__(self, key) -> int:
-            pass
+            return 1
 
         def __iter__(self, key) -> Iterator[str]:
             pass
@@ -656,10 +659,12 @@ def bar():
         ({'return': 'typing.Union[str, int]'}, ['int', 'str'], ''),
         ({'return': 'typing.Union["str", int]'},
          ['int', 'str'] if sys.version_info >= (3, 9) else ['int'], ''),
-        ({'return': 'typing.Union["str", 1]'}, [], ''),
+        ({'return': 'typing.Union["str", 1]'},
+         ['str'] if sys.version_info >= (3, 11) else [], ''),
         ({'return': 'typing.Optional[str]'}, ['NoneType', 'str'], ''),
         ({'return': 'typing.Optional[str, int]'}, [], ''),  # Takes only one arg
-        ({'return': 'typing.Any'}, [], ''),
+        ({'return': 'typing.Any'},
+         ['_AnyMeta'] if sys.version_info >= (3, 11) else [], ''),
 
         ({'return': 'typing.Tuple[int, str]'},
          ['Tuple' if sys.version_info[:2] == (3, 6) else 'tuple'], ''),
@@ -754,3 +759,99 @@ def test_keyword_param_completion(code, expected):
     import random
     completions = jedi.Interpreter(code, [locals()]).complete()
     assert expected == [c.name for c in completions if c.name.endswith('=')]
+
+
+@pytest.mark.parametrize('class_is_findable', [False, True])
+def test_avoid_descriptor_executions_if_not_necessary(class_is_findable):
+    counter = 0
+
+    class AvoidDescriptor(object):
+        @property
+        def prop(self):
+            nonlocal counter
+            counter += 1
+            return self
+
+    if not class_is_findable:
+        AvoidDescriptor.__name__ = "something_somewhere"
+    namespace = {'b': AvoidDescriptor()}
+    expected = ['prop']
+    _assert_interpreter_complete('b.pro', namespace, expected, check_type=True)
+    assert counter == 0
+    _assert_interpreter_complete('b.prop.pro', namespace, expected, check_type=True)
+    assert counter == 1
+
+
+class Hello:
+    its_me = 1
+
+
+@pytest.mark.parametrize('class_is_findable', [False, True])
+def test_try_to_use_return_annotation_for_property(class_is_findable):
+    class WithProperties(object):
+        @property
+        def with_annotation1(self) -> str:
+            raise BaseException
+
+        @property
+        def with_annotation2(self) -> 'str':
+            raise BaseException
+
+        @property
+        def with_annotation3(self) -> Hello:
+            raise BaseException
+
+        @property
+        def with_annotation4(self) -> 'Hello':
+            raise BaseException
+
+        @property
+        def with_annotation_garbage1(self) -> 'asldjflksjdfljdslkjfsl':  # noqa
+            return Hello()
+
+        @property
+        def with_annotation_garbage2(self) -> 'sdf$@@$5*+8':  # noqa
+            return Hello()
+
+        @property
+        def without_annotation(self):
+            return ""
+
+    if not class_is_findable:
+        WithProperties.__name__ = "something_somewhere"
+        Hello.__name__ = "something_somewhere_else"
+
+    namespace = {'p': WithProperties()}
+    _assert_interpreter_complete('p.without_annotation.upp', namespace, ['upper'])
+    _assert_interpreter_complete('p.with_annotation1.upp', namespace, ['upper'])
+    _assert_interpreter_complete('p.with_annotation2.upp', namespace, ['upper'])
+    _assert_interpreter_complete('p.with_annotation3.its', namespace, ['its_me'])
+    _assert_interpreter_complete('p.with_annotation4.its', namespace, ['its_me'])
+    # This is a fallback, if the annotations don't help
+    _assert_interpreter_complete('p.with_annotation_garbage1.its', namespace, ['its_me'])
+    _assert_interpreter_complete('p.with_annotation_garbage2.its', namespace, ['its_me'])
+
+
+def test_nested__getitem__():
+    d = {'foo': {'bar': 1}}
+    _assert_interpreter_complete('d["fo', locals(), ['"foo"'])
+    _assert_interpreter_complete('d["foo"]["ba', locals(), ['"bar"'])
+    _assert_interpreter_complete('(d["foo"])["ba', locals(), ['"bar"'])
+    _assert_interpreter_complete('((d["foo"]))["ba', locals(), ['"bar"'])
+
+
+@pytest.mark.parametrize('class_is_findable', [False, True])
+def test_custom__getitem__(class_is_findable, allow_unsafe_getattr):
+    class CustomGetItem:
+        def __getitem__(self, x: int):
+            return "asdf"
+
+    if not class_is_findable:
+        CustomGetItem.__name__ = "something_somewhere"
+
+    namespace = {'c': CustomGetItem()}
+    if not class_is_findable and not allow_unsafe_getattr:
+        expected = []
+    else:
+        expected = ['upper']
+    _assert_interpreter_complete('c["a"].up', namespace, expected)

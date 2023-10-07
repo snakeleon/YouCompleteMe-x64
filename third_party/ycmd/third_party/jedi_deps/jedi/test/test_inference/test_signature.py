@@ -13,18 +13,15 @@ from ..helpers import get_example_dir
     'code, sig, names, op, version', [
         ('import math; math.cos', 'cos(x, /)', ['x'], ge, (3, 6)),
 
-        ('next', 'next(iterator, default=None, /)', ['iterator', 'default'], ge, (3, 6)),
+        ('next', 'next(iterator, default=None, /)', ['iterator', 'default'], lt, (3, 12)),
+        ('next', 'next()', [], ge, (3, 12)),
 
         ('str', "str(object='', /) -> str", ['object'], ge, (3, 6)),
 
-        ('pow', 'pow(x, y, z=None, /) -> number', ['x', 'y', 'z'], lt, (3, 6)),
         ('pow', 'pow(base, exp, mod=None)', ['base', 'exp', 'mod'], ge, (3, 8)),
 
-        ('bytes.partition', 'partition(self, sep, /) -> (head, sep, tail)',
-         ['self', 'sep'], lt, (3, 6)),
         ('bytes.partition', 'partition(self, sep, /)', ['self', 'sep'], ge, (3, 6)),
 
-        ('bytes().partition', 'partition(sep, /) -> (head, sep, tail)', ['sep'], lt, (3, 6)),
         ('bytes().partition', 'partition(sep, /)', ['sep'], ge, (3, 6)),
     ]
 )
@@ -354,6 +351,7 @@ def test_dataclass_signature(Script, skip_pre_python37, start, start_params):
     assert quantity.name == 'int'
     price, = sig.params[-2].infer()
     assert price.name == 'float'
+
 
 @pytest.mark.parametrize(
     'start, start_params', [

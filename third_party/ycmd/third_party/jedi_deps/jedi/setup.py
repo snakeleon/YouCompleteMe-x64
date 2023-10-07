@@ -27,12 +27,16 @@ setup(name='jedi',
       maintainer=__AUTHOR__,
       maintainer_email=__AUTHOR_EMAIL__,
       url='https://github.com/davidhalter/jedi',
+      project_urls={
+          "Documentation": 'https://jedi.readthedocs.io/en/latest/',
+      },
       license='MIT',
       keywords='python completion refactoring vim',
       long_description=readme,
       packages=find_packages(exclude=['test', 'test.*']),
       python_requires='>=3.6',
-      install_requires=['parso>=0.8.0,<0.9.0'],
+      # Python 3.11 & 3.12 grammars are added to parso in 0.8.3
+      install_requires=['parso>=0.8.3,<0.9.0'],
       extras_require={
           'testing': [
               'pytest<7.0.0',
@@ -40,12 +44,16 @@ setup(name='jedi',
               'docopt',
               # coloroma for colored debug output
               'colorama',
-              'Django<3.1',  # For now pin this.
+              'Django',
               'attrs',
           ],
           'qa': [
-              'flake8==3.8.3',
-              'mypy==0.782',
+              # latest version supporting Python 3.6
+              'flake8==5.0.4',
+              # latest version supporting Python 3.6
+              'mypy==0.971',
+              # Arbitrary pins, latest at the time of pinning
+              'types-setuptools==67.2.0.1',
           ],
           'docs': [
               # Just pin all of these.
@@ -91,6 +99,8 @@ setup(name='jedi',
           'Programming Language :: Python :: 3.8',
           'Programming Language :: Python :: 3.9',
           'Programming Language :: Python :: 3.10',
+          'Programming Language :: Python :: 3.11',
+          'Programming Language :: Python :: 3.12',
           'Topic :: Software Development :: Libraries :: Python Modules',
           'Topic :: Text Editors :: Integrated Development Environments (IDE)',
           'Topic :: Utilities',

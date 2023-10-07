@@ -1,5 +1,3 @@
-# coding: utf-8
-#
 # Copyright 2011 Yesudeep Mangalapilly <yesudeep@gmail.com>
 # Copyright 2012 Google, Inc & contributors.
 #
@@ -16,12 +14,14 @@
 # limitations under the License.
 
 
+from __future__ import annotations
+
 # When updating this version number, please update the
 # ``docs/source/global.rst.inc`` file as well.
-VERSION_MAJOR = 2
-VERSION_MINOR = 1
-VERSION_BUILD = 9
+VERSION_MAJOR = 3
+VERSION_MINOR = 0
+VERSION_BUILD = 0
 VERSION_INFO = (VERSION_MAJOR, VERSION_MINOR, VERSION_BUILD)
-VERSION_STRING = "%d.%d.%d" % VERSION_INFO
+VERSION_STRING = f"{VERSION_MAJOR}.{VERSION_MINOR}.{VERSION_BUILD}"
 
 __version__ = VERSION_INFO

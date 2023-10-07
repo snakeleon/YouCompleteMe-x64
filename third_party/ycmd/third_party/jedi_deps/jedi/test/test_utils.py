@@ -81,10 +81,10 @@ class TestSetupReadline(unittest.TestCase):
             if all(not x.startswith('from os import ' + s)
                    for s in ['_', 'O_', 'EX_', 'MFD_', 'SF_', 'ST_',
                              'CLD_', 'POSIX_SPAWN_', 'P_', 'RWF_',
-                             'SCHED_'])
+                             'CLONE_', 'SCHED_'])
         }
         # There are quite a few differences, because both Windows and Linux
-        # (posix and nt) librariesare included.
+        # (posix and nt) libraries are included.
         assert len(difference) < 30
 
     def test_local_import(self):

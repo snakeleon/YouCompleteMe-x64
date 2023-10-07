@@ -89,13 +89,13 @@ DYNAMIC_PYTHON_LIBRARY_REGEX = """
   )$
 """
 
-JDTLS_MILESTONE = '1.14.0'
-JDTLS_BUILD_STAMP = '202207211651'
+JDTLS_MILESTONE = '1.26.0'
+JDTLS_BUILD_STAMP = '202307271613'
 JDTLS_SHA256 = (
-  '4978ee235049ecba9c65b180b69ef982eedd2f79dc4fd1781610f17939ecd159'
+  'ba5fe5ee3b2a8395287e24aef20ce6e17834cf8e877117e6caacac6a688a6c53'
 )
 
-RUST_TOOLCHAIN = 'nightly-2022-08-17'
+DEFAULT_RUST_TOOLCHAIN = 'nightly-2023-08-18'
 RUST_ANALYZER_DIR = p.join( DIR_OF_THIRD_PARTY, 'rust-analyzer' )
 
 BUILD_ERROR_MESSAGE = (
@@ -107,7 +107,7 @@ BUILD_ERROR_MESSAGE = (
   'issue tracker, including the entire output of this script (with --verbose) '
   'and the invocation line used to run it.' )
 
-CLANGD_VERSION = '16.0.1'
+CLANGD_VERSION = '17.0.1'
 CLANGD_BINARIES_ERROR_MESSAGE = (
   'No prebuilt Clang {version} binaries for {platform}. '
   'You\'ll have to compile Clangd {version} from source '
@@ -132,23 +132,23 @@ def FindLatestMSVC( quiet ):
       try:
         latest_v = int( latest_full_v.split( '.' )[ 0 ] )
       except ValueError:
-        raise ValueError( f"{latest_full_v} is not a version number." )
+        raise ValueError( f"{ latest_full_v } is not a version number." )
 
       if not quiet:
-        print( f'vswhere -latest returned version {latest_full_v}' )
+        print( f'vswhere -latest returned version { latest_full_v }' )
 
       if latest_v not in ACCEPTABLE_VERSIONS:
         if latest_v > 17:
           if not quiet:
-            print( f'MSVC Version {latest_full_v} is newer than expected.' )
+            print( f'MSVC Version { latest_full_v } is newer than expected.' )
         else:
           raise ValueError(
-            f'vswhere returned {latest_full_v} which is unexpected.'
+            f'vswhere returned { latest_full_v } which is unexpected.'
             'Pass --msvc <version> argument.' )
       return latest_v
     else:
       if not quiet:
-        print( f'vswhere returned nothing usable, {latest_full_v}' )
+        print( f'vswhere returned nothing usable, { latest_full_v }' )
 
   # Fall back to registry parsing, which works at least until MSVC 2019 (16)
   # but is likely failing on MSVC 2022 (17)
@@ -161,11 +161,11 @@ def FindLatestMSVC( quiet ):
   for i in ACCEPTABLE_VERSIONS:
     if not quiet:
       print( 'Trying to find '
-             rf'HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\VisualStudio\{i}.0' )
+             rf'HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\VisualStudio\{ i }.0' )
     try:
-      winreg.OpenKey( handle, rf'SOFTWARE\Microsoft\VisualStudio\{i}.0' )
+      winreg.OpenKey( handle, rf'SOFTWARE\Microsoft\VisualStudio\{ i }.0' )
       if not quiet:
-        print( f"Found MSVC version {i}" )
+        print( f"Found MSVC version { i }" )
       msvc = i
       break
     except FileNotFoundError:
@@ -455,6 +455,14 @@ def ParseArguments():
                        help = 'Enable Go semantic completion engine.' )
   parser.add_argument( '--rust-completer', action = 'store_true',
                        help = 'Enable Rust semantic completion engine.' )
+  parser.add_argument( '--rust-toolchain-version',
+                       action = 'store',
+                       default = DEFAULT_RUST_TOOLCHAIN,
+                       help = 'For advanced users ***NO SUPPORT***, specify '
+                              'the rust toolchain version to install from '
+                              'rustup. Only the default vaule "' +
+                               DEFAULT_RUST_TOOLCHAIN + '" is tested/'
+                              'supported by the maintainers of YCM/ycmd' )
   parser.add_argument( '--java-completer', action = 'store_true',
                        help = 'Enable Java semantic completion engine.' ),
   parser.add_argument( '--ts-completer', action = 'store_true',
@@ -931,7 +939,7 @@ def EnableGoCompleter( args ):
   new_env.pop( 'GOROOT', None )
   new_env[ 'GOBIN' ] = p.join( new_env[ 'GOPATH' ], 'bin' )
 
-  gopls = 'golang.org/x/tools/gopls@v0.9.4'
+  gopls = 'golang.org/x/tools/gopls@v0.13.2'
   CheckCall( [ go, 'install', gopls ],
              env = new_env,
              quiet = args.quiet,
@@ -958,13 +966,23 @@ def ReadToolchainVersion():
     return None
 
 
+def RustToolchainNeedsRefresh( cur, req ):
+  if cur == 'stable' and req == 'stable':
+    return True
+
+  return cur != req
+
+
 def EnableRustCompleter( switches ):
+  cur_toolchain_version = ReadToolchainVersion()
+  req_toolchain_version = switches.rust_toolchain_version
+
   if switches.quiet:
-    sys.stdout.write( 'Installing rust-analyzer for Rust support...' )
+    sys.stdout.write( f'Installing rust-analyzer "{ req_toolchain_version }" '
+                        'for Rust support...' )
     sys.stdout.flush()
 
-  toolchain_version = ReadToolchainVersion()
-  if toolchain_version != RUST_TOOLCHAIN:
+  if RustToolchainNeedsRefresh( cur_toolchain_version, req_toolchain_version ):
     install_dir = mkdtemp( prefix = 'rust_install_' )
 
     new_env = os.environ.copy()
@@ -992,7 +1010,7 @@ def EnableRustCompleter( switches ):
     rustup = p.join( install_dir, 'bin', 'rustup' )
 
     try:
-      CheckCall( [ rustup, 'toolchain', 'install', RUST_TOOLCHAIN ],
+      CheckCall( [ rustup, 'toolchain', 'install', req_toolchain_version ],
                  env = new_env,
                  quiet = switches.quiet )
 
@@ -1001,12 +1019,12 @@ def EnableRustCompleter( switches ):
                          'rustfmt',
                          'clippy' ]:
         CheckCall( [ rustup, 'component', 'add', component,
-                     '--toolchain', RUST_TOOLCHAIN ],
+                     '--toolchain', req_toolchain_version ],
                    env = new_env,
                    quiet = switches.quiet )
 
       toolchain_dir = subprocess.check_output(
-        [ rustup, 'run', RUST_TOOLCHAIN, 'rustc', '--print', 'sysroot' ],
+        [ rustup, 'run', req_toolchain_version, 'rustc', '--print', 'sysroot' ],
         env = new_env
       ).rstrip().decode( 'utf8' )
 
@@ -1017,7 +1035,7 @@ def EnableRustCompleter( switches ):
       for folder in os.listdir( toolchain_dir ):
         shutil.move( p.join( toolchain_dir, folder ), RUST_ANALYZER_DIR )
 
-      WriteToolchainVersion( RUST_TOOLCHAIN )
+      WriteToolchainVersion( req_toolchain_version )
     finally:
       RemoveDirectory( install_dir )
 
@@ -1127,30 +1145,30 @@ def GetClangdTarget():
   if OnWindows():
     return [
       ( 'clangd-{version}-win64',
-        'a0a7b16f6f92d545c84baff5e4bdb56897e955689ffc7407c915cc9d3c69a945' ),
+        '66a1e4d527b451d1e9f21183416fd53ef7f395266bbf7fd74b470ec326d19c98' ),
       ( 'clangd-{version}-win32',
-        '870de4d2a45380eba7c6b6640e2cb870219dd2025ed3bcb58101fd1d17f51d75' ) ]
+        'c4c351da9f528a2cfacbc669cfb656ef34791ed637aeed051274adf611f3ba5a' ) ]
   if OnMac():
     if OnArm():
       return [
         ( 'clangd-{version}-arm64-apple-darwin',
-          'c5b0a314c00e4ce839ce1f4ee1ed46116f839949b7874affa759e10589340948' ) ]
+          '38b0335306193cfe7978af9b2bb9dffc48406739b23f19158e7f000f910df5b0' ) ]
     return [
       ( 'clangd-{version}-x86_64-apple-darwin',
-        '826c85889a1c288418e2c05b91e40158cde06f2e79f1e951d4983de2652a6d2c' ) ]
+        'e3dcbefda4a10d7e1e2f8ce8db820219d78ac48ade247048fc0c6a821105ca26' ) ]
   if OnAArch64():
     return [
       ( 'clangd-{version}-aarch64-linux-gnu',
-        '79f4a0a20342479c0e29573cf58810e0daabbf00178cf042edf6e1acb20a8602' ) ]
+        'a3074a5d3c955b3326881617d36438e2cf36140d8de4b5f7d98e73eda92797a8' ) ]
   if OnArm():
     return [
       None, # First list index is for 64bit archives. ARMv7 is 32bit only.
       ( 'clangd-{version}-armv7a-linux-gnueabihf',
-        'e521f21021885aaeb94e631949db6c0a65cc9c5c9c708afe4a42a058eb91ebca' ) ]
+        'f167c13d3741ad7869a6ee57621af2cb9c2477bb300ab2fac91ea64c19f8df43' ) ]
   if OnX86_64():
     return [
       ( 'clangd-{version}-x86_64-unknown-linux-gnu',
-        '51e69f6f5394ed6990cd7d938c53135ef2b5f8d2da1026eb291ffb3c81968847' ) ]
+        '70a9cf4c9e288941f0193dbfe0ab164e1805b622c2df522ea7319dabdeae3b4c' ) ]
   raise InstallationFailed(
     CLANGD_BINARIES_ERROR_MESSAGE.format( version = CLANGD_VERSION,
                                           platform = 'this system' ) )

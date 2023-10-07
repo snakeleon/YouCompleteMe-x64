@@ -42,7 +42,7 @@ Jedi can currently be used with the following editors/projects:
 - `GNOME Builder`_ (with support for GObject Introspection)
 - Gedit (gedi_)
 - wdb_ - Web Debugger
-- `Eric IDE`_ (Available as a plugin)
+- `Eric IDE`_
 - `IPython 6.0.0+ <https://ipython.readthedocs.io/en/stable/whatsnew/version6.html>`_
 - `xonsh shell <https://xon.sh/contents.html>`_ has `jedi extension <https://xon.sh/xontribs.html#jedi>`_
 
@@ -51,7 +51,8 @@ and many more!
 There are a few language servers that use Jedi:
 
 - `jedi-language-server <https://github.com/pappasam/jedi-language-server>`_
-- `python-language-server <https://github.com/palantir/python-language-server>`_
+- `python-language-server <https://github.com/palantir/python-language-server>`_ (currently unmaintained)
+- `python-lsp-server <https://github.com/python-lsp/python-lsp-server>`_ (fork from python-language-server)
 - `anakin-language-server <https://github.com/muffinmad/anakin-language-server>`_
 
 Here are some pictures taken from jedi-vim_:

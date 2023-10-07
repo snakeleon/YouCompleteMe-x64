@@ -3,6 +3,68 @@
 Changelog
 ---------
 
+3.0.0
+~~~~~
+
+2023-03-20 • `full history <https://github.com/gorakhargosh/watchdog/compare/v2.3.1...v3.0.0>`__
+
+- Drop support for Python 3.6.
+- ``watchdog`` is now PEP 561 compatible, and tested with ``mypy``
+- Fix missing ``>`` in ``FileSystemEvent.__repr__()``  (`#980 <https://github.com/gorakhargosh/watchdog/pull/980>`__)
+- [ci] Lots of improvements
+- [inotify] Return from ``InotifyEmitter.queue_events()`` if not launched when thread is inactive (`#963 <https://github.com/gorakhargosh/watchdog/pull/963>`__)
+- [tests] Stability improvements
+- [utils] Remove handling of ``threading.Event.isSet`` spelling (`#962 <https://github.com/gorakhargosh/watchdog/pull/962>`__)
+- [watchmedo] Fixed tricks YAML generation (`#965 <https://github.com/gorakhargosh/watchdog/pull/965>`__)
+- Thanks to our beloved contributors: @kurtmckee, @altendky, @agroszer, @BoboTiG
+
+2.3.1
+~~~~~
+
+2023-02-28 • `full history <https://github.com/gorakhargosh/watchdog/compare/v2.3.0...v2.3.1>`__
+
+- Run ``black`` on the entire source code
+- Bundle the ``requirements-tests.txt`` file in the source distribution (`#939 <https://github.com/gorakhargosh/watchdog/pull/939>`__)
+- [watchmedo] Exclude ``FileOpenedEvent`` events from ``AutoRestartTrick``, and ``ShellCommandTrick``, to restore watchdog < 2.3.0 behavior. A better solution should be found in the future. (`#949 <https://github.com/gorakhargosh/watchdog/pull/949>`__)
+- [watchmedo] Log ``FileOpenedEvent``, and ``FileClosedEvent``, events in ``LoggerTrick``
+- Thanks to our beloved contributors: @BoboTiG
+
+2.3.0
+~~~~~
+
+2023-02-23 • `full history <https://github.com/gorakhargosh/watchdog/compare/v2.2.1...v2.3.0>`__
+
+- [inotify] Add support for ``IN_OPEN`` events: a ``FileOpenedEvent`` event will be fired (`#941 <https://github.com/gorakhargosh/watchdog/pull/941>`__)
+- [watchmedo] Add optional event debouncing for ``auto-restart``, only restarting once if many events happen in quick succession (``--debounce-interval``) (`#940 <https://github.com/gorakhargosh/watchdog/pull/940>`__)
+- [watchmedo] Exit gracefully on ``KeyboardInterrupt`` exception (Ctrl+C) (`#945 <https://github.com/gorakhargosh/watchdog/pull/945>`__)
+- [watchmedo] Add option to not auto-restart the command after it exits (``--no-restart-on-command-exit``) (`#946 <https://github.com/gorakhargosh/watchdog/pull/946>`__)
+- Thanks to our beloved contributors: @BoboTiG, @dstaple, @taleinat, @cernekj
+
+2.2.1
+~~~~~
+
+2023-01-01 • `full history <https://github.com/gorakhargosh/watchdog/compare/v2.2.0...v2.2.1>`__
+
+- Enable ``mypy`` to discover type hints as specified in PEP 561 (`#933 <https://github.com/gorakhargosh/watchdog/pull/933>`__)
+- [ci] Set the expected Python version when building release files
+- [ci] Update actions versions in use
+- [watchmedo] [regression] Fix usage of missing ``signal.SIGHUP`` attribute on non-Unix OSes (`#935 <https://github.com/gorakhargosh/watchdog/pull/935>`__)
+- Thanks to our beloved contributors: @BoboTiG, @simon04, @piotrpdev
+
+2.2.0
+~~~~~
+
+2022-12-05 • `full history <https://github.com/gorakhargosh/watchdog/compare/v2.1.9...v2.2.0>`__
+
+- [build] Wheels are now available for Python 3.11 (`#932 <https://github.com/gorakhargosh/watchdog/pull/932>`__)
+- [documentation] HTML documentation builds are now tested for errors (`#902 <https://github.com/gorakhargosh/watchdog/pull/902>`__)
+- [documentation] Fix typos here, and there (`#910 <https://github.com/gorakhargosh/watchdog/pull/910>`__)
+- [fsevents2] The ``fsevents2`` observer is now deprecated (`#909 <https://github.com/gorakhargosh/watchdog/pull/909>`__)
+- [tests] The error message returned by musl libc for error code ``-1`` is now allowed (`#923 <https://github.com/gorakhargosh/watchdog/pull/923>`__)
+- [utils] Remove unnecessary code in ``dirsnapshot.py`` (`#930 <https://github.com/gorakhargosh/watchdog/pull/930>`__)
+- [watchmedo] Handle shutdown events from ``SIGHUP`` (`#912 <https://github.com/gorakhargosh/watchdog/pull/912>`__)
+- Thanks to our beloved contributors: @kurtmckee, @babymastodon, @QuantumEnergyE, @timgates42, @BoboTiG
+
 2.1.9
 ~~~~~
 
