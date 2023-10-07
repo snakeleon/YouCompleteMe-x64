@@ -395,7 +395,7 @@ The following additional language support options are available:
   and add `--cs-completer` when calling `install.py`.
 - Go support: install [Go][go-install] and add `--go-completer` when calling
   `install.py`.
-- JavaScript and TypeScript support: install [Node.js and npm][npm-install] and
+- JavaScript and TypeScript support: install [Node.js 18+ and npm][npm-install] and
   add `--ts-completer` when calling `install.py`.
 - Rust support: add `--rust-completer` when calling `install.py`.
 - Java support: install [JDK 17][jdk-install] and add
@@ -435,6 +435,9 @@ apt install build-essential cmake vim-nox python3-dev
 - Install mono-complete, go, node, java and npm
 
 ```
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_current.x nodistro main" | sudo tee /etc/apt/sources.list.d/nodesource.list
 apt install mono-complete golang nodejs openjdk-17-jdk openjdk-17-jre npm
 ```
 
@@ -503,7 +506,7 @@ The following additional language support options are available:
   when calling `install.py`.
 - Go support: install [Go][go-install] and add `--go-completer` when calling
   `install.py`.
-- JavaScript and TypeScript support: install [Node.js and npm][npm-install] and
+- JavaScript and TypeScript support: install [Node.js 18+ and npm][npm-install] and
   add `--ts-completer` when calling `install.py`.
 - Rust support: add `--rust-completer` when calling `install.py`.
 - Java support: install [JDK 17][jdk-install] and add
@@ -617,7 +620,7 @@ The following additional language support options are available:
   Be sure that [the build utility `msbuild` is in your PATH][add-msbuild-to-path].
 - Go support: install [Go][go-install] and add `--go-completer` when calling
   `install.py`.
-- JavaScript and TypeScript support: install [Node.js and npm][npm-install] and
+- JavaScript and TypeScript support: install [Node.js 18+ and npm][npm-install] and
   add `--ts-completer` when calling `install.py`.
 - Rust support: add `--rust-completer` when calling `install.py`.
 - Java support: install [JDK 17][jdk-install] and add
@@ -893,7 +896,8 @@ Signature help is triggered in insert mode automatically when
 `g:ycm_auto_trigger` is enabled and is not supported when it is not enabled.
 
 The signatures popup is hidden when there are no matching signatures or when you
-leave insert mode. There is no key binding to clear the popup.
+leave insert mode. If you want to manually control when it is visible, you can
+map something to `<plug>YCMToggleSignatureHelp` (see below).
 
 For more details on this feature and a few demos, check out the
 [PR that proposed it][signature-help-pr].
@@ -1114,7 +1118,7 @@ $ EXTRA_CMAKE_ARGS='-DPATH_TO_LLVM_ROOT=/path/to/your/llvm' ./install.py --clang
 ```
 
 Please note that if using custom `clangd` or `libclang` it _must_ match the
-version that YCM requires. Currently YCM requires ***clang 16.0.1***.
+version that YCM requires. Currently YCM requires ***clang 17.0.1***.
 
 #### Compile flags
 
@@ -1530,8 +1534,19 @@ built YCM with the `--go-completer` flag; see the [*Installation*
 section](#installation) for details). The server only works for projects with
 the "canonical" layout.
 
-`gopls` also has a handful of undocumented options for which the
-[source code][gopls-preferences] is the only reference.
+`gopls` also has a load of [documented options](https://github.com/golang/tools/blob/master/gopls/doc/settings.md).
+
+You can set these in your `.ycm_extra_conf.py`. For example, to set the build tags:
+
+```python
+def Settings( **kwargs ):
+  if kwargs[ 'language' ] == 'go':
+    return {
+       'ls': {
+         'build.buildFlags': [ '-tags=debug' ] }
+       }
+    }
+```
 
 ### JavaScript and TypeScript Semantic Completion
 
@@ -1547,7 +1562,7 @@ available on [the wiki][tern-instructions].
 
 All JavaScript and TypeScript features are provided by the [TSServer][] engine,
 which is included in the TypeScript SDK. To enable these features, install
-[Node.js and npm][npm-install] and call the `install.py` script with the
+[Node.js 18+ and npm][npm-install] and call the `install.py` script with the
 `--ts-completer` flag.
 
 [TSServer][] relies on [the `jsconfig.json` file][jsconfig.json] for JavaScript
@@ -1772,6 +1787,10 @@ You can also style the line that has the warning/error with these groups:
 - `YcmErrorLine`, which falls back to group `SyntasticErrorLine` if it exists
 - `YcmWarningLine`, which falls back to group `SyntasticWarningLine` if it
   exists
+
+Finally, you can also style the popup for the detailed diagnostics (it is shown
+if `g:ycm_show_detailed_diag_in_popup` is set) using the group `YcmErrorPopup`,
+which falls back to `ErrorMsg`.
 
 Note that the line highlighting groups only work when the
 [`g:ycm_enable_diagnostic_signs`](#the-gycm_enable_diagnostic_signs-option)
@@ -3719,6 +3738,19 @@ Default: `0`
 let g:ycm_disable_signature_help = 1
 ```
 
+### The `g:ycm_signature_help_disable_syntax` option
+
+Set this to 1 to disable syntax highlighting in the signature help popup. Thiis
+can help if your colourscheme doesn't work well with the default highliting and
+inverse video.
+
+Default: `0`
+
+```viml
+" Disable signature help syntax highliting
+let g:ycm_signature_help_disable_syntax = 1
+```
+
 ### The `g:ycm_gopls_binary_path` option
 
 In case the system-wide `gopls` binary is newer than the bundled one, setting
@@ -3847,9 +3879,9 @@ Please note: The YCM maintainers do not specifically endorse nor necessarily hav
 
 ### 关于版本
 
-- ycm_core  核心版本: 47 (April 20, 2023) 静态编译
-- libclang  版本: 16.0.6 (June 14, 2023) [Clang][Clang]
-- Python    支持: 3.11.4 (June 06, 2023) [Python][python-win-download]
+- ycm_core  核心版本: 47 (Oct 7, 2023) 静态编译
+- libclang  版本: 16.0.6 (Jun 14, 2023) [Clang][Clang]
+- Python    支持: 3.12.0 (Oct 2, 2023) [Python][python-win-download]
 
 
 支持操作系统:
@@ -3858,6 +3890,7 @@ Please note: The YCM maintainers do not specifically endorse nor necessarily hav
 - Windows 7
 - Windows 8
 - Windows 10
+- Windows 11
 
 支持架构:
 
