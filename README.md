@@ -214,13 +214,13 @@ Installation
 
 | Runtime | Min Version | Recommended Version (full support) | Python |
 |---------|-------------|------------------------------------|--------|
-| Vim     | 8.1.2269    | 9.0.214                            | 3.8    |
+| Vim     | 8.2.3995    | 9.0.214                            | 3.8    |
 | Neovim  | 0.5         | Vim 9.0.214                        | 3.8    |
 
 #### Supported Vim Versions
 
 Our policy is to support the Vim version that's in the latest LTS of Ubuntu.
-That's currently Ubuntu 20.04 which contains `vim-nox` at `v8.1.2269`.
+That's currently Ubuntu 22.04 which contains `vim-nox` at `v8.2.3995`.
 
 Vim must have a [working Python 3 runtime](#supported-python-runtime).
 
@@ -421,7 +421,7 @@ that are conservatively turned off by default that you may want to turn on.
 
 ### Linux 64-bit
 
-The following assume you're using Ubuntu 20.04.
+The following assume you're using Ubuntu 22.04.
 
 #### Quick start, installing all completers
 
@@ -1092,7 +1092,7 @@ On supported architectures, the `install.py` script will download a suitable
 clangd (`--clangd-completer`) or libclang (`--clang-completer`) for you.
 Supported architectures are:
 
-* Linux glibc >= 2.31 (Intel, armv7-a, aarch64) - built on ubuntu 20.04
+* Linux glibc >= 2.31 (Intel, armv7-a, aarch64) - built on ubuntu 22.04
 * MacOS >=10.15 (Intel, arm64)
   - For Intel, compatibility per clang.llvm.org downloads
   - For arm64, macOS 10.15+
@@ -1396,6 +1396,21 @@ def CSharpSolutionFile( filepath ):
 
 If the path returned by `CSharpSolutionFile` is not an actual file, YCM will
 fall back to the other way of finding the file.
+
+#### Use with .NET 6.0 and .NET SDKs
+
+YCM ships with older version of OmniSharp-Roslyn based on Mono runtime.
+It is possible to use it with .NET 6.0 and newer, but it requires manual setup.
+
+1. Download NET 6.0 version of the OmniSharp server for your system from
+[releases](https://github.com/OmniSharp/omnisharp-roslyn/releases/)
+1. Set `g:ycm_roslyn_binary_path` to the unpacked executable `OmniSharp`
+1. Create a solution file if one doesn't already exist, it is currently required
+by YCM for internal bookkeeping
+    1. Run `dotnet new sln` at the root of your project
+    1. Run `dotnet sln add <project1.csproj> <project2.csproj> ...`
+    for all of your projects
+1. Run `:YcmRestartServer`
 
 ### Python Semantic Completion
 
@@ -3879,14 +3894,13 @@ Please note: The YCM maintainers do not specifically endorse nor necessarily hav
 
 ### 关于版本
 
-- ycm_core  核心版本: 47 (Oct 7, 2023) 静态编译
-- libclang  版本: 16.0.6 (Jun 14, 2023) [Clang][Clang]
-- Python    支持: 3.12.0 (Oct 2, 2023) [Python][python-win-download]
+- ycm_core  核心版本: 48 (Jan 2, 2024) 静态编译
+- libclang  版本: 17.0.6 (Nov 29, 2023) [Clang][Clang]
+- Python    支持: 3.12.1 (Dec 8, 2023) [Python][python-win-download]
 
 
 支持操作系统:
 
-- Windows Vista
 - Windows 7
 - Windows 8
 - Windows 10
