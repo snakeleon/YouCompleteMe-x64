@@ -1,0 +1,7 @@
+include regex_3/*.c
+include regex_3/*.h
+include regex_3/*.py
+include docs/*.*
+include tools/*.py
+include LICENSE.txt
+include pyproject.toml
