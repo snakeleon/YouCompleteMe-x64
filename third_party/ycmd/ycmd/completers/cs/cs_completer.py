@@ -241,6 +241,9 @@ class CsharpCompleter( Completer ):
          self._SolutionSubcommand( request_data,
                                    method = '_RefactorRename',
                                    args = args ) ),
+      'GoToDocumentOutline'              : ( lambda self, request_data, args:
+         self._SolutionSubcommand( request_data,
+                                   method = '_GoToDocumentOutline' ) ),
     }
 
 
@@ -312,6 +315,9 @@ class CsharpCompleter( Completer ):
     diagnostics = self._diagnostic_store[ current_file ][ current_line ]
     if not diagnostics:
       raise ValueError( NO_DIAGNOSTIC_MESSAGE )
+
+    # Prefer errors to warnings and warnings to infos.
+    diagnostics.sort( key = _CsDiagnosticToLspSeverity )
 
     closest_diagnostic = None
     distance_to_closest_diagnostic = 999
@@ -630,33 +636,45 @@ class CsharpSolutionCompleter( object ):
     if quickfixes:
       if len( quickfixes ) == 1:
         ref = quickfixes[ 0 ]
-        ref_file = ref[ 'FileName' ]
-        ref_line = ref[ 'Line' ]
-        lines = GetFileLines( request_data, ref_file )
-        line = lines[ min( len( lines ), ref_line - 1 ) ]
         return responses.BuildGoToResponseFromLocation(
           _BuildLocation(
             request_data,
-            ref_file,
-            ref_line,
+            ref[ 'FileName' ],
+            ref[ 'Line' ],
             ref[ 'Column' ] ),
-          line )
+          ref[ 'Text' ] )
       else:
         goto_locations = []
         for ref in quickfixes:
-          ref_file = ref[ 'FileName' ]
-          ref_line = ref[ 'Line' ]
-          lines = GetFileLines( request_data, ref_file )
-          line = lines[ min( len( lines ), ref_line - 1 ) ]
           goto_locations.append(
             responses.BuildGoToResponseFromLocation(
               _BuildLocation( request_data,
-                              ref_file,
-                              ref_line,
+                              ref[ 'FileName' ],
+                              ref[ 'Line' ],
                               ref[ 'Column' ] ),
-              line ) )
+              ref[ 'Text' ] ) )
 
         return goto_locations
+    else:
+      raise RuntimeError( 'No symbols found' )
+
+
+  def _GoToDocumentOutline( self, request_data ):
+    request = self._DefaultParameters( request_data )
+    response = self._GetResponse( '/currentfilemembersasflat', request )
+    if response is not None and len( response ) > 0:
+      goto_locations = []
+      for ref in response:
+        goto_locations.append(
+          responses.BuildGoToResponseFromLocation(
+            _BuildLocation( request_data,
+                            ref[ 'FileName' ],
+                            ref[ 'Line' ],
+                            ref[ 'Column' ] ),
+            ref[ 'Text' ] ) )
+      if len( goto_locations ) > 1:
+        return goto_locations
+      return goto_locations[ 0 ]
     else:
       raise RuntimeError( 'No symbols found' )
 
@@ -953,3 +971,11 @@ def _ModifiedFilesToFixIt( changes, request_data ):
         request_data[ 'line_num' ],
         request_data[ 'column_codepoint' ] ),
       chunks )
+
+
+def _CsDiagnosticToLspSeverity( diagnostic ):
+  if diagnostic.kind_ == 'ERROR':
+    return 1
+  if diagnostic.kind_ == 'WARNING':
+    return 2
+  return 3

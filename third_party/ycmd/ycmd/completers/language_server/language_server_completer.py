@@ -620,7 +620,7 @@ class LanguageServerConnection( threading.Thread ):
       elif method == 'workspace/workspaceFolders':
         self.SendResponse(
           lsp.Accept( request,
-                      lsp.WorkspaceFolders( self._project_directory ) ) )
+                      lsp.WorkspaceFolders( *self._server_workspace_dirs ) ) )
       else: # method unknown - reject
         self.SendResponse( lsp.Reject( request, lsp.Errors.MethodNotFound ) )
       return
@@ -890,6 +890,7 @@ class LanguageServerCompleter( Completer ):
       - ConvertNotificationToMessage
       - GetCompleterName
       - GetProjectDirectory
+      - GetWorkspaceForFilepath
       - GetProjectRootFiles
       - GetTriggerCharacters
       - GetDefaultNotificationHandler
@@ -1005,7 +1006,8 @@ class LanguageServerCompleter( Completer ):
     self._on_file_ready_to_parse_handlers = []
     self.RegisterOnFileReadyToParse(
       lambda self, request_data:
-        self._UpdateServerWithFileContents( request_data )
+        self._UpdateServerWithFileContents( request_data ),
+      True # once
     )
 
     self._signature_help_disabled = user_options[ 'disable_signature_help' ]
@@ -1042,12 +1044,14 @@ class LanguageServerCompleter( Completer ):
     self._initialize_event = threading.Event()
     self._on_initialize_complete_handlers = []
     self._server_capabilities = None
+    self._workspace_notification_supported = False
     self._is_completion_provider = False
     self._resolve_completion_items = False
     self._project_directory = None
     self._settings = {}
     self._extra_conf_dir = None
     self._semantic_token_atlas = None
+    self._server_workspace_dirs = set()
 
 
   def GetCompleterName( self ):
@@ -1075,6 +1079,7 @@ class LanguageServerCompleter( Completer ):
                  self.GetCommandLine() )
 
     self._project_directory = self.GetProjectDirectory( request_data )
+    self._server_workspace_dirs.add( self._project_directory )
 
     if self._connection_type == 'tcp':
       if self.GetCommandLine():
@@ -1235,6 +1240,9 @@ class LanguageServerCompleter( Completer ):
   def _RestartServer( self, request_data, *args, **kwargs ):
     self.Shutdown()
     self._StartAndInitializeServer( request_data, *args, **kwargs )
+    self._OnInitializeComplete(
+      lambda self: self._UpdateServerWithFileContents( request_data )
+    )
 
 
   def _ServerIsInitialized( self ):
@@ -1655,9 +1663,14 @@ class LanguageServerCompleter( Completer ):
       return responses.BuildDisplayMessageResponse(
           'No diagnostics for current file.' )
 
+    # Prefer errors to warnings and warnings to infos.
+    diagnostics.sort( key = lambda d: d[ 'severity' ] )
+
+    # request_data uses 1-based offsets, but LSP diagnostics use 0-based.
+    # It's easier to shift this one offset by -1 than to shift all diag ranges.
     current_column = lsp.CodepointsToUTF16CodeUnits(
         GetFileLines( request_data, current_file )[ current_line_lsp ],
-        request_data[ 'column_codepoint' ] )
+        request_data[ 'column_codepoint' ] ) - 1
     minimum_distance = None
 
     message = 'No diagnostics for current line.'
@@ -1898,6 +1911,12 @@ class LanguageServerCompleter( Completer ):
     if not self.ServerIsHealthy():
       return
 
+    def ClearOneshotHandlers():
+      self._on_file_ready_to_parse_handlers = [
+        ( handler, once ) for handler, once
+        in self._on_file_ready_to_parse_handlers if not once
+      ]
+
     # If we haven't finished initializing yet, we need to queue up all functions
     # registered on the FileReadyToParse event and in particular
     # _UpdateServerWithFileContents in reverse order of registration. This
@@ -1905,13 +1924,17 @@ class LanguageServerCompleter( Completer ):
     # messages. This is important because server start up can be quite slow and
     # we must not block the user, while we must keep the server synchronized.
     if not self._initialize_event.is_set():
-      for handler in reversed( self._on_file_ready_to_parse_handlers ):
+      for handler, _ in reversed( self._on_file_ready_to_parse_handlers ):
         self._OnInitializeComplete( partial( handler,
                                              request_data = request_data ) )
+      ClearOneshotHandlers()
       return
 
-    for handler in reversed( self._on_file_ready_to_parse_handlers ):
+    for handler, _ in reversed( self._on_file_ready_to_parse_handlers ):
       handler( self, request_data )
+    ClearOneshotHandlers()
+
+    self._UpdateServerWithFileContents( request_data )
 
     # Return the latest diagnostics that we have received.
     #
@@ -2133,6 +2156,14 @@ class LanguageServerCompleter( Completer ):
                   action )
 
     if action == lsp.ServerFileState.OPEN_FILE:
+      # First check if we need to inform the server of a new workspace.
+      if self._workspace_notification_supported:
+        workspace_for_file = self.GetWorkspaceForFilepath( file_name )
+        if workspace_for_file not in self._server_workspace_dirs:
+          self._server_workspace_dirs.add( workspace_for_file )
+          msg = lsp.DidChangeWorkspaceFolders( workspace_for_file )
+          self.GetConnection().SendNotification( msg )
+
       msg = lsp.DidOpenTextDocument( file_state, file_types, contents )
 
       self.GetConnection().SendNotification( msg )
@@ -2269,7 +2300,7 @@ class LanguageServerCompleter( Completer ):
       - If the user specified 'project_directory' in their extra conf
         'Settings', use that.
       - try to find files from GetProjectRootFiles and use the
-        first directory from there
+        first directory from there. (From GetWorkspaceForFilepath)
       - if there's an extra_conf file, use that directory
       - otherwise if we know the client's cwd, use that
       - otherwise use the directory of the file that we just opened
@@ -2284,12 +2315,10 @@ class LanguageServerCompleter( Completer ):
       return utils.AbsolutePath( self._settings[ 'project_directory' ],
                                   self._extra_conf_dir )
 
-    project_root_files = self.GetProjectRootFiles()
-    if project_root_files:
-      for folder in utils.PathsToAllParentFolders( request_data[ 'filepath' ] ):
-        for root_file in project_root_files:
-          if os.path.isfile( os.path.join( folder, root_file ) ):
-            return folder
+    filepath = request_data[ 'filepath' ]
+    workspace_path = self.GetWorkspaceForFilepath( filepath, strict = True )
+    if workspace_path:
+      return workspace_path
 
     if self._extra_conf_dir:
       return self._extra_conf_dir
@@ -2297,7 +2326,25 @@ class LanguageServerCompleter( Completer ):
     if 'working_dir' in request_data:
       return request_data[ 'working_dir' ]
 
-    return os.path.dirname( request_data[ 'filepath' ] )
+    return os.path.dirname( filepath )
+
+
+  def GetWorkspaceForFilepath( self, filepath, strict = False ):
+    """Return the workspace of the provided filepath. This could be a subproject
+    or a completely unrelated project to the root directory.
+    Like GetProjectDirectory, can be overridden by a concrete LSP completer.
+    By default we try to find the first parent directory that contains any file
+    mentioned in GetProjectRootFiles().
+    `strict` function argument was useful for allowing GetProjectDirectory to
+    reuse this implementation.
+    """
+    project_root_files = self.GetProjectRootFiles()
+    if project_root_files:
+      for folder in utils.PathsToAllParentFolders( filepath ):
+        for root_file in project_root_files:
+          if os.path.isfile( os.path.join( folder, root_file ) ):
+            return folder
+    return None if strict else os.path.dirname( filepath )
 
 
   def _SendInitialize( self, request_data ):
@@ -2319,10 +2366,15 @@ class LanguageServerCompleter( Completer ):
       # the settings on the Initialize request are somehow subtly different from
       # the settings supplied in didChangeConfiguration, though it's not exactly
       # clear how/where that is specified.
+      additional_workspace_dirs = self._settings.get(
+                                    'additional_workspace_dirs',
+                                    [] )
+      self._server_workspace_dirs.update( additional_workspace_dirs )
       msg = lsp.Initialize( request_id,
                             self._project_directory,
                             self.ExtraCapabilities(),
-                            self._settings.get( 'ls', {} ) )
+                            self._settings.get( 'ls', {} ),
+                            additional_workspace_dirs )
 
       def response_handler( response, message ):
         if message is None:
@@ -2368,6 +2420,9 @@ class LanguageServerCompleter( Completer ):
     when the initialize request receives a response."""
     with self._server_info_mutex:
       self._server_capabilities = response[ 'result' ][ 'capabilities' ]
+      self._workspace_notification_supported = (
+        _ServerSupportsWorkspaceFoldersChangeNotif(
+          self._server_capabilities ) )
       self._resolve_completion_items = self._ShouldResolveCompletionItems()
 
       if self._resolve_completion_items:
@@ -2480,8 +2535,8 @@ class LanguageServerCompleter( Completer ):
     self._on_initialize_complete_handlers.append( handler )
 
 
-  def RegisterOnFileReadyToParse( self, handler ):
-    self._on_file_ready_to_parse_handlers.append( handler )
+  def RegisterOnFileReadyToParse( self, handler, once=False ):
+    self._on_file_ready_to_parse_handlers.append( ( handler, once ) )
 
 
   def GetHoverResponse( self, request_data ):
@@ -2516,9 +2571,7 @@ class LanguageServerCompleter( Completer ):
     except ResponseFailedException:
       result = None
 
-    if not result:
-      raise RuntimeError( 'Cannot jump to location' )
-    if not isinstance( result, list ):
+    if result and not isinstance( result, list ):
       return [ result ]
     return result
 
@@ -2533,15 +2586,18 @@ class LanguageServerCompleter( Completer ):
 
     self._UpdateServerWithFileContents( request_data )
 
-    if len( handlers ) == 1:
-      result = self._GoToRequest( request_data, handlers[ 0 ] )
-    else:
-      for handler in handlers:
-        result = self._GoToRequest( request_data, handler )
-        if len( result ) > 1 or not _CursorInsideLocation( request_data,
-                                                           result[ 0 ] ):
-          break
+    result = []
+    for handler in handlers:
+      new_result = self._GoToRequest( request_data, handler )
+      if new_result:
+        result = new_result
+      if len( result ) > 1 or ( result and
+                                not _CursorInsideLocation( request_data,
+                                                           result[ 0 ] ) ):
+        break
 
+    if not result:
+      raise RuntimeError( 'Cannot jump to location' )
     return _LocationListToGoTo( request_data, result )
 
 
@@ -2910,6 +2966,8 @@ class LanguageServerCompleter( Completer ):
                                       ServerStateDescription() ),
              responses.DebugInfoItem( 'Project Directory',
                                       self._project_directory ),
+             responses.DebugInfoItem( 'Open Workspaces',
+                                      self._server_workspace_dirs ),
              responses.DebugInfoItem(
                'Settings',
                json.dumps( self._settings.get( 'ls', {} ),
@@ -2928,13 +2986,15 @@ def _DistanceOfPointToRange( point, range ):
   # Single-line range.
   if start[ 'line' ] == end[ 'line' ]:
     # 0 if point is within range, otherwise distance from start/end.
-    return max( 0, point[ 'character' ] - end[ 'character' ],
+    # +1 takes into account that, visually, end is one character farther.
+    return max( 0, point[ 'character' ] - end[ 'character' ] + 1,
                 start[ 'character' ] - point[ 'character' ] )
 
   if start[ 'line' ] == point[ 'line' ]:
     return max( 0, start[ 'character' ] - point[ 'character' ] )
   if end[ 'line' ] == point[ 'line' ]:
-    return max( 0, point[ 'character' ] - end[ 'character' ] )
+    # +1 takes into account that, visually, end is one character farther.
+    return max( 0, point[ 'character' ] - end[ 'character' ] + 1 )
   # If not on the first or last line, then point is within range for sure.
   return 0
 
@@ -3548,6 +3608,12 @@ def _DecodeSemanticTokens( atlas, token_data, filename, contents ):
     last_token = token
 
   return tokens
+
+
+def _ServerSupportsWorkspaceFoldersChangeNotif( server_capabilities ):
+  workspace = server_capabilities.get( 'workspace', {} )
+  workspace_folders = workspace.get( 'workspaceFolders', {} )
+  return _IsCapabilityProvided( workspace_folders, 'changeNotifications' )
 
 
 def _IsCapabilityProvided( capabilities, query ):

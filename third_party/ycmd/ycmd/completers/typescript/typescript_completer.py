@@ -656,6 +656,9 @@ class TypeScriptCompleter( Completer ):
     if not ts_diagnostics_on_line:
       raise ValueError( NO_DIAGNOSTIC_MESSAGE )
 
+    # Prefer errors to warnings and warnings to infos.
+    ts_diagnostics_on_line.sort( key = _TsDiagToLspSeverity )
+
     closest_ts_diagnostic = None
     distance_to_closest_ts_diagnostic = None
 
@@ -911,7 +914,12 @@ class TypeScriptCompleter( Completer ):
       'offset': request_data[ 'column_codepoint' ]
     } )
 
+    extra_info = _AggregateTagsFromDocstring( info )
+
     message = f'{ info[ "displayString" ] }\n\n{ info[ "documentation" ] }'
+    if extra_info:
+      message += f'\n\n{ extra_info }'
+
     return responses.BuildDetailedInfoResponse( message )
 
 
@@ -1117,6 +1125,16 @@ def _LogLevel():
   return 'verbose' if LOGGER.isEnabledFor( logging.DEBUG ) else 'normal'
 
 
+def _AggregateTagsFromDocstring( info ):
+  extra_info = []
+  for tag in info.get( 'tags', [] ):
+    tag_name = tag[ 'name' ]
+    tag_text = tag.get( 'text' )
+    formated_tag = tag_name + ( f': { tag_text }' if tag_text else '' )
+    extra_info.append( formated_tag )
+  return '\n'.join( extra_info )
+
+
 def _BuildCompletionExtraMenuAndDetailedInfo( request_data, entry ):
   signature = _DisplayPartsToString( entry[ 'displayParts' ] )
   if entry[ 'name' ] == signature:
@@ -1130,6 +1148,11 @@ def _BuildCompletionExtraMenuAndDetailedInfo( request_data, entry ):
 
   docs = entry.get( 'documentation', [] )
   detailed_info += [ doc[ 'text' ].strip() for doc in docs if doc ]
+
+  extra_info = _AggregateTagsFromDocstring( entry )
+  if extra_info:
+    detailed_info.append( extra_info )
+
   detailed_info = '\n\n'.join( detailed_info )
 
   return extra_menu_info, detailed_info
@@ -1244,3 +1267,12 @@ def _BuildTsFormatRange( request_data ):
 
 def _DisplayPartsToString( parts ):
   return ''.join( [ p[ 'text' ] for p in parts ] )
+
+
+def _TsDiagToLspSeverity( diag ):
+  category = diag[ 'category' ]
+  if category == 'error':
+    return 1
+  if category == 'warning':
+    return 2
+  return 3
