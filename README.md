@@ -2682,7 +2682,7 @@ number like `99`.
 When `g:ycm_auto_trigger` is `0`, YCM sets the `completefunc`, so that you can
 manually trigger normal completion using `C-x C-u`.
 
-If you want to map something else to trigger completion, such as `C-d``,
+If you want to map something else to trigger completion, such as `C-d`,
 then you can map it to `<plug>(YCMComplete)`. For example:
 
 ```viml
@@ -3894,9 +3894,9 @@ Please note: The YCM maintainers do not specifically endorse nor necessarily hav
 
 ### 关于版本
 
-- ycm_core  核心版本: 48 (Jan 2, 2024) 静态编译
-- libclang  版本: 17.0.6 (Nov 29, 2023) [Clang][Clang]
-- Python    支持: 3.12.1 (Dec 8, 2023) [Python][python-win-download]
+- ycm_core  核心版本: 48 (May 21, 2024) 静态编译
+- libclang  版本: 18.1.6 (May 20, 2024) [Clang][Clang]
+- Python    支持: 3.12.3 (Apr 9, 2024) [Python][python-win-download]
 
 
 支持操作系统:
