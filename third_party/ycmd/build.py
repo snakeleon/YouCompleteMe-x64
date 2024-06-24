@@ -89,13 +89,13 @@ DYNAMIC_PYTHON_LIBRARY_REGEX = """
   )$
 """
 
-JDTLS_MILESTONE = '1.31.0'
-JDTLS_BUILD_STAMP = '202401111522'
+JDTLS_MILESTONE = '1.36.0'
+JDTLS_BUILD_STAMP = '202405301306'
 JDTLS_SHA256 = (
-  '6c25f62d0b74d1dd92ab19afbafbe5041eb06c2b853eab57f7f42fe6feb01f7c'
+  '028e274d06f4a61cad4ffd56f89ef414a8f65613c6d05d9467651b7fb03dae7b'
 )
 
-DEFAULT_RUST_TOOLCHAIN = 'nightly-2023-08-18'
+DEFAULT_RUST_TOOLCHAIN = 'nightly-2024-06-11'
 RUST_ANALYZER_DIR = p.join( DIR_OF_THIRD_PARTY, 'rust-analyzer' )
 
 BUILD_ERROR_MESSAGE = (
@@ -107,7 +107,7 @@ BUILD_ERROR_MESSAGE = (
   'issue tracker, including the entire output of this script (with --verbose) '
   'and the invocation line used to run it.' )
 
-CLANGD_VERSION = '17.0.1'
+CLANGD_VERSION = '18.1.1'
 CLANGD_BINARIES_ERROR_MESSAGE = (
   'No prebuilt Clang {version} binaries for {platform}. '
   'You\'ll have to compile Clangd {version} from source '
@@ -945,7 +945,7 @@ def EnableGoCompleter( args ):
   new_env.pop( 'GOROOT', None )
   new_env[ 'GOBIN' ] = p.join( new_env[ 'GOPATH' ], 'bin' )
 
-  gopls = 'golang.org/x/tools/gopls@v0.14.0'
+  gopls = 'golang.org/x/tools/gopls@v0.15.3'
   CheckCall( [ go, 'install', gopls ],
              env = new_env,
              quiet = args.quiet,
@@ -1151,30 +1151,30 @@ def GetClangdTarget():
   if OnWindows():
     return [
       ( 'clangd-{version}-win64',
-        '66a1e4d527b451d1e9f21183416fd53ef7f395266bbf7fd74b470ec326d19c98' ),
+        'e5e1daf4553bd526e92a7f56805547673c1b6384f9a2a7b106008a81cd552c37' ),
       ( 'clangd-{version}-win32',
-        'c4c351da9f528a2cfacbc669cfb656ef34791ed637aeed051274adf611f3ba5a' ) ]
+        '424708a5405a23fb90f8e48473fa9e6340d988ee3733ce8c73e03f9052cb0a71' ) ]
   if OnMac():
     if OnArm():
       return [
         ( 'clangd-{version}-arm64-apple-darwin',
-          '38b0335306193cfe7978af9b2bb9dffc48406739b23f19158e7f000f910df5b0' ) ]
+          '1b6d1b228f70a9903a5299c74347e7767f7fdd019e97abd879b22d56d6d7de83' ) ]
     return [
       ( 'clangd-{version}-x86_64-apple-darwin',
-        'e3dcbefda4a10d7e1e2f8ce8db820219d78ac48ade247048fc0c6a821105ca26' ) ]
+        '10bed9246718a3d8993f8ccf4fec0168d4bfe7b2bf1d04cf9a8aed5cb7d8f03c' ) ]
   if OnAArch64():
     return [
       ( 'clangd-{version}-aarch64-linux-gnu',
-        'a3074a5d3c955b3326881617d36438e2cf36140d8de4b5f7d98e73eda92797a8' ) ]
+        '5ca6d63c9822debfd2f3aa4ec2c7b61eb8f6c8391a3ee7b52051fdb089da16af' ) ]
   if OnArm():
     return [
       None, # First list index is for 64bit archives. ARMv7 is 32bit only.
       ( 'clangd-{version}-armv7a-linux-gnueabihf',
-        'f167c13d3741ad7869a6ee57621af2cb9c2477bb300ab2fac91ea64c19f8df43' ) ]
+        'ee6ded7b445317cced97d0002fe944b359990f6e7d7ca09dadd3f835fce7ebbb' ) ]
   if OnX86_64():
     return [
       ( 'clangd-{version}-x86_64-unknown-linux-gnu',
-        '70a9cf4c9e288941f0193dbfe0ab164e1805b622c2df522ea7319dabdeae3b4c' ) ]
+        '128451c2689d8157189b4bb60803ca33adb75c67ce07b91b1a91ecacdfbf851f' ) ]
   raise InstallationFailed(
     CLANGD_BINARIES_ERROR_MESSAGE.format( version = CLANGD_VERSION,
                                           platform = 'this system' ) )
