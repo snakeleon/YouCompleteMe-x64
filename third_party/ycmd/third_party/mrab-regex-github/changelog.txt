@@ -1,3 +1,61 @@
+Version: 2024.9.13
+
+    Updated to actions/upload-artifact@v4 in main.yml.
+
+Version: 2024.9.12
+
+    Updated to actions/download-artifact@v4 in main.yml.
+
+Version: 2024.9.11
+
+    Updated to Unicode 16.0.0.
+
+Version: 2024.7.24
+
+    Git issue 539: Bug: Partial matching fails on a simple example
+
+Version: 2024.6.22
+
+    Git issue 535: Regex fails Unicode 15.1 GraphemeBreakTest due to missing new GB9c rule implementation
+
+Version: 2024.5.15
+
+    Git issue 530: hangs with fuzzy and optionals
+
+    It's not hanging, it'll finish eventually. It's just an example of catastrophic backtracking.
+
+    The error printed when Ctrl+C is pressed does show a bug, though, which is now fixed.
+
+Version: 2024.5.10
+
+    Updated for Python 3.13.
+
+    <time.h> now needs to be included explicitly because Python.h no longer includes it.
+
+Version: 2024.4.28
+
+    Git issue 527: `VERBOSE`/`X` flag breaks `\N` escapes
+
+Version: 2024.4.16
+
+    Git issue 525: segfault when fuzzy matching empty list
+
+Version: 2023.12.25
+
+    Cannot get release notification action in main.yml to work. Commenting it out for now.
+
+Version: 2023.12.24
+
+    Fixed invalid main.yml.
+
+Version: 2023.12.23
+
+    The escape function no longer escapes \x00. It's not necessary.
+
+    Inline flags can now be turned off and apply to what follows.
+
+    Added \R to match line endings.
+
 Version: 2023.10.3
 
     Updated to Unicode 15.1.0.

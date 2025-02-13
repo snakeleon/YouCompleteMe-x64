@@ -22,9 +22,9 @@ import os
 import shutil
 import tempfile
 import threading
+from collections import OrderedDict
 
 from ycmd import responses, utils
-from ycmd.completers.language_server import language_server_protocol as lsp
 from ycmd.completers.language_server import language_server_completer
 from ycmd.utils import LOGGER
 
@@ -42,12 +42,13 @@ LANGUAGE_SERVER_HOME = os.path.abspath( os.path.join(
 
 PATH_TO_JAVA = None
 
-PROJECT_FILE_TAILS = [
-  '.project',
-  'pom.xml',
-  'build.gradle',
-  'build.gradle.kts'
-]
+PROJECT_FILE_TAILS = OrderedDict( {
+  'pom.xml': 'maven',
+  'build.gradle': 'gradle',
+  'build.gradle.kts': 'gradle',
+  'settings.gradle': 'gradle',
+  '.project': 'eclipse',
+} )
 
 DEFAULT_WORKSPACE_ROOT_PATH = os.path.abspath( os.path.join(
   os.path.dirname( __file__ ),
@@ -231,8 +232,8 @@ def _LauncherConfiguration( user_options, workspace_root, wipe_config ):
 
 
 def _MakeProjectFilesForPath( path ):
-  for tail in PROJECT_FILE_TAILS:
-    yield os.path.join( path, tail ), tail
+  for tail, type in PROJECT_FILE_TAILS.items():
+    yield os.path.join( path, tail ), tail, type
 
 
 def _FindProjectDir( starting_dir ):
@@ -240,10 +241,10 @@ def _FindProjectDir( starting_dir ):
   project_type = None
 
   for folder in utils.PathsToAllParentFolders( starting_dir ):
-    for project_file, tail in _MakeProjectFilesForPath( folder ):
+    for project_file, tail, type in _MakeProjectFilesForPath( folder ):
       if os.path.isfile( project_file ):
         project_path = folder
-        project_type = tail
+        project_type = type
         break
     if project_type:
       break
@@ -255,9 +256,14 @@ def _FindProjectDir( starting_dir ):
     LOGGER.debug( 'Found %s style project in %s. Searching for '
                   'project root:', project_type, project_path )
 
+    file_types_to_search_for = [
+      tail for tail, type in PROJECT_FILE_TAILS.items() if type == project_type
+    ]
+
     for folder in utils.PathsToAllParentFolders( os.path.join( project_path,
                                                                '..' ) ):
-      if os.path.isfile( os.path.join( folder, project_type ) ):
+      if any( os.path.isfile( os.path.join( folder, tail ) )
+              for tail in file_types_to_search_for ):
         LOGGER.debug( '  %s is a parent project dir', folder )
         project_path = folder
       else:
@@ -624,24 +630,13 @@ class JavaCompleter( language_server_completer.LanguageServerCompleter ):
 
 
   def OrganizeImports( self, request_data ):
-    fixit = {
-      'resolve': True,
-      'command': {
-        'title': 'Organize Imports',
-        'command': 'java.edit.organizeImports',
-        'arguments': [ lsp.FilePathToUri( request_data[ 'filepath' ] ) ]
-      }
-    }
-    return self._ResolveFixit( request_data, fixit )
-
-
-  def CodeActionCommandToFixIt( self, request_data, command ):
-    # JDT wants us to special case `java.apply.workspaceEdit`
-    # https://github.com/eclipse/eclipse.jdt.ls/issues/376
-    if command[ 'command' ][ 'command' ] == 'java.apply.workspaceEdit':
-      command[ 'edit' ] = command.pop( 'command' )[ 'arguments' ][ 0 ]
-      return super().CodeActionLiteralToFixIt( request_data, command )
-    return super().CodeActionCommandToFixIt( request_data, command )
+    fixits = super().GetCodeActions( request_data )[ 'fixits' ]
+    for fixit in fixits:
+      if fixit[ 'command' ][ 'kind' ] == 'source.organizeImports':
+        return self._ResolveFixit( request_data, fixit )
+    # We should never get here. With codeAction/resolve support,
+    # JDT always sends the organizeImports code action.
+    raise RuntimeError( 'OrganizeImports not available.' )
 
 
   def GetServerName( self ):

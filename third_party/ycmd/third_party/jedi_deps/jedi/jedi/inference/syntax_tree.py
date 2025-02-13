@@ -493,8 +493,10 @@ def infer_factor(value_set, operator):
         elif operator == 'not':
             b = value.py__bool__()
             if b is None:  # Uncertainty.
-                return
-            yield compiled.create_simple_object(value.inference_state, not b)
+                yield list(value.inference_state.builtins_module.py__getattribute__('bool')
+                           .execute_annotation()).pop()
+            else:
+                yield compiled.create_simple_object(value.inference_state, not b)
         else:
             yield value
 
@@ -645,7 +647,7 @@ def _infer_comparison_part(inference_state, context, left, operator, right):
             _bool_to_value(inference_state, False)
         ])
     elif str_operator in ('in', 'not in'):
-        return NO_VALUES
+        return inference_state.builtins_module.py__getattribute__('bool').execute_annotation()
 
     def check(obj):
         """Checks if a Jedi object is either a float or an int."""
@@ -695,8 +697,15 @@ def tree_name_to_values(inference_state, context, tree_name):
 
             if expr_stmt.type == "expr_stmt" and expr_stmt.children[1].type == "annassign":
                 correct_scope = parser_utils.get_parent_scope(name) == context.tree_node
+                ann_assign = expr_stmt.children[1]
                 if correct_scope:
                     found_annotation = True
+                    if (
+                        (ann_assign.children[1].type == 'name')
+                        and (ann_assign.children[1].value == tree_name.value)
+                        and context.parent_context
+                    ):
+                        context = context.parent_context
                     value_set |= annotation.infer_annotation(
                         context, expr_stmt.children[1].children[1]
                     ).execute_annotation()

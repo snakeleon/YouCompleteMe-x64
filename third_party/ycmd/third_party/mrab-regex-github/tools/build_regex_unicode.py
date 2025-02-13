@@ -1,4 +1,4 @@
-#! python3.11
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
 # This Python script parses the Unicode data files in the UCD.zip file and
@@ -422,6 +422,10 @@ def parse_script_extensions(properties, subpath):
                 continue
 
             if line.startswith('# Property:'):
+                prop_name = line.split()[-1]
+                property = properties[munge(prop_name)]
+                property['values'] = {}
+            elif line.startswith('# All code points not explicitly listed for '):
                 prop_name = line.split()[-1]
                 property = properties[munge(prop_name)]
                 property['values'] = {}
@@ -1733,6 +1737,16 @@ typedef RE_UINT32 (*RE_GetPropertyFunc)(RE_UINT32 codepoint);
 
         h_file.write('\n')
 
+        val_list = unique(properties[munge('Indic_Conjunct_Break')]['values'].values(),
+          key=id)
+        values = [(value['id'], value['names'][0]) for value in val_list]
+
+        for val_id, name in sorted(values):
+            h_file.write('#define RE_INCB_{} {}\n'.format(munge(name),
+              val_id))
+
+        h_file.write('\n')
+
         h_file.write('extern char* re_strings[{}];\n'.format(unicode_data['string_count']))
         h_file.write('extern RE_Property re_properties[{}];\n'.format(unicode_data['property_table_count']))
         h_file.write('extern RE_PropertyValue re_property_values[{}];\n'.format(unicode_data['valueset_table_count']))
@@ -1754,7 +1768,7 @@ typedef RE_UINT32 (*RE_GetPropertyFunc)(RE_UINT32 codepoint);
         h_file.write('int re_get_full_case_folding(RE_UINT32 codepoint, RE_UINT32* folded);\n')
 
 # The Unicode version.
-UNICODE_VERSION = '15.1.0'
+UNICODE_VERSION = '16.0.0'
 
 this_folder = dirname(__file__)
 
@@ -1781,4 +1795,4 @@ binary_dict = make_binary_dict()
 
 generate_code(unicode_data, UNICODE_VERSION, this_folder)
 
-print('\nSuccessfully generated _reges_unicode.h and _reges_unicode.c in %s' % tools_folder)
+print('\nSuccessfully generated _regex_unicode.h and _regex_unicode.c in %s' % tools_folder)

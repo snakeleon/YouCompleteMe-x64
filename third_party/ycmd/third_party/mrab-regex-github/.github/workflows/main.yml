@@ -9,7 +9,7 @@ on:
 
 env:
   PYTHON_VER: '3.10'  # Python to run test/cibuildwheel
-  CIBW_BUILD: cp37-* cp38-* cp39-* cp310-* cp311-* cp312-*
+  CIBW_BUILD: cp38-* cp39-* cp310-* cp311-* cp312-* cp313-*
   CIBW_TEST_COMMAND: python -m unittest regex.test_regex
 
 jobs:
@@ -45,7 +45,7 @@ jobs:
 
     env:
       # macOS archs
-      CIBW_ARCHS_MACOS: "x86_64 arm64"
+      CIBW_ARCHS_MACOS: "x86_64 arm64 universal2"
 
     steps:
       - uses: actions/checkout@v3
@@ -59,10 +59,19 @@ jobs:
           python -m cibuildwheel --output-dir wheelhouse
 
       - name: Upload wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: regex-files
           path: wheelhouse/*.whl
+
+     # I cannot get this to work!
+     # - name: Create GitHub release
+     #   uses: actions/create-release@v1
+     #   env:
+     #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+     #   with:
+     #     tag_name: ${{ github.ref }}
+     #     release_name: regex ${{ github.ref }}
 
   # Build source distribution & manylinux1_x86_64 wheels
   # These two jobs build:
@@ -85,7 +94,7 @@ jobs:
       # manylinux2014  >=19.3   3.7.8+, 3.8.4+, 3.9.0+    2.17 (2012-12-25)
       # manylinux_x_y  >=20.3   3.8.10+, 3.9.5+, 3.10.0+  x.y
       # manylinux2010 images EOL on 2022-08-01, it doesn't support cp311.
-      CIBW_BUILD: cp37-* cp38-* cp39-* cp310-*
+      CIBW_BUILD: cp38-* cp39-* cp310-*
       CIBW_MANYLINUX_X86_64_IMAGE: manylinux2010
       CIBW_ARCHS_LINUX: x86_64
 
@@ -102,13 +111,13 @@ jobs:
           python -m cibuildwheel --output-dir wheelhouse
 
       - name: Upload source distribution
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: regex-files
           path: dist/*.tar.gz
 
       - name: Upload manylinux1_x86_64 wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: regex-files
           path: wheelhouse/*.whl
@@ -144,7 +153,7 @@ jobs:
           python -m cibuildwheel --output-dir wheelhouse
 
       - name: Upload ${{ matrix.arch }} wheels
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: regex-files
           path: wheelhouse/*.whl
@@ -156,7 +165,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: regex-files
           path: dist

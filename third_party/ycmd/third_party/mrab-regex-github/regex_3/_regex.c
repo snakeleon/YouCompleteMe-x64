@@ -50,17 +50,10 @@
 #include "Python.h"
 #include "structmember.h" /* offsetof */
 #include <ctype.h>
+#include <time.h>
 #include "_regex.h"
 #include "pyport.h"
 #include "pythread.h"
-
-#if PY_VERSION_HEX < 0x03070000
-/* Issue 29943: PySlice_GetIndicesEx change broke ABI in 3.5 and 3.6 branches
- */
-#if defined(PySlice_GetIndicesEx) && !defined(PYPY_VERSION)
-#undef PySlice_GetIndicesEx
-#endif
-#endif
 
 typedef RE_UINT32 RE_CODE;
 typedef unsigned char BYTE;
@@ -1802,6 +1795,7 @@ static BOOL unicode_at_grapheme_boundary(RE_State* state, Py_ssize_t text_pos)
     Py_UCS4 right_char;
     RE_UINT32 left_prop;
     RE_UINT32 right_prop;
+    RE_UINT32 prop;
     Py_ssize_t pos;
 
     /* Break at the start and end of text, unless the text is empty. */
@@ -1872,6 +1866,38 @@ static BOOL unicode_at_grapheme_boundary(RE_State* state, Py_ssize_t text_pos)
     if (left_prop == RE_GBREAK_PREPEND)
         return FALSE;
 
+    /* The GB9c rule only applies to extended grapheme clusters: Do not break
+     * within certain combinations with Indic_Conjunct_Break (InCB)=Linker.
+     */
+    /* GB9c	*/
+    if (re_get_indic_conjunct_break(right_char) == RE_INCB_CONSONANT) {
+        BOOL has_linker;
+
+        has_linker = FALSE;
+        pos = left_pos;
+
+        do {
+            prop = re_get_indic_conjunct_break(char_at(state->text, pos));
+
+            switch (prop) {
+            case RE_INCB_LINKER:
+                has_linker = TRUE;
+                break;
+            case RE_INCB_EXTEND:
+                break;
+            case RE_INCB_CONSONANT:
+                if (has_linker)
+                    return FALSE;
+                goto end_GB9c;
+            default:
+                goto end_GB9c;
+            }
+
+            --pos;
+        } while (pos >= state->text_start);
+    }
+
+end_GB9c:
     /* Do not break within emoji modifier sequences or emoji zwj sequences. */
     /* GB11 */
     if (left_prop == RE_GBREAK_ZWJ && re_get_extended_pictographic(right_char))
@@ -9391,86 +9417,6 @@ Py_LOCAL_INLINE(BOOL) is_repeat_guarded(RE_State* state, size_t index,
 /* Builds a Unicode string. */
 Py_LOCAL_INLINE(PyObject*) build_unicode_value(void* buffer, Py_ssize_t start,
   Py_ssize_t end, Py_ssize_t buffer_charsize) {
-#if defined(PYPY_VERSION) && PY_VERSION_HEX < 0x05090000
-    Py_ssize_t len;
-    Py_UNICODE* codepoints;
-    PyObject* result;
-
-    len = end - start;
-    codepoints = (Py_UNICODE*)re_alloc(len * Py_UNICODE_SIZE);
-    if (!codepoints)
-        return NULL;
-
-    switch (buffer_charsize) {
-    case 1:
-    {
-        Py_UCS1* from_ptr;
-        Py_UCS1* end_ptr;
-        Py_UCS4* to_ptr;
-
-        from_ptr = (Py_UCS1*)buffer + start;
-        end_ptr = (Py_UCS1*)buffer + end;
-        to_ptr = codepoints;
-
-        while (from_ptr < end_ptr)
-            *to_ptr++ = *from_ptr++;
-
-        break;
-    }
-    case 2:
-    {
-        Py_UCS2* from_ptr;
-        Py_UCS2* end_ptr;
-        Py_UCS4* to_ptr;
-
-        from_ptr = (Py_UCS2*)buffer + start;
-        end_ptr = (Py_UCS2*)buffer + end;
-        to_ptr = codepoints;
-
-        while (from_ptr < end_ptr)
-            *to_ptr++ = *from_ptr++;
-
-        break;
-    }
-#if Py_UNICODE_SIZE == 4
-    case 4:
-    {
-        Py_UCS4* from_ptr;
-        Py_UCS4* end_ptr;
-        Py_UCS4* to_ptr;
-
-        from_ptr = (Py_UCS4*)buffer + start;
-        end_ptr = (Py_UCS4*)buffer + end;
-        to_ptr = codepoints;
-
-        while (from_ptr < end_ptr)
-            *to_ptr++ = *from_ptr++;
-
-        break;
-    }
-#endif
-    default:
-    {
-        Py_UCS1* from_ptr;
-        Py_UCS1* end_ptr;
-        Py_UCS4* to_ptr;
-
-        from_ptr = (Py_UCS1*)buffer + start;
-        end_ptr = (Py_UCS1*)buffer + end;
-        to_ptr = codepoints;
-
-        while (from_ptr < end_ptr)
-            *to_ptr++ = *from_ptr++;
-
-        break;
-    }
-    }
-
-    result = PyUnicode_FromUnicode(codepoints, len);
-    re_dealloc(codepoints);
-
-    return result;
-#else
     Py_ssize_t len;
     int kind;
 
@@ -9493,7 +9439,6 @@ Py_LOCAL_INLINE(PyObject*) build_unicode_value(void* buffer, Py_ssize_t start,
     }
 
     return PyUnicode_FromKindAndData(kind, buffer, len);
-#endif
 }
 
 /* Builds a bytestring. Returns NULL if any member is too wide. */
@@ -11537,13 +11482,72 @@ Py_LOCAL_INLINE(BOOL) same_span_as_group(RE_GroupData* group, RE_GroupSpan
       span);
 }
 
-/* Checks whether 2 groupus have the same spam. */
+/* Checks whether 2 groups have the same spam. */
 Py_LOCAL_INLINE(BOOL) same_span_of_group(RE_GroupData* group_1, RE_GroupData*
   group_2) {
     return (group_1->current >= 0 && group_2->current >= 0 &&
       same_span(group_1->captures[group_1->current],
       group_2->captures[group_2->current])) || (group_1->current < 0 &&
       group_2->current < 0);
+}
+
+/* Checks whether a string matches or at least partially if it's at the end. */
+Py_LOCAL_INLINE(BOOL) partial_string_match(RE_State* state, RE_Node* node,
+  Py_ssize_t text_pos) {
+    Py_ssize_t length;
+    RE_CODE* values;
+    Py_ssize_t ofs;
+    Py_UCS4 (*char_at)(void* text, Py_ssize_t pos);
+
+    length = (Py_ssize_t)node->value_count;
+    values = node->values;
+    ofs = 0;
+    char_at = state->char_at;
+
+    while (ofs < length) {
+        if (text_pos + ofs >= state->slice_end)
+            return TRUE;
+
+        if (char_at(state->text, text_pos + ofs) != values[ofs])
+            return FALSE;
+
+        ++ofs;
+    }
+
+    return TRUE;
+}
+
+/* Checks whether a string matches or at least partially if it's at the end,
+ * ignoring case.
+ */
+Py_LOCAL_INLINE(BOOL) partial_string_match_ign(RE_State* state, RE_Node* node,
+  Py_ssize_t text_pos) {
+    Py_ssize_t length;
+    RE_CODE* values;
+    Py_ssize_t ofs;
+    Py_UCS4 (*char_at)(void* text, Py_ssize_t pos);
+    RE_EncodingTable* encoding;
+    RE_LocaleInfo* locale_info;
+
+    length = (Py_ssize_t)node->value_count;
+    values = node->values;
+    ofs = 0;
+    char_at = state->char_at;
+    encoding = state->encoding;
+    locale_info = state->locale_info;
+
+    while (ofs < length) {
+        if (text_pos + ofs >= state->slice_end)
+            return TRUE;
+
+        if (!same_char_ign(encoding, locale_info, char_at(state->text, text_pos
+          + ofs), values[ofs]))
+            return FALSE;
+
+        ++ofs;
+    }
+
+    return TRUE;
 }
 
 /* Performs a depth-first match or search from the context. */
@@ -15828,10 +15832,24 @@ backtrack:
 
                     length = (Py_ssize_t)test->value_count;
 
+                    --pos;
+
+                    /* Is it a partial match? */
+                    if (pos >= limit && pos > state->slice_end - length &&
+                      state->partial_side == RE_PARTIAL_RIGHT) {
+                        do {
+                            if (partial_string_match(state, test, pos))
+                                return RE_ERROR_PARTIAL;
+
+                            --pos;
+                        } while (pos >= limit && pos > state->slice_end -
+                          length && state->partial_side == RE_PARTIAL_RIGHT);
+                    }
+
                     /* The tail is a string. We don't want to go off the end of
                      * the slice.
                      */
-                    pos = min_ssize_t(pos - 1, state->slice_end - length);
+                    pos = min_ssize_t(pos, state->slice_end - length);
 
                     for (;;) {
                         Py_ssize_t found;
@@ -15964,10 +15982,24 @@ backtrack:
 
                     length = (Py_ssize_t)test->value_count;
 
+                    --pos;
+
+                    /* Is it a partial match? */
+                    if (pos >= limit && pos > state->slice_end - length &&
+                      state->partial_side == RE_PARTIAL_RIGHT) {
+                        do {
+                            if (partial_string_match_ign(state, test, pos))
+                                return RE_ERROR_PARTIAL;
+
+                            --pos;
+                        } while (pos >= limit && pos > state->slice_end -
+                          length && state->partial_side == RE_PARTIAL_RIGHT);
+                    }
+
                     /* The tail is a string. We don't want to go off the end of
                      * the slice.
                      */
-                    pos = min_ssize_t(pos - 1, state->slice_end - length);
+                    pos = min_ssize_t(pos, state->slice_end - length);
 
                     for (;;) {
                         Py_ssize_t found;
@@ -17458,7 +17490,7 @@ Py_LOCAL_INLINE(int) do_best_fuzzy_match(RE_State* state, BOOL search) {
 
         /* Has an error occurred, or is it a partial match? */
         if (status < 0)
-            break;
+            goto error;
 
         if (status == RE_ERROR_FAILURE)
             break;
@@ -17478,11 +17510,11 @@ Py_LOCAL_INLINE(int) do_best_fuzzy_match(RE_State* state, BOOL search) {
             clear_best_list(&best_list);
             if (!add_to_best_list(state, &best_list, state->match_pos,
               state->text_pos))
-                goto error;
+                goto mem_error;
 
             clear_best_fuzzy_changes(state, &best_changes_list);
             if (!add_best_fuzzy_changes(state, &best_changes_list))
-                goto error;
+                goto mem_error;
         } else if (state->total_errors == fewest_errors) {
             /* This match was as good as the previous matches. Remember this
              * one.
@@ -17490,7 +17522,7 @@ Py_LOCAL_INLINE(int) do_best_fuzzy_match(RE_State* state, BOOL search) {
             add_to_best_list(state, &best_list, state->match_pos,
               state->text_pos);
             if (!add_best_fuzzy_changes(state, &best_changes_list))
-                goto error;
+                goto mem_error;
         }
 
         start_pos = state->match_pos;
@@ -17556,6 +17588,9 @@ Py_LOCAL_INLINE(int) do_best_fuzzy_match(RE_State* state, BOOL search) {
                         init_match(state);
                         status = basic_match(state, FALSE);
 
+                        if (status < 0)
+                            goto error;
+
                         if (status == RE_ERROR_SUCCESS) {
                             BOOL better = FALSE;
 
@@ -17574,12 +17609,12 @@ Py_LOCAL_INLINE(int) do_best_fuzzy_match(RE_State* state, BOOL search) {
                                 save_fuzzy_counts(state, best_fuzzy_counts);
                                 if (!save_fuzzy_changes(state,
                                   &best_fuzzy_changes))
-                                    goto error;
+                                    goto mem_error;
 
                                 best_groups = save_captures(state,
                                   best_groups);
                                 if (!best_groups)
-                                    goto error;
+                                    goto mem_error;
 
                                 best_match_pos = state->match_pos;
                                 best_text_pos = state->text_pos;
@@ -17644,6 +17679,9 @@ Py_LOCAL_INLINE(int) do_best_fuzzy_match(RE_State* state, BOOL search) {
                 init_match(state);
                 status = basic_match(state, search);
 
+                if (status < 0)
+                    goto error;
+
                 list = &best_changes_list.lists[0];
                 state->fuzzy_changes.count = list->count;
                 Py_MEMCPY(state->fuzzy_changes.items, list->items,
@@ -17663,10 +17701,13 @@ Py_LOCAL_INLINE(int) do_best_fuzzy_match(RE_State* state, BOOL search) {
 
     return status;
 
+mem_error:
+    status = RE_ERROR_MEMORY;
+
 error:
     fini_best_list(state, &best_list);
     fini_best_changes_list(state, &best_changes_list);
-    return RE_ERROR_MEMORY;
+    return status;
 }
 
 /* Performs a match or search from the current text position for an enhanced
@@ -18048,18 +18089,6 @@ Py_LOCAL_INLINE(BOOL) get_string(PyObject* string, RE_StringInfo* str_info) {
         return TRUE;
     }
 
-#if defined(PYPY_VERSION)
-    if (PyBytes_Check(string)) {
-        /* Bytestrings don't always support the buffer interface. */
-        str_info->characters = (void*)PyBytes_AS_STRING(string);
-        str_info->length = PyBytes_GET_SIZE(string);
-        str_info->charsize = 1;
-        str_info->is_unicode = FALSE;
-        str_info->should_release = FALSE;
-        return TRUE;
-    }
-
-#endif
     /* Get pointer to string buffer. */
     if (PyObject_GetBuffer(string, &str_info->view, PyBUF_SIMPLE) != 0) {
         PyErr_SetString(PyExc_TypeError, "expected string or buffer");
@@ -20881,45 +20910,11 @@ Py_LOCAL_INLINE(PyObject*) next_split_part(SplitterObject* self) {
 
     if (self->index == 0) {
         if (self->split_count < self->maxsplit) {
-#if PY_VERSION_HEX < 0x03070000
-            Py_ssize_t step;
-            Py_ssize_t end_pos;
-
-            if (state->reverse) {
-                step = -1;
-                end_pos = state->slice_start;
-            } else {
-                step = 1;
-                end_pos = state->slice_end;
-            }
-
-retry:
-#endif
             self->status = do_match(state, TRUE);
             if (self->status < 0)
                 goto error;
 
             if (self->status == RE_ERROR_SUCCESS) {
-#if PY_VERSION_HEX < 0x03070000
-                if (state->version_0) {
-                    /* Version 0 behaviour is to advance one character if the
-                     * split was zero-width. Unfortunately, this can give an
-                     * incorrect result. GvR wants this behaviour to be
-                     * retained so as not to break any existing software which
-                     * might rely on it.
-                     */
-                    if (state->text_pos == state->match_pos) {
-                        if (self->last_pos == end_pos)
-                            goto no_match;
-
-                        /* Advance one character. */
-                        state->text_pos += step;
-                        state->must_advance = FALSE;
-                        goto retry;
-                    }
-                }
-
-#endif
                 ++self->split_count;
 
                 /* Get segment before this match. */
@@ -20934,25 +20929,8 @@ retry:
 
                 self->last_pos = state->text_pos;
 
-#if PY_VERSION_HEX >= 0x03070000
                 /* Don't allow 2 contiguous zero-width matches. */
                 state->must_advance = state->text_pos == state->match_pos;
-#else
-                /* Version 0 behaviour is to advance one character if the match
-                 * was zero-width. Unfortunately, this can give an incorrect
-                 * result. GvR wants this behaviour to be retained so as not to
-                 * break any existing software which might rely on it.
-                 */
-                if (state->version_0) {
-                    if (state->text_pos == state->match_pos)
-                        /* Advance one character. */
-                        state->text_pos += step;
-
-                    state->must_advance = FALSE;
-                } else
-                    /* Don't allow a contiguous zero-width match. */
-                    state->must_advance = TRUE;
-#endif
             }
         } else
             goto no_match;
@@ -21077,57 +21055,6 @@ static void splitter_dealloc(PyObject* self_) {
     PyObject_DEL(self);
 }
 
-#if defined(PYPY_VERSION) && PY_VERSION_HEX < 0x05090000
-Py_LOCAL_INLINE(BOOL) is_whitespace(Py_UCS4 c) {
-    return 0x09 <= c && c <= 0x0D || c == ' ';
-}
-
-Py_LOCAL_INLINE(BOOL) is_digit(Py_UCS4 c) {
-    return '0' <= c && c <= '9';
-}
-
-Py_LOCAL_INLINE(PyObject*) integer_from_unicode(PyObject* item) {
-    int kind;
-    void* data;
-    Py_ssize_t length;
-    char* buffer;
-    Py_ssize_t count;
-    Py_ssize_t index;
-    PyObject* value;
-
-    kind = PyUnicode_KIND(item);
-    data = PyUnicode_DATA(item);
-    length = PyUnicode_GET_LENGTH(item);
-    buffer = (char*)re_alloc(length + 1);
-    if (!buffer)
-        return NULL;
-    count = 0;
-
-    for (index = 0; index < length; index++) {
-        Py_UCS4 c;
-
-        c = PyUnicode_READ(kind, data, index);
-        if (is_whitespace(c) || c == '+' || c == '-' || is_digit(c))
-            buffer[count++] = c;
-        else
-            goto error;
-    }
-
-    buffer[count] = '\0';
-
-    value = PyLong_FromString(buffer, NULL, 0);
-    re_dealloc(buffer);
-
-    return value;
-
-error:
-    re_dealloc(buffer);
-    PyErr_Format(PyExc_ValueError,
-      "invalid literal for int() with base %d: %.200R", 10, item);
-    return NULL;
-}
-#endif
-
 /* Converts a captures index to an integer.
  *
  * A negative capture index in 'expandf' and 'subf' is passed as a string
@@ -21146,11 +21073,7 @@ Py_LOCAL_INLINE(Py_ssize_t) index_to_integer(PyObject* item) {
     if (PyUnicode_Check(item)) {
         PyObject* int_obj;
 
-#if defined(PYPY_VERSION) && PY_VERSION_HEX < 0x05090000
-        int_obj = integer_from_unicode(item);
-#else
         int_obj = PyLong_FromUnicodeObject(item, 0);
-#endif
         if (!int_obj)
             goto error;
 
@@ -21567,9 +21490,6 @@ Py_LOCAL_INLINE(PyObject*) pattern_subx(PatternObject* self, PyObject*
     RE_JoinInfo join_info;
     Py_ssize_t sub_count;
     Py_ssize_t last_pos;
-#if PY_VERSION_HEX < 0x03070000
-    Py_ssize_t step;
-#endif
     PyObject* item;
     MatchObject* match;
     BOOL built_capture = FALSE;
@@ -21688,9 +21608,6 @@ Py_LOCAL_INLINE(PyObject*) pattern_subx(PatternObject* self, PyObject*
 
     sub_count = 0;
     last_pos = state.reverse ? state.text_length : 0;
-#if PY_VERSION_HEX < 0x03070000
-    step = state.reverse ? -1 : 1;
-#endif
     while (sub_count < maxsub) {
         int status;
 
@@ -21861,21 +21778,8 @@ Py_LOCAL_INLINE(PyObject*) pattern_subx(PatternObject* self, PyObject*
 
         last_pos = state.text_pos;
 
-#if PY_VERSION_HEX >= 0x03070000
         /* Don't allow 2 contiguous zero-width matches. */
         state.must_advance = state.match_pos == state.text_pos;
-#else
-        if (state.version_0) {
-            /* Always advance after a zero-width match. */
-            if (state.match_pos == state.text_pos) {
-                state.text_pos += step;
-                state.must_advance = FALSE;
-            } else
-                state.must_advance = TRUE;
-        } else
-            /* Don't allow 2 contiguous zero-width matches. */
-            state.must_advance = state.match_pos == state.text_pos;
-#endif
     }
 
     /* Get the segment following the last match. We use 'length' instead of
@@ -22068,10 +21972,6 @@ static PyObject* pattern_split(PatternObject* self, PyObject* args, PyObject*
     Py_ssize_t split_count;
     size_t g;
     Py_ssize_t start_pos;
-#if PY_VERSION_HEX < 0x03070000
-    Py_ssize_t end_pos;
-    Py_ssize_t step;
-#endif
     Py_ssize_t last_pos;
 
     PyObject* string;
@@ -22110,16 +22010,8 @@ static PyObject* pattern_split(PatternObject* self, PyObject* args, PyObject*
     split_count = 0;
     if (state.reverse) {
         start_pos = state.text_length;
-#if PY_VERSION_HEX < 0x03070000
-        end_pos = 0;
-        step = -1;
-#endif
     } else {
         start_pos = 0;
-#if PY_VERSION_HEX < 0x03070000
-        end_pos = state.text_length;
-        step = 1;
-#endif
     }
 
     last_pos = start_pos;
@@ -22132,25 +22024,6 @@ static PyObject* pattern_split(PatternObject* self, PyObject* args, PyObject*
             /* No more matches. */
             break;
 
-#if PY_VERSION_HEX < 0x03070000
-        if (state.version_0) {
-            /* Version 0 behaviour is to advance one character if the split was
-             * zero-width. Unfortunately, this can give an incorrect result.
-             * GvR wants this behaviour to be retained so as not to break any
-             * existing software which might rely on it.
-             */
-            if (state.text_pos == state.match_pos) {
-                if (last_pos == end_pos)
-                    break;
-
-                /* Advance one character. */
-                state.text_pos += step;
-                state.must_advance = FALSE;
-                continue;
-            }
-        }
-
-#endif
         /* Get segment before this match. */
         if (state.reverse)
             item = get_slice(string, state.match_pos, last_pos);
@@ -22179,25 +22052,8 @@ static PyObject* pattern_split(PatternObject* self, PyObject* args, PyObject*
         ++split_count;
         last_pos = state.text_pos;
 
-#if PY_VERSION_HEX >= 0x03070000
         /* Don't allow 2 contiguous zero-width matches. */
         state.must_advance = state.text_pos == state.match_pos;
-#else
-        /* Version 0 behaviour is to advance one character if the match was
-         * zero-width. Unfortunately, this can give an incorrect result. GvR
-         * wants this behaviour to be retained so as not to break any existing
-         * software which might rely on it.
-         */
-        if (state.version_0) {
-            if (state.text_pos == state.match_pos)
-                /* Advance one character. */
-                state.text_pos += step;
-
-            state.must_advance = FALSE;
-        } else
-            /* Don't allow a contiguous zero-width match. */
-            state.must_advance = TRUE;
-#endif
     }
 
     /* Get segment following last match (even if empty). */

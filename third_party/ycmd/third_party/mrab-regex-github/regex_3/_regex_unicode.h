@@ -16,7 +16,7 @@ typedef unsigned char BOOL;
 
 #define RE_MAX_CASES 4
 #define RE_MAX_FOLDED 3
-#define RE_MAX_SCX 21
+#define RE_MAX_SCX 23
 
 typedef struct RE_Property {
     RE_UINT16 name;
@@ -34,9 +34,9 @@ typedef RE_UINT32 (*RE_GetPropertyFunc)(RE_UINT32 codepoint);
 
 #define RE_PROP_GC 0x1E
 #define RE_PROP_CASED 0xA
-#define RE_PROP_UPPERCASE 0x5B
+#define RE_PROP_UPPERCASE 0x5C
 #define RE_PROP_LOWERCASE 0x38
-#define RE_PROP_SCX 0x55
+#define RE_PROP_SCX 0x56
 
 #define RE_PROP_C 30
 #define RE_PROP_L 31
@@ -96,15 +96,15 @@ typedef RE_UINT32 (*RE_GetPropertyFunc)(RE_UINT32 codepoint);
 #define RE_PROP_DIGIT 0x1E0009
 #define RE_PROP_GRAPH 0x1F0001
 #define RE_PROP_LOWER 0x380001
-#define RE_PROP_PRINT 0x500001
-#define RE_PROP_SPACE 0x5E0001
-#define RE_PROP_UPPER 0x5B0001
-#define RE_PROP_WORD 0x5F0001
-#define RE_PROP_XDIGIT 0x610001
-#define RE_PROP_POSIX_ALNUM 0x4B0001
-#define RE_PROP_POSIX_DIGIT 0x4C0001
-#define RE_PROP_POSIX_PUNCT 0x4D0001
-#define RE_PROP_POSIX_XDIGIT 0x4E0001
+#define RE_PROP_PRINT 0x510001
+#define RE_PROP_SPACE 0x5F0001
+#define RE_PROP_UPPER 0x5C0001
+#define RE_PROP_WORD 0x600001
+#define RE_PROP_XDIGIT 0x620001
+#define RE_PROP_POSIX_ALNUM 0x4C0001
+#define RE_PROP_POSIX_DIGIT 0x4D0001
+#define RE_PROP_POSIX_PUNCT 0x4E0001
+#define RE_PROP_POSIX_XDIGIT 0x4F0001
 
 #define RE_WBREAK_OTHER 0
 #define RE_WBREAK_LF 1
@@ -180,8 +180,8 @@ typedef RE_UINT32 (*RE_GetPropertyFunc)(RE_UINT32 codepoint);
 #define RE_LBREAK_NONSTARTER 28
 #define RE_LBREAK_AKSARA 29
 #define RE_LBREAK_VIRAMA 30
-#define RE_LBREAK_IDEOGRAPHIC 31
-#define RE_LBREAK_AKSARASTART 32
+#define RE_LBREAK_AKSARASTART 31
+#define RE_LBREAK_IDEOGRAPHIC 32
 #define RE_LBREAK_VIRAMAFINAL 33
 #define RE_LBREAK_ZWSPACE 34
 #define RE_LBREAK_ZWJ 35
@@ -198,11 +198,16 @@ typedef RE_UINT32 (*RE_GetPropertyFunc)(RE_UINT32 codepoint);
 #define RE_LBREAK_REGIONALINDICATOR 46
 #define RE_LBREAK_EMODIFIER 47
 
-extern char* re_strings[1506];
-extern RE_Property re_properties[183];
-extern RE_PropertyValue re_property_values[1651];
+#define RE_INCB_NONE 0
+#define RE_INCB_EXTEND 1
+#define RE_INCB_CONSONANT 2
+#define RE_INCB_LINKER 3
+
+extern char* re_strings[1530];
+extern RE_Property re_properties[185];
+extern RE_PropertyValue re_property_values[1680];
 extern RE_UINT16 re_expand_on_folding[104];
-extern RE_GetPropertyFunc re_get_property[100];
+extern RE_GetPropertyFunc re_get_property[101];
 
 RE_UINT32 re_get_alphabetic(RE_UINT32 codepoint);
 RE_UINT32 re_get_alphanumeric(RE_UINT32 codepoint);
@@ -262,6 +267,7 @@ RE_UINT32 re_get_line_break(RE_UINT32 codepoint);
 RE_UINT32 re_get_logical_order_exception(RE_UINT32 codepoint);
 RE_UINT32 re_get_lowercase(RE_UINT32 codepoint);
 RE_UINT32 re_get_math(RE_UINT32 codepoint);
+RE_UINT32 re_get_modifier_combining_mark(RE_UINT32 codepoint);
 RE_UINT32 re_get_nfc_quick_check(RE_UINT32 codepoint);
 RE_UINT32 re_get_nfd_quick_check(RE_UINT32 codepoint);
 RE_UINT32 re_get_nfkc_quick_check(RE_UINT32 codepoint);

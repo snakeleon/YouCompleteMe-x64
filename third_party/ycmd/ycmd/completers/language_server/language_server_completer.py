@@ -16,6 +16,7 @@
 # along with ycmd.  If not, see <http://www.gnu.org/licenses/>.
 
 from functools import partial
+from pathlib import Path
 import abc
 import collections
 import contextlib
@@ -2306,8 +2307,8 @@ class LanguageServerCompleter( Completer ):
 
 
   def GetProjectRootFiles( self ):
-    """Returns a list of files that indicate the root of the project.
-    It should be easier to override just this method than the whole
+    """Returns a list of globs matching files that indicate the root of the
+    project.  It should be easier to override just this method than the whole
     GetProjectDirectory."""
     return []
 
@@ -2362,7 +2363,7 @@ class LanguageServerCompleter( Completer ):
     if project_root_files:
       for folder in utils.PathsToAllParentFolders( filepath ):
         for root_file in project_root_files:
-          if os.path.isfile( os.path.join( folder, root_file ) ):
+          if next( Path( folder ).glob( root_file ), [] ):
             return folder
     return None if strict else os.path.dirname( filepath )
 
@@ -2638,7 +2639,7 @@ class LanguageServerCompleter( Completer ):
       REQUEST_TIMEOUT_COMMAND )
 
     result = response.get( 'result' ) or []
-    return _SymbolInfoListToGoTo( request_data, result )
+    return _LspSymbolListToGoTo( request_data, result )
 
 
   def GoToDocumentOutline( self, request_data ):
@@ -2655,12 +2656,11 @@ class LanguageServerCompleter( Completer ):
 
     result = response.get( 'result' ) or []
 
-    # We should only receive SymbolInformation (not DocumentSymbol)
     if any( 'range' in s for s in result ):
-      raise ValueError(
-        "Invalid server response; DocumentSymbol not supported" )
+      LOGGER.debug( 'Hierarchical DocumentSymbol not supported.' )
+      result = _FlattenDocumentSymbolHierarchy( result )
 
-    return _SymbolInfoListToGoTo( request_data, result )
+    return _LspSymbolListToGoTo( request_data, result )
 
 
   def InitialHierarchy( self, request_data, args ):
@@ -2850,7 +2850,6 @@ class LanguageServerCompleter( Completer ):
                       cursor_range_ls,
                       matched_diagnostics ),
       REQUEST_TIMEOUT_COMMAND )
-
     return self.CodeActionResponseToFixIts( request_data,
                                             code_actions[ 'result' ] )
 
@@ -2861,28 +2860,22 @@ class LanguageServerCompleter( Completer ):
 
     fixits = []
     for code_action in code_actions:
-      if 'edit' in code_action:
-        # TODO: Start supporting a mix of WorkspaceEdits and Commands
-        # once there's a need for such
-        assert 'command' not in code_action
-
-        # This is a WorkspaceEdit literal
-        fixits.append( self.CodeActionLiteralToFixIt( request_data,
-                                                      code_action ) )
+      capabilities = self._server_capabilities[ 'codeActionProvider' ]
+      if ( ( isinstance( capabilities, dict ) and
+             capabilities.get( 'resolveProvider' ) ) or
+           'command' in code_action ):
+        # If server is a code action resolve provider, either we are obligated
+        # to resolve, or we have a command in the code action response.
+        # If server does not want us to resolve, but sends a command anyway,
+        # we still need to lazily execute that command.
+        fixits.append( responses.UnresolvedFixIt( code_action,
+                                                  code_action[ 'title' ],
+                                                  code_action.get( 'kind' ) ) )
         continue
+      # No resoving here - just a simple code action literal.
+      fixits.append( self.CodeActionLiteralToFixIt( request_data,
+                                                    code_action ) )
 
-      # Either a CodeAction or a Command
-      assert 'command' in code_action
-
-      action_command = code_action[ 'command' ]
-      if isinstance( action_command, dict ):
-        # CodeAction with a 'command' rather than 'edit'
-        fixits.append( self.CodeActionCommandToFixIt( request_data,
-                                                      code_action ) )
-        continue
-
-      # It is a Command
-      fixits.append( self.CommandToFixIt( request_data, code_action ) )
 
     # Show a list of actions to the user to select which one to apply.
     # This is (probably) a more common workflow for "code action".
@@ -2986,10 +2979,44 @@ class LanguageServerCompleter( Completer ):
 
 
   def _ResolveFixit( self, request_data, fixit ):
-    if not fixit[ 'resolve' ]:
-      return { 'fixits': [ fixit ] }
+    code_action = fixit[ 'command' ]
+    capabilities = self._server_capabilities[ 'codeActionProvider' ]
+    if ( isinstance( capabilities, dict ) and
+         capabilities.get( 'resolveProvider' ) ):
+      # Resolve through codeAction/resolve request, before resolving commands.
+      # If the server is an asshole, it might be a code action resolve
+      # provider, but send a LSP Command instead. We can not resolve those with
+      # codeAction/resolve!
+      if ( 'command' not in code_action or
+           isinstance( code_action[ 'command' ], str ) ):
+        request_id = self.GetConnection().NextRequestId()
+        msg = lsp.CodeActionResolve( request_id, code_action )
+        code_action = self.GetConnection().GetResponse(
+            request_id,
+            msg,
+            REQUEST_TIMEOUT_COMMAND )[ 'result' ]
 
-    unresolved_fixit = fixit[ 'command' ]
+    result = []
+    if 'edit' in code_action:
+      result.append( self.CodeActionLiteralToFixIt( request_data,
+                                                    code_action ) )
+
+    if 'command' in code_action:
+      assert not result, 'Code actions with edit and command is not supported.'
+      if isinstance( code_action[ 'command' ], str ):
+        unresolved_command_fixit = self.CommandToFixIt( request_data,
+                                                        code_action )
+      else:
+        unresolved_command_fixit = self.CodeActionCommandToFixIt( request_data,
+                                                                  code_action )
+      result.append( self._ResolveFixitCommand( request_data,
+                                                unresolved_command_fixit ) )
+
+    return responses.BuildFixItResponse( result )
+
+
+  def _ResolveFixitCommand( self, request_data, fixit ):
+    unresolved_fixit = fixit.command
     collector = EditCollector()
     with self.GetConnection().CollectApplyEdits( collector ):
       self.GetCommandResponse(
@@ -3001,19 +3028,23 @@ class LanguageServerCompleter( Completer ):
     response = collector.requests
     assert len( response ) < 2
     if not response:
-      return responses.BuildFixItResponse( [ responses.FixIt(
+      return responses.FixIt(
         responses.Location( request_data[ 'line_num' ],
                             request_data[ 'column_num' ],
                             request_data[ 'filepath' ] ),
-        [] ) ] )
+        [] )
     fixit = WorkspaceEditToFixIt(
       request_data,
       response[ 0 ][ 'edit' ],
       unresolved_fixit[ 'title' ] )
-    return responses.BuildFixItResponse( [ fixit ] )
+    return fixit
 
 
   def ResolveFixit( self, request_data ):
+    fixit = request_data[ 'fixit' ]
+    if 'command' not in fixit:
+      # Somebody has sent us an already resolved fixit.
+      return { 'fixits': [ fixit ] }
     return self._ResolveFixit( request_data, request_data[ 'fixit' ] )
 
 
@@ -3365,26 +3396,10 @@ def _LocationListToGoTo( request_data, positions ):
     raise RuntimeError( 'Cannot jump to location' )
 
 
-def _SymbolInfoListToGoTo( request_data, symbols ):
+def _LspSymbolListToGoTo( request_data, symbols ):
   """Convert a list of LSP SymbolInformation into a YCM GoTo response"""
 
-  def BuildGoToLocationFromSymbol( symbol ):
-    location, line_value = _LspLocationToLocationAndDescription(
-      request_data,
-      symbol[ 'location' ] )
-
-    description = ( f'{ lsp.SYMBOL_KIND[ symbol[ "kind" ] ] }: '
-                    f'{ symbol[ "name" ] }' )
-
-    goto = responses.BuildGoToResponseFromLocation( location,
-                                                    description )
-    goto[ 'extra_data' ] = {
-      'kind': lsp.SYMBOL_KIND[ symbol[ 'kind' ] ],
-      'name': symbol[ 'name' ],
-    }
-    return goto
-
-  locations = [ BuildGoToLocationFromSymbol( s ) for s in
+  locations = [ _BuildGoToLocationFromSymbol( s, request_data ) for s in
                 sorted( symbols,
                         key = lambda s: ( s[ 'kind' ], s[ 'name' ] ) ) ]
 
@@ -3394,6 +3409,38 @@ def _SymbolInfoListToGoTo( request_data, symbols ):
     return locations[ 0 ]
   else:
     return locations
+
+
+def _FlattenDocumentSymbolHierarchy( symbols ):
+  result = []
+  for s in symbols:
+    result.append( s )
+    if children := s.get( 'children' ):
+      result.extend( _FlattenDocumentSymbolHierarchy( children ) )
+  return result
+
+
+def _BuildGoToLocationFromSymbol( symbol, request_data ):
+  """ Convert a LSP SymbolInfo or DocumentSymbol into a YCM GoTo response"""
+  lsp_location = symbol.get( 'location' )
+  if not lsp_location: # This is a DocumentSymbol
+    lsp_location = symbol
+    lsp_location[ 'uri' ] = lsp.FilePathToUri( request_data[ 'filepath' ] )
+
+  location, line_value = _LspLocationToLocationAndDescription(
+    request_data,
+    lsp_location )
+
+  description = ( f'{ lsp.SYMBOL_KIND[ symbol[ "kind" ] ] }: '
+                  f'{ symbol[ "name" ] }' )
+
+  goto = responses.BuildGoToResponseFromLocation( location,
+                                                  description )
+  goto[ 'extra_data' ] = {
+    'kind': lsp.SYMBOL_KIND[ symbol[ 'kind' ] ],
+    'name': symbol[ 'name' ],
+  }
+  return goto
 
 
 def _LspLocationToLocationAndDescription( request_data,

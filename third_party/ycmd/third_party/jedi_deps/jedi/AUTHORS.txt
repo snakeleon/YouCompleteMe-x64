@@ -63,6 +63,9 @@ Code Contributors
 - Leo Ryu (@Leo-Ryu)
 - Joseph Birkner (@josephbirkner)
 - Márcio Mazza (@marciomazza)
+- Martin Vielsmaier (@moser) <martin@vielsmaier.net>
+- TingJia Wu (@WutingjiaX) <wutingjia@bytedance.com>
+- Nguyễn Hồng Quân <ng.hong.quan@gmail.com>
 
 And a few more "anonymous" contributors.
 
