@@ -215,8 +215,8 @@ Installation
 
 | Runtime | Min Version | Recommended Version (full support) | Python |
 |---------|-------------|------------------------------------|--------|
-| Vim     | 9.1.0016    | 9.1.0016                           | 3.8    |
-| Neovim  | 0.5         | Vim 9.1.0016                       | 3.8    |
+| Vim     | 9.1.0016    | 9.1.0016                           | 3.12   |
+| Neovim  | 0.5         | Vim 9.1.0016                       | 3.12   |
 
 #### Supported Vim Versions
 
@@ -231,16 +231,16 @@ available in Neovim, and Neovim is not officially supported.
 #### Supported Python runtime
 
 YCM has two components: A server and a client. Both the server and client
-require Python 3.8 or later 3.x release.
+require Python 3.12 or later 3.x release.
 
 For the Vim client, Vim must be, compiled with `--enable-shared` (or
 `--enable-framework` on macOS). You can check if this is working with `:py3
-import sys; print( sys.version)`. It should say something like `3.8.2 (...)`.
+import sys; print( sys.version)`. It should say something like `3.12.0 (...)`.
 
-For Neovim, you must have a python 3.8 runtime and the Neovim python
+For Neovim, you must have a python 3.12 runtime and the Neovim python
 extensions. See Neovim's `:help provider-python` for how to set that up.
 
-For the server, you must run the `install.py` script with a python 3.8 (or
+For the server, you must run the `install.py` script with a python 3.12 (or
 later) runtime. Anaconda etc. are not supported. YCM will remember the runtime
 you used to run `install.py` and will use that when launching the server, so if
 you usually use anaconda, then make sure to use the full path to a real cpython3,
@@ -528,6 +528,10 @@ look at what's available for configuration. There are a few interesting options
 that are conservatively turned off by default that you may want to turn on.
 
 ### Windows
+
+***NOTE***: Windows support is *deprecated* and *unmaintained*. We will do our
+best to keep it working, but we no longer test it in CI and there is a high
+likelihood of breakages.
 
 #### Quick start, installing all completers
 
@@ -3953,9 +3957,9 @@ Please note: The YCM maintainers do not specifically endorse nor necessarily hav
 
 ### 关于版本
 
-- ycm_core  核心版本: 48 (Feb. 13, 2025) 静态编译
-- libclang  版本: 19.1.0 (Sep. 17, 2024) [Clang][Clang]
-- Python    支持: 3.13.2 (Feb. 4, 2024) [Python][python-win-download]
+- ycm_core  核心版本: 48 (Jan. 6, 2026) 静态编译
+- libclang  版本: 21.1.0 (Aug. 27, 2025) [Clang][Clang]
+- Python    支持: 3.13.11 (Dec. 5, 2025) [Python][python-win-download]
 
 
 支持操作系统:
