@@ -773,6 +773,7 @@ function! s:AbortAutohoverRequest() abort
       let request = requests[ request_id ]
       if request.origin == 'autohover'
         call remove( s:pollers.command.requests, request_id )
+        py3 ycm_state.FlushCommandRequest( int( vim.eval( "request_id" ) ) )
         call request.callback( '' )
       endif
     endfor
@@ -1551,7 +1552,7 @@ function! s:PollCommands( timer_id ) abort
 
     " This request is done
     call remove( s:pollers.command.requests, request_id )
-    py3 ycm_state.FlushCommandRequest( vim.eval( "request_id" ) )
+    py3 ycm_state.FlushCommandRequest( int( vim.eval( "request_id" ) ) )
     call request[ 'callback' ]( result )
   endfor
 
@@ -1664,7 +1665,7 @@ if exists( '*popup_atcursor' )
   function! s:ShowHoverResult( response )
     call popup_hide( s:cursorhold_popup )
 
-    if empty( a:response )
+    if empty( a:response ) || !exists( 'b:ycm_hover' )
       return
     endif
 

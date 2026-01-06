@@ -12,19 +12,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runs-on: [ ubuntu-24.04, macos-14, windows-2019 ]
+        runs-on: [ ubuntu-24.04, macos-14 ]
         python-arch: [ 'x64' ]
         include:
           - runs-on: macos-14
             python-arch: 'arm64'
-          - runs-on: windows-2019
-            python-arch: 'x86'
         exclude:
           - runs-on: macos-14
             python-arch: "x64"
     env:
       COVERAGE: true
-    name: "${{ matrix.runs-on }} - Python 3.9 ${{ matrix.python-arch }}"
+    name: "${{ matrix.runs-on }} - Python 3.12 ${{ matrix.python-arch }}"
     runs-on: ${{ matrix.runs-on }}
     steps:
     - uses: actions/checkout@v4
@@ -34,7 +32,7 @@ jobs:
     - name: Install Python
       uses: actions/setup-python@v5
       with:
-        python-version: "3.9"
+        python-version: "3.12"
         architecture: ${{ matrix.python-arch }}
     - name: Run pip
       run: python3 -m pip install -r python/test_requirements.txt
@@ -45,7 +43,7 @@ jobs:
     - name: Upload coverage data
       uses: codecov/codecov-action@v4
       with:
-        name: "${{ runner.os }}-3.9-${{ matrix.python-arch }}"
+        name: "${{ runner.os }}-3.12-${{ matrix.python-arch }}"
         token: ${{ secrets.CODECOV_TOKEN }}
 
   vim-tests:
@@ -54,7 +52,7 @@ jobs:
       matrix:
         vim: [ 'new', 'old' ]
         arch: [ 'x86_64' ]
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-24.04
     container: 'youcompleteme/ycm-vim-${{ matrix.arch }}-py3:test'
     env:
       COVERAGE: true
@@ -70,7 +68,7 @@ jobs:
     - name: Install Java
       uses: actions/setup-java@v4
       with:
-        java-version: 17
+        java-version: 21
         distribution: 'temurin'
     - name: Build ycmd
       run: python3 ./install.py --force-sudo --ts-completer --clangd-completer --java-completer

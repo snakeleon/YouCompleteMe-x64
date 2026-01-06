@@ -17,10 +17,13 @@
 
 import contextlib
 import os
+from pprint import pformat
 from ycmd.tests.test_utils import ( BuildRequest,
                                     ClearCompletionsCache,
                                     IgnoreExtraConfOutsideTestsFolder,
                                     IsolatedApp,
+                                    PollForMessages,
+                                    PollForMessagesTimeoutException,
                                     SetUpApp,
                                     StopCompleterServer,
                                     WaitUntilCompleterServerReady )
@@ -47,7 +50,6 @@ def setUpModule():
 
 
 def tearDownModule():
-  global shared_app
   StopCompleterServer( shared_app, 'java' )
 
 
@@ -62,6 +64,10 @@ def StartJavaCompleterServerWithFile( app, file_path ):
                    event_name = 'FileReadyToParse',
                    filepath = file_path,
                    filetype = 'java' ) )
+  WaitUntilJavaCompleterServerReady( app )
+
+
+def WaitUntilJavaCompleterServerReady( app ):
   WaitUntilCompleterServerReady( app, 'java', SERVER_STARTUP_TIMEOUT )
 
 
@@ -85,8 +91,6 @@ def isolated_app( custom_options = {} ):
 
 
 def SharedYcmd( test ):
-  global shared_app
-
   @functools.wraps( test )
   def Wrapper( test_case_instance, *args, **kwargs ):
     ClearCompletionsCache()
@@ -106,3 +110,33 @@ def IsolatedYcmd( custom_options = {} ):
           StopCompleterServer( app, 'java' )
     return Wrapper
   return Decorator
+
+
+def WaitForDiagnosticsForFile( app,
+                               filepath,
+                               contents,
+                               diags_filepath,
+                               diags_are_ready = lambda d: True,
+                               **kwargs ):
+  diags = None
+  try:
+    for message in PollForMessages( app,
+                                    { 'filepath': filepath,
+                                      'contents': contents,
+                                      'filetype': 'java' },
+                                    **kwargs ):
+      if ( 'diagnostics' in message and
+           message[ 'filepath' ] == diags_filepath ):
+        print( f'Message { pformat( message ) }' )
+        diags = message[ 'diagnostics' ]
+        if diags_are_ready( diags ):
+          return diags
+
+      # Eventually PollForMessages will throw a timeout exception and we'll fail
+      # if we don't see the diagnostics go empty
+  except PollForMessagesTimeoutException as e:
+    raise AssertionError(
+      f'{ e }. Timed out waiting for diagnostics for file { diags_filepath }.'
+    )
+
+  return diags

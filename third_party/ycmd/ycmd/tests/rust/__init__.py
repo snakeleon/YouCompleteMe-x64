@@ -17,11 +17,14 @@
 
 import functools
 import os
+import time
+from pprint import pformat
 
 from ycmd.tests.test_utils import ( BuildRequest,
                                     ClearCompletionsCache,
                                     IgnoreExtraConfOutsideTestsFolder,
                                     IsolatedApp,
+                                    PollForMessagesTimeoutException,
                                     SetUpApp,
                                     StopCompleterServer,
                                     WaitUntilCompleterServerReady )
@@ -38,7 +41,6 @@ def setUpModule():
 
 
 def tearDownModule():
-  global shared_app
   StopCompleterServer( shared_app, 'rust' )
 
 
@@ -52,9 +54,37 @@ def StartRustCompleterServerInDirectory( app, directory ):
   WaitUntilCompleterServerReady( app, 'rust' )
 
 
-def SharedYcmd( test ):
-  global shared_app
+def PollForMessages( app, request_data, timeout = 60 ):
+  expiration = time.time() + timeout
+  while True:
+    if time.time() > expiration:
+      raise PollForMessagesTimeoutException( 'Waited for diagnostics to be '
+        f'ready for { timeout } seconds, aborting.' )
 
+    default_args = {
+      'line_num'  : 1,
+      'column_num': 1,
+    }
+    args = dict( default_args )
+    args.update( request_data )
+
+    response = app.post_json( '/receive_messages', BuildRequest( **args ) ).json
+
+    print( f'poll response: { pformat( response ) }' )
+
+    if isinstance( response, bool ):
+      if not response:
+        raise RuntimeError( 'The message poll was aborted by the server' )
+    elif isinstance( response, list ):
+      return response
+    else:
+      raise AssertionError(
+        f'Message poll response was wrong type: { type( response ).__name__ }' )
+
+    time.sleep( 0.25 )
+
+
+def SharedYcmd( test ):
   @functools.wraps( test )
   def Wrapper( test_case_instance, *args, **kwargs ):
     ClearCompletionsCache()
