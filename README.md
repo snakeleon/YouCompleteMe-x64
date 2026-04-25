@@ -3940,9 +3940,9 @@ Please note: The YCM maintainers do not specifically endorse nor necessarily hav
 
 ### 关于版本
 
-- ycm_core  核心版本: 48 (Feb. 4, 2026) 静态编译
-- libclang  版本: 21.1.8 (Dec. 17, 2026) [Clang][Clang]
-- Python    支持: 3.13.11 (Dec. 5, 2025) [Python][python-win-download]
+- ycm_core  核心版本: 48 (Apr. 26, 2026) 静态编译
+- libclang  版本: 22.1.4 (Apr. 21, 2026) [Clang][Clang]
+- Python    支持: 3.14.4 (Apr. 7, 2026) [Python][python-win-download]
 
 
 支持操作系统:
